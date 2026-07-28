@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import { makeConfig } from "../../src/config.ts";
 import { createLogger } from "../../src/logger.ts";
 import { runPipeline } from "../../src/pipeline.ts";
@@ -33,7 +34,9 @@ export async function runCase(
     cacheNamespace = "golden",
 ): Promise<Map<string, Uint8Array>> {
     const config = makeConfig(repoRoot, {
-        cacheDir: resolve(repoRoot, ".cache", cacheNamespace, entry.name),
+        // Transient intermediates go to the OS temp dir, never the working tree.
+        // The cache is content-keyed, so namespaced temp paths are collision-free.
+        cacheDir: join(tmpdir(), "foundry-pdf-parser-tests", cacheNamespace, entry.name),
         enrich: false,
         logLevel: "error",
     });

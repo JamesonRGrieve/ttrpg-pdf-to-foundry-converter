@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makeConfig } from "../../src/config.ts";
@@ -45,7 +46,7 @@ describe("encrypted refusal (C4 / G6)", () => {
         expect(raw.images).toHaveLength(0);
 
         const config = makeConfig(repoRoot, {
-            cacheDir: resolve(repoRoot, ".cache", "enc-test"),
+            cacheDir: join(tmpdir(), "foundry-pdf-parser-tests", "enc-test"),
             logLevel: "error",
         });
         const profile = loadProfile(resolve(repoRoot, "profiles/example-bestiary-two-column.yml"));
