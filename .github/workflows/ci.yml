@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: ci
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+jobs:
+    # Cross-platform (G2) x cross-runtime (G3). The golden vitest compares Tier A
+    # output byte-for-byte against golden/ on every OS/runtime, which is the
+    # cross-platform determinism gate. Pure-node scanner gates run everywhere.
+    build-test:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+                node: [20, 22]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.1.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node }}
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm build
+            - run: pnpm typecheck
+            - run: pnpm lint
+            - run: pnpm format
+            - run: pnpm test
+            - run: node scripts/gate-dep-pin.mjs
+            - run: node scripts/gate-timestamp-scan.mjs
+            - run: node scripts/gate-title-scan.mjs
+            - run: node scripts/gate-wiki-scan.mjs
+
+    # CLI-level cold/warm determinism (G1/G1b) and fail-closed refusals (G5/G6).
+    cli-gates:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.1.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: node scripts/gate-determinism.mjs
+            - run: node scripts/gate-refusals.mjs
+
+    # G12: the full suite must pass with the network removed. Dependencies are
+    # installed first, then the default route is dropped before tests run.
+    no-network:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.1.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Drop network connectivity
+              run: sudo ip route del default || true
+            - run: pnpm test

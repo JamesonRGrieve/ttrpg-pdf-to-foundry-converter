@@ -1,0 +1,6 @@
+# biome and esbuild ship prebuilt platform binaries via a build script. Approving
+# them here clears pnpm 11's "ignored builds" state, which otherwise fails the
+# deps-status check run before every pnpm script (including inside git hooks/CI).
+allowBuilds:
+    "@biomejs/biome": true
+    esbuild: true

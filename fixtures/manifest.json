@@ -1,0 +1,20 @@
+{
+    "$comment": "Fixture → profile pairs. Golden output for each lives in golden/<name>/. Drives scripts/update-golden.ts, the golden vitest, and the determinism/cross-platform CI gates.",
+    "cases": [
+        {
+            "name": "statblock-two-column",
+            "pdf": "fixtures/rendered/statblock-two-column.pdf",
+            "profile": "profiles/example-bestiary-two-column.yml"
+        },
+        {
+            "name": "item-catalog",
+            "pdf": "fixtures/rendered/item-catalog.pdf",
+            "profile": "profiles/example-item-catalog.yml"
+        },
+        {
+            "name": "images",
+            "pdf": "fixtures/rendered/images.pdf",
+            "profile": "profiles/example-image-plates.yml"
+        }
+    ]
+}

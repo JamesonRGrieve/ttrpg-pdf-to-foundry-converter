@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Bundled example profile (spec §12). Targets a two-column bestiary layout with
+# bold creature headers over a normal-weight body. Written against the synthetic,
+# free-content fixture `statblock-two-column` — it ships zero commercial data
+# (C1/C7). A working demonstration of substantial non-infringing use.
+schema_version: 1
+profile_id: example-bestiary-two-column
+name: Two-column bestiary with bold creature headers
+version: 1.0.0
+license: CC0-1.0
+
+fingerprint:
+    page_size: { w: 612, h: 792, tol: 2 }
+    columns: 2
+    fonts: ["libertinusserif-bold", "libertinusserif-regular"]
+    size_buckets: [8.0, 9.0, 10.5]
+
+exclude:
+    - { region: { y_min: 0, y_max: 45 } } # footer folio
+    - { region: { y_min: 748, y_max: 792 } } # running head
+
+selectors:
+    creature_name: { weight: bold, size: 10.5 }
+    body: { weight: normal, size: 9.0 }
+
+blocks:
+    - id: statblock
+      starts_at: creature_name
+      ends_at: { next: creature_name }
+      fields:
+          - { name: name, from: creature_name, transform: [trim], required: true }
+          - { name: flavor, from: body, match: "(?s)^(.*?)Armor Class", capture: 1, transform: [collapse_ws] }
+          - { name: ac, from: body, match: 'Armor Class (\d+)', capture: 1, transform: [to_int] }
+          - { name: hp, from: body, match: 'Hit Points (\d+)', capture: 1, transform: [to_int] }
+          - { name: speed, from: body, match: 'Speed (\d+)', capture: 1, transform: [to_int] }
+
+emit:
+    - block: statblock
+      document_type: Actor
+      group: examples
+      pack: fixture-bestiary
+      map:
+          name: $name
+          type: npc
+          system.description: $flavor
+          system.attributes.armor.value: $ac
+          system.attributes.wounds.max: $hp
+          system.attributes.speed.value: $speed

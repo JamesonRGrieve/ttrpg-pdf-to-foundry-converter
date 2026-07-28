@@ -1,0 +1,17 @@
+# Maintained denylist for CI gate G9 (spec §13). Repo-wide grep must return ZERO
+# hits for any of these commercial product titles / publishers. Their absence is
+# affirmative evidence the engine was developed content-agnostically: the
+# synthetic fixtures use only invented names, so nothing here should ever appear
+# in source, tests, fixtures, or docs (C7). The gate excludes THIS file from its
+# own scan. Add a term (case-insensitive) whenever a new commercial product must
+# be guarded against.
+Player's Handbook
+Dungeon Master's Guide
+Monster Manual
+Pathfinder Core Rulebook
+Dark Heresy
+Rogue Trader
+Deathwatch
+Only War
+Black Crusade
+Imperium Maledictum

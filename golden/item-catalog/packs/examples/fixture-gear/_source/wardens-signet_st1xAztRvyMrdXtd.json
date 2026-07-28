@@ -1,0 +1,20 @@
+{
+    "_id": "st1xAztRvyMrdXtd",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Warden's Signet",
+    "sort": 300000,
+    "system": {
+        "cost": {
+            "value": 150
+        },
+        "description": "An engraved seal of office. Doors that would refuse a stranger often open for the bearer of such a fixture.",
+        "rarity": "Rare",
+        "weight": {
+            "value": 0
+        }
+    },
+    "type": "gear"
+}

@@ -1,0 +1,24 @@
+{
+    "_id": "4w8wVO71QEL1vaUS",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Murk Basilisk",
+    "sort": 200000,
+    "system": {
+        "attributes": {
+            "armor": {
+                "value": 16
+            },
+            "speed": {
+                "value": 20
+            },
+            "wounds": {
+                "max": 35
+            }
+        },
+        "description": "This basilisk's gaze fixes prey in place. Its influence flattens the reeds for fifty paces, and afflicted travellers report a fluttering in the fingers."
+    },
+    "type": "npc"
+}

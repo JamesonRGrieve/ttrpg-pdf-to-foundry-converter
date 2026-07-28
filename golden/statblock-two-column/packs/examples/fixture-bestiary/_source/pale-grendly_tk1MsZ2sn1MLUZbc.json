@@ -1,0 +1,24 @@
+{
+    "_id": "tk1MsZ2sn1MLUZbc",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Pale Grendly",
+    "sort": 300000,
+    "system": {
+        "attributes": {
+            "armor": {
+                "value": 11
+            },
+            "speed": {
+                "value": 25
+            },
+            "wounds": {
+                "max": 9
+            }
+        },
+        "description": "A diminutive scavenger that flits between grave-fields. Efficient and furtive, the grendly hoards buttons, teeth, and other small trophies."
+    },
+    "type": "npc"
+}

@@ -1,0 +1,17 @@
+{
+    "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+    "organizeImports": { "enabled": true },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true,
+            "suspicious": { "noExplicitAny": "warn" },
+            "complexity": { "useLiteralKeys": "off" },
+            "style": { "noNonNullAssertion": "warn" }
+        }
+    },
+    "formatter": { "enabled": false },
+    "files": {
+        "ignore": ["dist", ".cache", "node_modules", "fixtures/rendered", "golden", "coverage"]
+    }
+}

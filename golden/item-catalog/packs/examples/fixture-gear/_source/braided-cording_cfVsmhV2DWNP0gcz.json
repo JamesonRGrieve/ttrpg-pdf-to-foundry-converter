@@ -1,0 +1,20 @@
+{
+    "_id": "cfVsmhV2DWNP0gcz",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Braided Cording",
+    "sort": 100000,
+    "system": {
+        "cost": {
+            "value": 5
+        },
+        "description": "Fifty spans of resin-stiffened cord. Fraying is rare; the fibres cling efficiently to stone and iron alike.",
+        "rarity": "Common",
+        "weight": {
+            "value": 3
+        }
+    },
+    "type": "gear"
+}

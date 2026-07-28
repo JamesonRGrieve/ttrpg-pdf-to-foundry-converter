@@ -1,0 +1,24 @@
+{
+    "_id": "6sRdqda8Rvq0Q40V",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Glimmerfin Drake",
+    "sort": 0,
+    "system": {
+        "attributes": {
+            "armor": {
+                "value": 14
+            },
+            "speed": {
+                "value": 40
+            },
+            "wounds": {
+                "max": 22
+            }
+        },
+        "description": "The glimmerfin drifts through fog-choked ravines, its scales fluttering with a faint efflorescence. Fisherfolk of the lower fens fear its silent glide."
+    },
+    "type": "npc"
+}

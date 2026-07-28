@@ -1,0 +1,8 @@
+dist
+.cache
+node_modules
+coverage
+pnpm-lock.yaml
+fixtures/rendered
+golden
+LICENSE

@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Single pre-commit gate: the full suite must pass clean before a commit lands.
+set -e
+pnpm typecheck
+pnpm lint
+pnpm format
+pnpm test
+node scripts/gate-dep-pin.mjs
+node scripts/gate-timestamp-scan.mjs
+node scripts/gate-title-scan.mjs
+node scripts/gate-wiki-scan.mjs

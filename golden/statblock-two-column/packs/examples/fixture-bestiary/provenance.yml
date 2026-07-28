@@ -1,0 +1,12 @@
+engine_version: 0.1.0
+ir_version: 1
+extractor: pdfjs-dist 4.10.38 + pdf-lib 1.17.1
+profile_id: example-bestiary-two-column
+profile_version: 1.0.0
+profile_sha256: dc9658322caf391f7fff422f468a14e0f5b2f2b1d6c7528e048463fef4fcbe18
+source_basename: statblock-two-column.pdf
+enrichment:
+  enabled: false
+  resolver_version: null
+  lockfile_sha256: null
+pack: examples/fixture-bestiary

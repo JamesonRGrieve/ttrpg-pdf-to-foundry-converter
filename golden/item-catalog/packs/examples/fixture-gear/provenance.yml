@@ -1,0 +1,12 @@
+engine_version: 0.1.0
+ir_version: 1
+extractor: pdfjs-dist 4.10.38 + pdf-lib 1.17.1
+profile_id: example-item-catalog
+profile_version: 1.0.0
+profile_sha256: dfbaeb8af58a87f521a8543f2021a06b20bad89439cbae6b0d2dad1030079aee
+source_basename: item-catalog.pdf
+enrichment:
+  enabled: false
+  resolver_version: null
+  lockfile_sha256: null
+pack: examples/fixture-gear

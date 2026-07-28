@@ -1,0 +1,24 @@
+{
+    "_id": "qC5mHjZXZ8QJ656Q",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Cinder Wight",
+    "sort": 100000,
+    "system": {
+        "attributes": {
+            "armor": {
+                "value": 12
+            },
+            "speed": {
+                "value": 30
+            },
+            "wounds": {
+                "max": 18
+            }
+        },
+        "description": "A shuffling husk wreathed in floating embers. The wight was first sighted inflicting slow burns upon the effigies of the marsh-shrine."
+    },
+    "type": "npc"
+}

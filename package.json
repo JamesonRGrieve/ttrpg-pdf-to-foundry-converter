@@ -1,0 +1,76 @@
+{
+    "name": "foundry-pdf-parser",
+    "version": "0.1.0",
+    "description": "Deterministic PDF to Foundry VTT compendium parsing engine. Interprets user-supplied profiles at runtime; ships zero third-party data.",
+    "license": "AGPL-3.0-or-later",
+    "type": "module",
+    "packageManager": "pnpm@11.1.1",
+    "engines": {
+        "node": ">=22"
+    },
+    "bin": {
+        "foundry-pdf-parser": "dist/cli.js"
+    },
+    "exports": {
+        ".": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "profiles",
+        "docs",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "clean": "rm -rf dist .cache",
+        "cli": "tsx src/cli.ts",
+        "validate-profile": "tsx src/cli.ts validate-profile",
+        "fixtures:render": "node scripts/render-fixtures.mjs",
+        "golden:update": "tsx scripts/update-golden.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
+        "lint": "eslint . && biome lint .",
+        "lint:fix": "eslint . --fix && biome lint --write .",
+        "lint:biome": "biome lint .",
+        "lint:ratchet": "node scripts/lint-ratchet.mjs",
+        "format": "prettier --check .",
+        "format:fix": "prettier --write .",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "coverage": "vitest run --coverage",
+        "gate:determinism": "node scripts/gate-determinism.mjs",
+        "gate:timestamps": "node scripts/gate-timestamp-scan.mjs",
+        "gate:titles": "node scripts/gate-title-scan.mjs",
+        "gate:wiki": "node scripts/gate-wiki-scan.mjs",
+        "gate:deps": "node scripts/gate-dep-pin.mjs",
+        "gate:all": "node scripts/gate-all.mjs",
+        "check": "pnpm build && pnpm typecheck && pnpm lint && pnpm format && pnpm test && pnpm gate:all",
+        "prepare": "husky || true"
+    },
+    "dependencies": {
+        "ajv": "^8.17.1",
+        "ajv-formats": "^3.0.1",
+        "pdf-lib": "1.17.1",
+        "pdfjs-dist": "4.10.38",
+        "pngjs": "7.0.0",
+        "re2js": "0.4.3",
+        "yaml": "2.7.0"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^1.9.4",
+        "@types/node": "^22.10.5",
+        "@types/pngjs": "^6.0.5",
+        "@typescript-eslint/eslint-plugin": "^8.19.0",
+        "@typescript-eslint/parser": "^8.19.0",
+        "@vitest/coverage-v8": "^2.1.8",
+        "eslint": "^8.57.1",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-import": "^2.31.0",
+        "eslint-plugin-promise": "^7.2.1",
+        "husky": "^9.1.7",
+        "prettier": "^3.4.2",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.3",
+        "vitest": "^2.1.8"
+    }
+}

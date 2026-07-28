@@ -1,0 +1,20 @@
+{
+    "_id": "aJoxQxIdNV0sN1NP",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "name": "Lumen Torch",
+    "sort": 0,
+    "system": {
+        "cost": {
+            "value": 12
+        },
+        "description": "A hand-cranked lantern favoured by tunnel-wardens. Its beam flickers when the crank tires, but it never wholly fails.",
+        "rarity": "Common",
+        "weight": {
+            "value": 1
+        }
+    },
+    "type": "gear"
+}
