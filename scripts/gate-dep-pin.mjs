@@ -3,8 +3,8 @@
 // (extractor, image encoder, RE2 engine, YAML serializer) are pinned EXACTLY —
 // no range specifiers. A drifting extractor/encoder silently breaks byte-identity.
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { read } from "./lib/files.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");

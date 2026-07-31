@@ -1,8 +1,8 @@
+import { dirname, resolve } from "node:path";
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Gate G8: no ISO-8601 dates, epoch-like ints, or UUIDs in emitted entity files.
 // Spurious timestamps/UUIDs are the classic source of non-reproducible output.
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import { listFiles, read } from "./lib/files.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
