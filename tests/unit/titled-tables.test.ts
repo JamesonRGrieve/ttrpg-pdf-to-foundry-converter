@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { cutAtEdges, detectTitledTables } from "../../src/infer/detect-titled-tables.ts";
+import { centredInColumn, cutAtEdges, detectTitledTables } from "../../src/infer/detect-titled-tables.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun {
@@ -44,6 +44,18 @@ function irOf(runs: IRTextRun[]): IR {
 }
 
 const bold = { weight: "bold" as const, font: "head" };
+
+describe("centred cells", () => {
+    it("places a cell centred under its label in that label's column, not the one it starts in", () => {
+        const edges = [53, 153, 201, 244];
+        // Starts mid-way through the name column, lies mostly under the class label.
+        expect(centredInColumn({ ...run("Melee, Thrown", 137, 578), width: 52 }, edges).x).toBe(153);
+        // A cell set at its own column's edge stays, however far it runs on.
+        expect(centredInColumn({ ...run("Basic 90m", 154, 578), width: 60 }, edges).x).toBe(154);
+        // Mostly in the column it starts in: stays.
+        expect(centredInColumn({ ...run("Lantern", 120, 578), width: 40 }, edges).x).toBe(120);
+    });
+});
 
 describe("cells in one run", () => {
     it("cuts a run spanning column edges at the word break nearest each edge", () => {

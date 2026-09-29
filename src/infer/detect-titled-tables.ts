@@ -374,6 +374,22 @@ export function cutAtEdges(r: IRTextRun, colBoundaries: readonly number[]): IRTe
     return pieces;
 }
 
+/**
+ * A cell centred under its label may start left of the label's edge, inside
+ * the column before. A run that starts mid-column (away from its column's own
+ * edge, where a left-set cell or a row of fused cells starts) and lies mostly
+ * past the next edge is that next column's cell: it is placed at that edge.
+ */
+export function centredInColumn(r: IRTextRun, colBoundaries: readonly number[]): IRTextRun {
+    const end = r.x + r.width;
+    const own = colBoundaries[columnOfRun(r.x, colBoundaries)] ?? r.x;
+    const next = colBoundaries.find((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < end);
+    if (next === undefined || r.x - own <= COLUMN_EDGE_TOLERANCE || end - next <= next - r.x) {
+        return r;
+    }
+    return { ...r, x: next, width: end - next };
+}
+
 /** The column a run starts in: the last header edge at or left of it. */
 function columnOfRun(x: number, colBoundaries: readonly number[]): number {
     return columnAt(x, colBoundaries, COLUMN_EDGE_TOLERANCE);
@@ -530,11 +546,14 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
             0.5,
         );
         const displayed = body.length > 0 && line.runs.some((r) => r.size > DISPLAY_SIZE_FACTOR * recordSize);
-        const proseRun = line.runs.some(
-            (r) =>
-                r.text.trim().length > PROSE_RUN_LENGTH &&
-                colBoundaries.filter((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < r.x + r.width).length >= 2,
-        );
+        const isProse = (l: RawRow): boolean =>
+            l.runs.some(
+                (r) =>
+                    r.text.trim().length > PROSE_RUN_LENGTH &&
+                    colBoundaries.filter((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < r.x + r.width)
+                        .length >= 2,
+            );
+        const proseRun = isProse(line);
         // A record's key is a name or value; a sentence break in it is prose.
         const key = line.runs
             .filter((r) => columnOfRun(r.x, colBoundaries) === 0)
@@ -551,10 +570,14 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
             new Set(l.runs.map((r) => columnOfRun(r.x, colBoundaries))).size;
         // A section row set apart by a wide gap still belongs to the table
         // when records resume right after it (before the next wide gap).
-        const resumes = (isRecord: (l: RawRow) => boolean): boolean => {
+        const never = (): boolean => false;
+        const resumes = (isRecord: (l: RawRow) => boolean, stop: (l: RawRow) => boolean): boolean => {
             for (let j = i + 1; j < lines.length && !wide(gaps[j - 1] ?? 0); j++) {
                 const next = lines[j];
-                if (next !== undefined && isRecord(next)) {
+                if (next === undefined || stop(next)) {
+                    return false;
+                }
+                if (isRecord(next)) {
                     return true;
                 }
             }
@@ -562,7 +585,7 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
         };
         const halfTheColumns = colBoundaries.length / 2;
         const setApart =
-            wide(gapBefore) && columnsOf(line) < 2 && !resumes((l) => columnsOf(l) >= halfTheColumns);
+            wide(gapBefore) && columnsOf(line) < 2 && !resumes((l) => columnsOf(l) >= halfTheColumns, never);
         // A larger line is the table's own section row while records follow
         // it — two cells or more, not a line of prose or a `Label:` field
         // line — and otherwise a heading below the table.
@@ -570,9 +593,10 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
             columnsOf(l) >= Math.max(MIN_COLUMNS, halfTheColumns) && !opensWithLabel(l);
         // In a table of few columns a line of prose fills as many cells as a
         // record does, so there a larger line set apart by a wide gap is a
-        // heading whatever follows it.
+        // heading whatever follows it. Records found only past a line of prose
+        // below it belong to what the heading opens (the next table).
         const narrow = colBoundaries.length < 2 * MIN_COLUMNS;
-        const heading = displayed && ((narrow && wide(gapBefore)) || !resumes(record));
+        const heading = displayed && ((narrow && wide(gapBefore)) || !resumes(record, isProse));
         if (proseRun || proseKey || setApart || heading) {
             break;
         }
@@ -743,7 +767,13 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
             (start === 0 || r.x >= (bounds[0] ?? 0) - COLUMN_EDGE_TOLERANCE) &&
             (next === undefined || r.x < next - COLUMN_EDGE_TOLERANCE);
         const copy = body
-            .map((line) => ({ ...line, runs: splitAtColumns(line.runs, colBoundaries).filter(inCopy) }))
+            .map((line) => ({
+                ...line,
+                runs: splitAtColumns(
+                    line.runs.map((r) => centredInColumn(r, colBoundaries)),
+                    colBoundaries,
+                ).filter(inCopy),
+            }))
             .filter((line) => line.runs.length > 0);
         dataRows.push(...readRows(copy, bounds));
     }

@@ -826,6 +826,19 @@ describe("table continuations", () => {
         expect(tableBody([record(500), record(494), heading, record(488), record(482)], edges)).toHaveLength(
             5,
         );
+        // Records found only past prose below the heading belong to the next table.
+        const paragraph = {
+            y: 470,
+            runs: [
+                {
+                    ...at("Lamps are tended nightly and their wicks are trimmed at dawn.", 0, 470),
+                    width: 380,
+                },
+            ],
+        };
+        expect(
+            tableBody([record(500), record(494), heading, paragraph, record(464), record(458)], edges),
+        ).toHaveLength(2);
     });
 
     it("measures a centred key from the key itself, not its baseline group", () => {
