@@ -57,11 +57,16 @@ export interface ParsedNpc {
  * Labels of fields rather than named rules: a weapon profile's qualities line
  * and the fields of a psychic power printed in the statblock.
  */
-const FIELD_LABELS = /^(?:special|action|focus power|range|sustained|subtype|effect)$/iu;
+const FIELD_LABELS =
+    /^(?:special|action|focus power|range|sustained|subtype|effect|insanity points|corruption points)$/iu;
+
+/** A field label may carry a qualifier in parentheses ("Armour (Primitive)"); the field is the label before it. */
+const bareLabel = (label: string): string => label.replace(/\s*\([^)]*\)\s*$/u, "");
 
 /** The entries of a statblock's psychic powers list, by name key. */
 function listedPowers(blocks: DetectedNumericGrid["blocks"]): Set<string> {
-    const list = blocks.find((b) => b.label !== null && /^psychic\s+powers?$/iu.test(b.label))?.text ?? "";
+    const list =
+        blocks.find((b) => b.label !== null && /^psychic\s+powers?$/iu.test(bareLabel(b.label)))?.text ?? "";
     return new Set(
         list
             .split(",")
@@ -86,8 +91,8 @@ export function specialAbilities(blocks: DetectedNumericGrid["blocks"]): ParsedN
     const powers = listedPowers(blocks);
     return blocks.flatMap(({ label, text, pageIndex }) =>
         label === null ||
-        FIELD_LABELS.test(label) ||
-        LABELS.some(([re]) => re.test(`${label}:`)) ||
+        FIELD_LABELS.test(bareLabel(label)) ||
+        LABELS.some(([re]) => re.test(`${bareLabel(label)}:`)) ||
         isVehicleLabel(label) ||
         powers.has(powerKey(label)) ||
         text.length === 0

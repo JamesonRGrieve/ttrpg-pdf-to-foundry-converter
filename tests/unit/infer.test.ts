@@ -37,6 +37,7 @@ import {
     fitModifications,
     infer,
     introducingEntry,
+    namingEntry,
     isBlank,
     kindEntry,
     mergeInto,
@@ -328,6 +329,7 @@ describe("npc statblocks", () => {
         const npc = parseNpc({
             pageIndex: 0,
             name: "MIRE HOUND (Troop)",
+            caption: null,
             bannerNumber: 9,
             labels: ["ws", "bs", "s", "t", "ag", "int", "per", "wp", "fel"],
             values: [30, 0, 35, 33, 40, 12, 38, 25, 5],
@@ -357,6 +359,7 @@ describe("npc statblocks", () => {
         const npc = parseNpc({
             pageIndex: 0,
             name: "LAMP WARDEN",
+            caption: null,
             bannerNumber: 14,
             labels: [],
             values: [],
@@ -370,6 +373,7 @@ describe("npc statblocks", () => {
         const npc = parseNpc({
             pageIndex: 0,
             name: "GLOOM LORD (Master)",
+            caption: null,
             bannerNumber: 40,
             labels: [],
             values: [],
@@ -391,8 +395,10 @@ describe("npc statblocks", () => {
                 block("Range", "Self"),
                 block("Effect", "The lamp flares."),
                 block("Talents", "Keen Eye"),
-                block("Psychic Powers", "Kindle, Glimmer Ward (see below)"),
+                block("Psychic Powers (Psy Rating 2)", "Kindle, Glimmer Ward (see below)"),
                 block("Glimmer Ward", "A ward of light."),
+                block("Armour (Primitive)", "Hides (Body 2)"),
+                block("Insanity Points", "12"),
                 block("CruisingSPEED", "30 KPH"),
                 block("Crew", "Rider"),
                 block("Lantern Sight", "Sees in the dark."),
@@ -1185,6 +1191,21 @@ describe("statblock prose", () => {
         expect(introducingEntry(entries, "Mire Hound", 72)?.heading.pageIndex).toBe(71);
         expect(introducingEntry(entries, "Mire Hound", 12)).toBeNull();
         expect(introducingEntry(entries, "Reed King", 71)).toBeNull();
+    });
+
+    it("takes the heading a caption shortens, never the caption line itself", () => {
+        const entries = [
+            heading("INDUSTRIAL or HEAVY LAMP SERVITOR", 72),
+            heading("Lamp Servitor Profile", 72),
+            heading("ESHA WICK, THE LANTERN BEARER", 72),
+        ];
+        expect(namingEntry(entries, "Lamp Servitor", "Lamp Servitor Profile", 72)?.heading.text).toBe(
+            "INDUSTRIAL or HEAVY LAMP SERVITOR",
+        );
+        expect(namingEntry(entries, "Esha Wick’s", "Esha Wick’s Profile", 72)?.heading.text).toBe(
+            "ESHA WICK, THE LANTERN BEARER",
+        );
+        expect(namingEntry(entries, "Reed King", "Reed King Profile", 72)).toBeNull();
     });
 });
 

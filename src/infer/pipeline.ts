@@ -16,6 +16,7 @@ import {
 } from "./columns.ts";
 import { detectEntries, type Entry } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
+import { detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import { entryItem, entryType, typeNamedBy } from "./entry-types.ts";
@@ -685,6 +686,46 @@ export function introducingEntry(entries: readonly Entry[], name: string, pageIn
     return best;
 }
 
+/** A name's words, lower-cased, a possessive ending dropped. */
+const nameWords = (name: string): string[] =>
+    name
+        .toLowerCase()
+        .replace(/['’]s\b/gu, "")
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length > 0);
+
+/**
+ * The prose entry whose heading a statblock's caption shortens: the nearest
+ * heading within reach holding every word of the caption and more ("Repair
+ * Servitor" under "Industrial or Heavy Repair Servitor"). Its heading is the
+ * fuller printed name.
+ */
+export function namingEntry(
+    entries: readonly Entry[],
+    caption: string,
+    captionLine: string,
+    pageIndex: number,
+): Entry | null {
+    const words = nameWords(caption);
+    let best: Entry | null = null;
+    for (const e of entries) {
+        const p = e.heading.pageIndex;
+        const heading = new Set(nameWords(e.heading.text));
+        if (
+            // The caption line itself may read as a heading; it names nothing more.
+            nameKey(e.heading.text) !== nameKey(captionLine) &&
+            p <= pageIndex &&
+            p >= pageIndex - STATBLOCK_PROSE_REACH &&
+            words.length > 0 &&
+            heading.size > words.length &&
+            words.every((w) => heading.has(w))
+        ) {
+            best = e;
+        }
+    }
+    return best;
+}
+
 /** The words, in order, of the entries within a statblock's prose reach. */
 function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
     const near = entries.filter(
@@ -694,14 +735,22 @@ function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
 }
 
 function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector): number {
-    const grids = detectNumericGrids(ir);
+    // Statblocks print their characteristics as a grid or as a row.
+    const grids = [...detectNumericGrids(ir), ...detectStatRows(ir)];
     for (const grid of grids) {
         const npc = parseNpc(grid);
         for (const u of npc.unparsed) {
             out.warnings.push(`p${out.page(grid.pageIndex)} ${npc.name}: unparsed ${u}`);
         }
-        const name = rejoinSplitWords(npc.name, nearbyWords(entries, grid.pageIndex));
-        const intro = introducingEntry(entries, name, grid.pageIndex);
+        const caption = rejoinSplitWords(npc.name, nearbyWords(entries, grid.pageIndex));
+        const exact = introducingEntry(entries, caption, grid.pageIndex);
+        // A grid's banner prints the full name; a row's caption may shorten its heading.
+        const naming =
+            exact === null && grid.caption !== null
+                ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
+                : null;
+        const intro = exact ?? naming;
+        const name = naming === null ? caption : cleanName(naming.heading.text);
         out.add(
             "Actor",
             ACTOR_SEGMENT,

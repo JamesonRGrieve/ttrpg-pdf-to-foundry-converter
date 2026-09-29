@@ -33,6 +33,8 @@ export interface DetectedNumericGrid {
     labels: string[];
     values: number[];
     name: string;
+    /** The caption line the name was read from, for a statblock printed as a row (null for a grid). */
+    caption: string | null;
     /** A lone number on the name banner line, when printed. */
     bannerNumber: number | null;
     associatedText: string[];

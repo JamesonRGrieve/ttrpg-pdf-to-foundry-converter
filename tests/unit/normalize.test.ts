@@ -58,6 +58,18 @@ function doc(textRuns: RawTextRun[], pageIndexes: number[]): RawDoc {
 /** Two plain two-column pages of the same parity, setting the document's layout. */
 const twoColumnPages = (): RawTextRun[] => [...columns(0, 700, 20), ...columns(4, 700, 20)];
 
+describe("overprinted runs", () => {
+    it("keeps one of two identical runs printed over each other", () => {
+        const ir = normalize(doc([raw(0, LEFT, 700, 20, "Fel"), raw(0, LEFT, 700, 20, "Fel")], [0]));
+        expect(ir.runs.map((r) => r.text)).toEqual(["Fel"]);
+    });
+
+    it("keeps the same text printed at two places", () => {
+        const ir = normalize(doc([raw(0, LEFT, 700, 20, "Fel"), raw(0, LEFT + 40, 700, 20, "Fel")], [0]));
+        expect(ir.runs.map((r) => r.text)).toEqual(["Fel", "Fel"]);
+    });
+});
+
 describe("column regions", () => {
     it("splits two columns above a full-width table, keeping the table's caption with it", () => {
         // The caption sits a little over two line pitches below the prose.

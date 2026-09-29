@@ -23,6 +23,9 @@ const ROW_GAP = 60;
 const COL_GAP = 85;
 const ROW_TOL = 10;
 
+/** The system schema's characteristic keys, in statblock order (output format knowledge). */
+export const SCHEMA_CHAR_ORDER: readonly string[] = ["ws", "bs", "s", "t", "ag", "int", "per", "wp", "fel"];
+
 interface GridCell {
     run: IRTextRun;
     value: number;
@@ -266,22 +269,19 @@ function readLabelsForGrid(ir: IR, grid: CharGrid): string[] {
         labels.push(bestLabel);
     }
 
-    // System-schema characteristic order (output format knowledge).
-    const SCHEMA_CHAR_ORDER = ["ws", "bs", "s", "t", "ag", "int", "per", "wp", "fel"];
-
     // Validate each label against the schema. If a label doesn't exactly match
     // a known characteristic key, it's garbled (e.g. "t6" instead of "t").
     // Use positional mapping whenever labels are unreliable.
     if (grid.cells.length === 9) {
         const validCount = labels.filter((l) => SCHEMA_CHAR_ORDER.includes(l)).length;
         if (validCount < 7) {
-            return SCHEMA_CHAR_ORDER;
+            return [...SCHEMA_CHAR_ORDER];
         }
         // Fix individual garbled labels while keeping correct ones in position
         return labels.map((l, i) => (SCHEMA_CHAR_ORDER.includes(l) ? l : (SCHEMA_CHAR_ORDER[i] ?? l)));
     }
 
-    return labels.length > 0 ? labels : SCHEMA_CHAR_ORDER;
+    return labels.length > 0 ? labels : [...SCHEMA_CHAR_ORDER];
 }
 
 /** How far above the grid's top row the name banner may sit. */
@@ -731,6 +731,7 @@ export function detectNumericGrids(ir: IR): DetectedNumericGrid[] {
             results.push({
                 pageIndex: p,
                 name: banner.name,
+                caption: null,
                 bannerNumber: banner.number,
                 labels,
                 values,

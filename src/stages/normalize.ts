@@ -410,10 +410,19 @@ export function normalize(raw: RawDoc): IR {
         docMargin.top = Math.max(docMargin.top, geom.marginTop);
         docMargin.bottom = Math.min(docMargin.bottom, geom.marginBottom);
 
+        // A run printed twice over itself (an overprint in the text layer)
+        // carries its text once.
+        const printed = new Set<string>();
         for (const r of pageRuns) {
             const size = quantizeSize(r.fontSize);
             const x = quantizeCoord(r.x);
             const y = quantizeCoord(r.y);
+            const text = canonicalizeText(r.text);
+            const placement = [x, y, quantizeWidth(r.width), size, r.fontName, r.weight, text].join("\u0000");
+            if (text.trim().length > 0 && printed.has(placement)) {
+                continue;
+            }
+            printed.add(placement);
             const column = layout.columnOf.get(r) ?? 0;
             const columnLeft = layout.lefts[column] ?? geom.marginLeft;
             const band = Math.floor((page.height - r.y) / BAND_HEIGHT);
@@ -424,7 +433,7 @@ export function normalize(raw: RawDoc): IR {
                 y,
                 width: quantizeWidth(r.width),
                 height: quantizeWidth(r.height),
-                text: canonicalizeText(r.text),
+                text,
                 font: canonFontName(r.fontName),
                 weight: r.weight,
                 italic: r.italic,
