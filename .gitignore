@@ -12,12 +12,13 @@ node_modules/
 coverage/
 .vitest/
 
-# C9 / C10: wiki enrichment is resolved at runtime on the user's machine and is
-# NEVER distributed. The lockfile, any resolved index, and any localized images
-# are user-local only and must never be committed.
-enrichment.lock.yml
-*.enrichment.lock.yml
-assets/localized/
+# Web build output and the OCR runtime staged into it (copied from node_modules).
+dist-web/
+web/public/vendor/
+
+# Playwright artifacts
+test-results/
+playwright-report/
 
 # OS / editor
 .DS_Store

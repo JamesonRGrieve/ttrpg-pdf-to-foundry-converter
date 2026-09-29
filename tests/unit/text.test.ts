@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { canonicalizeText, stripSubsetPrefix } from "../../src/util/text.ts";
+import { canonicalizeText, stripSubsetPrefix, wordBreakBetween } from "../../src/util/text.ts";
 
 // All non-ASCII / invisible characters are written as \u escape sequences so
 // the exact codepoint under test is unambiguous in the source.
@@ -107,5 +107,14 @@ describe("stripSubsetPrefix", () => {
         expect(stripSubsetPrefix("ABCDEFG+Foo")).toBe("ABCDEFG+Foo"); // 7 chars before +
         expect(stripSubsetPrefix("abcdef+Foo")).toBe("abcdef+Foo"); // lowercase
         expect(stripSubsetPrefix("ABCDEF+")).toBe("ABCDEF+"); // empty tail
+    });
+});
+
+describe("wordBreakBetween", () => {
+    it("breaks at a visible gap, or after sentence punctuation before a letter", () => {
+        expect(wordBreakBetween("lamp", "oil", 4, 1.5)).toBe(true);
+        expect(wordBreakBetween("lan", "tern", 0.2, 1.5)).toBe(false);
+        expect(wordBreakBetween("Glow:", "The", 0.5, 1.5)).toBe(true);
+        expect(wordBreakBetween("ratio 3:", "1", 0.5, 1.5)).toBe(false);
     });
 });

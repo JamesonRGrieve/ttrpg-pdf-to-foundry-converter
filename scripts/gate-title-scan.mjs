@@ -31,14 +31,22 @@ const terms = read(repoRoot, DENYLIST)
     .filter((l) => l.length > 0 && !l.startsWith("#"))
     .map((l) => l.toLowerCase());
 
+// Whole-word matching: a denylisted phrase must not merely occur inside other
+// words (e.g. across an identifier boundary like "readonly warnings").
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const patterns = terms.map((term) => ({
+    term,
+    re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{N}])`, "u"),
+}));
+
 const violations = [];
 for (const rel of listFiles(repoRoot)) {
     if (rel === DENYLIST || !isText(rel) || AUDIT_TOOLING.some((re) => re.test(rel))) {
         continue;
     }
     const text = read(repoRoot, rel).toLowerCase();
-    for (const term of terms) {
-        if (text.includes(term)) {
+    for (const { term, re } of patterns) {
+        if (re.test(text)) {
             violations.push(`${rel}: contains denylisted "${term}"`);
         }
     }

@@ -3,55 +3,65 @@
 The engine is a deterministic interpreter. Its core guarantee is:
 
 ```
-f(complete_pdf, profile, engine_version) -> output corpus
+f(complete_pdf, engine_version, pinned dependencies) -> output corpus
 ```
 
-Given the same complete PDF, the same profile, and the same engine version, the
-`_source/*.json` pack corpus and the extracted Tier A image assets are
-**byte-identical** — across platforms, Node runtimes, and whether the run started
-cold or warm from cache. This document describes how that guarantee is built and
-where it stops.
+Given the same complete PDF, the same engine version and the same pinned
+dependencies, the `_source/*.json` pack corpus and the extracted image assets are
+**byte-identical**: across platforms, between the Node CLI and the in-browser
+page, and whether the run started cold or warm from cache. This document
+describes how that guarantee is built and where it stops.
 
 ## Input contract
 
-- The only input is a **complete PDF**. There is no entry point that resumes from
-  an intermediate representation — no `--from-markdown`, no `--resume`. The
-  intermediate cache is read only when a complete PDF hashes to a key that
-  already exists.
-- The **profile** and the **engine version** are the other two inputs. The
-  engine version and the IR version participate in both the function above and
-  the cache key, so any change to extraction or normalization rules forks the
-  output cleanly rather than silently.
+- The only content input is a **complete PDF**, written in the user's chosen
+  **target schema** (a game line's structure; `dh2` by default). There is no
+  entry point that resumes from an intermediate representation, and no profile
+  or configuration that changes what is extracted. The same PDF, target schema
+  and engine version give byte-identical output. The caches are read only when a complete PDF hashes to a key
+  that already exists.
+- The engine version, the IR version, and the renderer/OCR identity participate
+  in the cache keys, so any change to extraction, OCR, arbitration or
+  normalization forks the output cleanly rather than silently.
+- The determinism-critical dependencies (text extractor, renderer, OCR engine,
+  its WASM core and model data, hashing, compression) are pinned exactly in
+  `package.json` and mirrored in `src/pins.ts`; gate G10 keeps the two in sync.
 
-## Determinism tiers
+## OCR determinism
 
-| Tier               | Scope                                      | Guarantee                                                       | Gating                              |
-| ------------------ | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------- |
-| **A — Core**       | PDF → entities + embedded image extraction | Byte-identical across platforms, runtimes, and cold/warm cache  | Blocking (golden + gate scripts)    |
-| **B — Raster**     | Vector art rendered to a bitmap            | Byte-identical only for a pinned renderer on a pinned platform  | Opt-in, non-blocking cross-platform |
-| **C — Enrichment** | Wiki image-link resolution                 | Deterministic given a fixed lockfile; the network itself is not | Non-blocking                        |
+OCR runs inside the engine and must be as reproducible as everything else:
 
-**Tier A output is byte-identical whether or not Tier B or C ran.** Enrichment is
-written only into designated fields, after the `_id` is fixed, so a run with
-enrichment and a run without it produce identical ids, filenames, and Tier A
-field values.
+- Pages render with the pinned `mupdf` at a fixed 300 DPI in 8-bit grayscale.
+- Recognition uses the pinned `tesseract.js` build on the pinned **plain-SIMD
+  LSTM** WASM core. tesseract.js would otherwise pick a core by CPU feature
+  detection and prefer relaxed-SIMD, whose arithmetic is implementation-defined
+  and can differ between CPUs. The Node engine pins the core through its own
+  worker entry; the browser engine pins it by pointing `corePath` at the exact
+  build file.
+- The model data is the pinned `@tesseract.js-data/eng` package, loaded from
+  disk (Node) or the page's own origin (browser), never fetched from a CDN.
+- Arbitration (correcting the text layer from OCR) iterates only in geometric
+  order and uses fixed thresholds, so identical inputs give identical output.
 
-## Intermediates and the cache
+The browser e2e test converts a fixture in Chromium and requires the result to
+be byte-identical to the CLI's committed golden output.
 
-Extraction, normalization, and image recovery are a pure function of the complete
-PDF, so their result (the canonical IR plus the recovered image assets) is cached
-under a content key:
+## Intermediates and the caches
+
+Two caches, both pure optimizations. Deleting either and re-running produces
+identical output (cold vs. warm is proven equal by gate G1/G1b).
 
 ```
-key = sha256( sha256(pdf) | "eng:" ENGINE_VERSION | "ir:" IR_VERSION )[:32]
+ocr page key  = sha256( sha256(pdf) | renderer id | ocr engine id )[:32]
+read-doc key  = sha256( sha256(pdf) | "eng:" ENGINE_VERSION | "ir:" IR_VERSION | "ocr:" renderer id | ocr engine id )[:32]
 ```
 
-The cache lives under `.cache/<key>/` (`ir.json`, `manifest.json`, `assets/`) and
-is **gitignored and fully regenerable**. It is a pure optimization: deleting it
-and re-running produces identical output (cold vs. warm cache are proven equal by
-CI). The raw PDF content hash is used locally only — never emitted, never written
-to a tracked path, never logged to a shared sink. A cached entry whose recorded
-engine/IR version no longer matches is ignored.
+The CLI keeps them under `--cache-dir` (default `<os tmp>/foundry-pdf-parser/cache`):
+recognized words per page under `ocr/<key>/`, and the arbitrated IR plus image
+assets under `<key>/`. The browser keeps OCR in memory for the run. The PDF
+content hash is used locally only: never emitted, never written to a tracked
+path, never logged. A cached read document whose recorded engine/IR version no
+longer matches is ignored.
 
 ## Normalization
 
@@ -77,7 +87,11 @@ concrete golden bytes change, never reproducibility):
 1. **Column-major.** `column` is part of the sort key. A row-major order would
    interleave two columns' headers at the same band and make "next header" block
    segmentation impossible. For single-column documents this reduces to the plain
-   `(page, band, x)` order.
+   `(page, band, x)` order. Text columns are found by their **gutters**: vertical
+   channels at least 8 pt wide that at most two runs cross, ignoring page
+   furniture in the top and bottom margin bands. Tab stops inside a column (a
+   label and its value, table cells within prose) are not gutters, because the
+   column's full-width lines cross them.
 2. **Top-to-bottom bands.** Bands are distance-from-top and sorted **ascending**,
    yielding true reading order — the reverse of the spec's literal descending
    key, which would have ordered the bottom of the page first.
@@ -128,9 +142,10 @@ Each document `_id` is a 16-character base62 string derived from a SHA-256 over
 _id = base62( sha256( pack + "\0" + canonical_content ) )[:16]
 ```
 
-`canonical_content` is the byte-sorted JSON projection of the entity's Tier A
-fields and images, **excluding** `_id`, `_stats`, `sort`, and all Tier C
-enrichment fields. Crucially, an image reference contributes its **content
+`canonical_content` is the byte-sorted JSON projection of the entity's fields
+and images, **excluding** `_id`, `_stats` and `sort`. SHA-256 is the pinned
+pure-JS implementation, identical in Node and the browser. Crucially, an image
+reference contributes its **content
 address** (`asset:<assetId>`) to the hash, not its deployment path — so changing
 the asset-reference prefix (a deployment concern) never forks ids across
 machines. The base62 alphabet is exactly `[0-9A-Za-z]`, matching Foundry's
@@ -152,23 +167,14 @@ warning.
 Every document is written with keys **byte-sorted at every level**, **4-space**
 indentation, **LF** line endings, no BOM, and a **terminal newline**. Assets are
 content-addressed and deduplicated: identical bytes become one file, so two users
-produce the same asset tree.
-
-## Tier C: enrichment reproducibility
-
-Wiki link resolution is fail-open (any offline/unreachable/no-match outcome logs
-and proceeds with no link) and is made reproducible by a **local lockfile**, not
-by the network. The first enriching run resolves names and writes the lockfile;
-subsequent runs read it and make **zero** network calls. The resolver's ranking
-is a pure function of the candidate set (versioned by `RESOLVER_VERSION`), so a
-fixed lockfile yields a fixed result. The lockfile pins page revid and image
-SHA-1 so `--refresh-enrichment` can detect staleness. The lockfile is user-local,
-gitignored, and never distributed.
+produce the same asset tree. Re-encoded rasters use the in-house PNG encoder
+(filter 0, pinned zlib, only IHDR/IDAT/IEND). The browser's zip download uses a
+fixed entry timestamp, so the archive's bytes depend only on its contents.
 
 ## Compiled packs caveat
 
 Every determinism guarantee, golden test, and CI gate in this repo
-(`gate:determinism`, `gate:timestamps`, `gate:titles`, `gate:wiki`) operates on
+(`gate:determinism`, `gate:timestamps`, `gate:titles`) operates on
 the **`_source/*.json` pack corpus** — the human-readable, per-document JSON the
 engine emits.
 

@@ -1,0 +1,142 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { describe, expect, it } from "vitest";
+import {
+    isEmptyCell,
+    parseAvailability,
+    parseCoverage,
+    parseDamage,
+    parseInteger,
+    parseQualities,
+    parseRange,
+    parseRateOfFire,
+    parseReload,
+    parseWeaponClass,
+    parseWeight,
+} from "../../src/infer/notation.ts";
+
+describe("parseDamage", () => {
+    it("reads dice, signed bonus and damage-type letter", () => {
+        expect(parseDamage("2d10+3 I")).toEqual({ formula: "2d10", bonus: 3, type: "impact" });
+        expect(parseDamage("1d10–2 (E)")).toEqual({ formula: "1d10", bonus: -2, type: "energy" });
+        expect(parseDamage("1d5+SB R")).toEqual({ formula: "1d5", bonus: 0, type: "rending" });
+    });
+
+    it("repairs an OCR l/I for the dice 'd1' and ignores footnote markers", () => {
+        expect(parseDamage("1dl0 X†")).toEqual({ formula: "1d10", bonus: 0, type: "explosive" });
+    });
+
+    it("rejects non-damage text", () => {
+        expect(parseDamage("Basic")).toBeNull();
+    });
+});
+
+describe("parseRange", () => {
+    it("reads metres, kilometres and strength-bonus multiples", () => {
+        expect(parseRange("100m")).toEqual({ value: 100, units: "m", special: "" });
+        expect(parseRange("2 km")).toEqual({ value: 2, units: "km", special: "" });
+        expect(parseRange("SBx3")).toEqual({ value: 0, units: "m", special: "SBx3" });
+        expect(parseRange("3xSB")).toEqual({ value: 0, units: "m", special: "SBx3" });
+    });
+
+    it("rejects non-range text", () => {
+        expect(parseRange("Melee")).toBeNull();
+    });
+});
+
+describe("parseRateOfFire", () => {
+    it("reads single, semi and full modes, dash as zero", () => {
+        expect(parseRateOfFire("S/3/-")).toEqual({ single: true, semi: 3, full: 0 });
+        expect(parseRateOfFire("–/–/10")).toEqual({ single: false, semi: 0, full: 10 });
+    });
+
+    it("reads an empty mode field as no such mode", () => {
+        expect(parseRateOfFire("S/–/")).toEqual({ single: true, semi: 0, full: 0 });
+    });
+
+    it("rejects malformed triples", () => {
+        expect(parseRateOfFire("S/3")).toBeNull();
+        expect(parseRateOfFire("X/3/2")).toBeNull();
+    });
+});
+
+describe("parseReload", () => {
+    it("maps actions to reload keys", () => {
+        expect(parseReload("Full")).toBe("full");
+        expect(parseReload("2 Full")).toBe("2-full");
+        expect(parseReload("Half")).toBe("half");
+        expect(parseReload("—")).toBe("-");
+        expect(parseReload("Sometimes")).toBeNull();
+    });
+});
+
+describe("parseWeight / parseInteger", () => {
+    it("reads kilograms and treats a dash as zero", () => {
+        expect(parseWeight("4.5kg")).toBe(4.5);
+        expect(parseWeight("15 kg")).toBe(15);
+        expect(parseWeight("-")).toBe(0);
+        expect(parseWeight("heavy")).toBeNull();
+    });
+
+    it("reads signed integers", () => {
+        expect(parseInteger("+10")).toBe(10);
+        expect(parseInteger("-5")).toBe(-5);
+        expect(parseInteger("n/a")).toBe(0);
+        expect(parseInteger("x")).toBeNull();
+    });
+
+    it("recognizes empty cells", () => {
+        expect(isEmptyCell(" – ")).toBe(true);
+        expect(isEmptyCell("N/A")).toBe(true);
+        expect(isEmptyCell("3")).toBe(false);
+    });
+});
+
+describe("parseQualities", () => {
+    it("slugs qualities, folds ratings, sorts, and keeps commas inside parentheses", () => {
+        expect(parseQualities("Sturdy, Spread (3), Quiet")).toEqual(["quiet", "spread-3", "sturdy"]);
+        expect(parseQualities("Graded (2, 3)")).toEqual(["graded-2,3"]);
+        expect(parseQualities("—")).toEqual([]);
+    });
+});
+
+describe("parseAvailability", () => {
+    it("matches full names and hyphenated forms", () => {
+        expect(parseAvailability("Very Rare")).toBe("very-rare");
+        expect(parseAvailability("Near Unique")).toBe("near-unique");
+        expect(parseAvailability("Common")).toBe("common");
+    });
+
+    it("resolves abbreviations structurally against the enum", () => {
+        expect(parseAvailability("VR")).toBe("very-rare");
+        expect(parseAvailability("ER")).toBe("extremely-rare");
+        expect(parseAvailability("Sc")).toBe("scarce");
+        expect(parseAvailability("Av")).toBe("average");
+        expect(parseAvailability("Cm")).toBe("common");
+        expect(parseAvailability("Ra")).toBe("rare");
+    });
+
+    it("returns null for non-availability text", () => {
+        expect(parseAvailability("")).toBeNull();
+        expect(parseAvailability("xyz")).toBeNull();
+    });
+});
+
+describe("parseCoverage", () => {
+    it("expands location words in schema order", () => {
+        expect(parseCoverage("Body, Arms")).toEqual(["body", "leftArm", "rightArm"]);
+        expect(parseCoverage("All")).toEqual(["head", "body", "leftArm", "rightArm", "leftLeg", "rightLeg"]);
+        expect(parseCoverage("Head")).toEqual(["head"]);
+    });
+
+    it("rejects unknown location words", () => {
+        expect(parseCoverage("Tail")).toBeNull();
+    });
+});
+
+describe("parseWeaponClass", () => {
+    it("takes the first weapon-class word", () => {
+        expect(parseWeaponClass("Basic")).toBe("basic");
+        expect(parseWeaponClass("Pistol/Melee")).toBe("pistol");
+        expect(parseWeaponClass("Something")).toBeNull();
+    });
+});

@@ -29,10 +29,7 @@ describe("CI gate scripts pass against the corpus", () => {
     it("G9 title scan against the denylist", () => {
         expect(() => runGate("gate-title-scan.mjs")).not.toThrow();
     });
-    it("G13 wiki-data scan", () => {
-        expect(() => runGate("gate-wiki-scan.mjs")).not.toThrow();
-    });
-    it("G5/G6 fail-closed refusals (spawns the CLI; writes only to tmp)", () => {
+    it("G6 fail-closed encrypted refusal (spawns the CLI; writes only to tmp)", () => {
         expect(() => runGate("gate-refusals.mjs")).not.toThrow();
     }, 60_000);
 });

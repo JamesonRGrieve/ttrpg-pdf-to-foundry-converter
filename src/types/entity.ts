@@ -1,36 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { FoundryDocumentType } from "./profile.ts";
 
-/** A field value produced by the apply stage before emit maps it into a document. */
-export type FieldValue = string | number | boolean | null;
+/** Top-level Foundry document classes the engine emits into compendium packs. */
+export type FoundryDocumentType = "Item" | "Actor" | "JournalEntry" | "RollTable";
+
+/** A JSON value as it lands in an emitted `_source/*.json` document. */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+export type JsonObject = { [key: string]: JsonValue };
+
+/** A field value produced by inference before emit maps it into a document. */
+export type FieldValue = JsonValue;
 
 /**
- * One extracted entity, prior to `_id` assignment. `enrichmentFields` are kept
- * strictly separate from `fields`: they are excluded from the `_id` hash and
- * from every Tier A field so enrichment can never perturb identity (spec §9.1,
- * §10.6). `ordinal` is the position in the deterministic IR order and drives
- * both the `sort` value and collision disambiguation (§9.2).
+ * One extracted entity, prior to `_id` assignment. `ordinal` is the position in
+ * the deterministic IR order and drives both the `sort` value and collision
+ * disambiguation.
  */
 export interface Entity {
     blockId: string;
     documentType: FoundryDocumentType;
-    pack: string;
+    /** Game-line directory the pack lives under (`<group>/<pack>/_source`). */
     group: string;
+    pack: string;
     ordinal: number;
-    /** Foundry document field path → value (Tier A). Feeds the `_id` hash. */
+    /** Foundry document field path → value. Feeds the `_id` hash. */
     fields: Record<string, FieldValue>;
-    /** Resolved Foundry-path → asset id (Tier A). Feeds the `_id` hash. */
+    /** Resolved Foundry-path → asset id. Feeds the `_id` hash. */
     images: Record<string, string>;
-    /** Pending Tier C lookups: Foundry field path → already-resolved wiki key. */
-    enrichmentRequests: { path: string; key: string }[];
-    /** Tier C enrichment field path → value. NEVER feeds the `_id` hash. */
-    enrichmentFields: Record<string, FieldValue>;
     /** Source page/coordinate context for diagnostics. */
     provenance: { pageIndex: number; y: number };
 }
 
 export interface EntityGraph {
     entities: Entity[];
-    /** Non-fatal issues surfaced during apply/enrich (unmatched optional fields, etc.). */
+    /** Non-fatal issues surfaced during inference (unparsed cells, etc.). */
     warnings: string[];
 }

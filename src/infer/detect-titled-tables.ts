@@ -1,0 +1,709 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import type { IR, IRTextRun } from "../types/ir.ts";
+import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
+import { columnAt } from "../util/columns.ts";
+import { inMarginBand, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
+import { percentile } from "../util/stats.ts";
+import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
+import { normalizeHeader } from "./columns.ts";
+import { restoreWordSpaces } from "./names.ts";
+import { mergeContinuationRows } from "./row-merge.ts";
+import type { DetectedTable, TableCell, TableRow, TitledTable } from "./types.ts";
+
+/**
+ * Detect tables by their title pattern ("Table N-N: Title") and extract row
+ * data from the text runs below the title. This is more robust than pure
+ * column-alignment detection for PDFs with decorative fonts that fragment
+ * runs — the title anchors the table region, and row parsing uses y-position
+ * grouping rather than global column alignment.
+ */
+
+const TABLE_TITLE_RE = /^Table\s+\d+[-–]\d+:?\s*(.*)/i;
+
+/** A numbered table caption ("Table 3-2: …"), not a heading of its own. */
+export function isTableCaption(text: string): boolean {
+    return TABLE_TITLE_RE.test(text.trim());
+}
+const Y_TOL = 5;
+/** Runs within this many points vertically share a printed line. */
+const LINE_Y_TOL = 2;
+/** A captioned table has at least this many columns (a roll table: roll + result). */
+const MIN_COLUMNS = 2;
+
+interface TitleHit {
+    pageIndex: number;
+    y: number;
+    title: string;
+    run: IRTextRun;
+}
+
+/** Widest gap between runs of one caption line. */
+const CAPTION_GAP = 12;
+/** A caption line within this many caption-sizes below continues the caption. */
+const CAPTION_WRAP_FACTOR = 1.4;
+
+/**
+ * The full caption text: the matching run, the same-style runs that continue
+ * its baseline, and wrapped caption lines directly beneath it.
+ */
+function captionText(ir: IR, start: IRTextRun): string {
+    const sameStyle = (r: IRTextRun): boolean =>
+        r.pageIndex === start.pageIndex && r.font === start.font && r.weight === start.weight && r !== start;
+    let text = start.text;
+    let end = start.x + start.width;
+    const onLine = ir.runs
+        .filter((r) => sameStyle(r) && Math.abs(r.y - start.y) < LINE_Y_TOL && r.x >= end - 1)
+        .sort((a, b) => a.x - b.x);
+    for (const r of onLine) {
+        if (r.x - end > CAPTION_GAP) {
+            break;
+        }
+        text = joinText(text, r.text, r.x - end);
+        end = r.x + r.width;
+    }
+    let y = start.y;
+    for (;;) {
+        const below = ir.runs
+            .filter(
+                (r) =>
+                    sameStyle(r) &&
+                    y - r.y > LINE_Y_TOL &&
+                    y - r.y <= CAPTION_WRAP_FACTOR * start.size &&
+                    Math.abs(r.x - start.x) < CAPTION_GAP,
+            )
+            .sort((a, b) => a.x - b.x);
+        const [lead] = below;
+        if (lead === undefined) {
+            break;
+        }
+        text = `${text} ${below.map((r) => r.text).join(" ")}`;
+        y = lead.y;
+    }
+    return text.replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * A caption stands alone on its baseline. A table reference set in the same
+ * bold face inside running text ("… roll on Table 8-15: Malignancies (see
+ * page 290) …") has text in another face right beside it.
+ */
+function inRunningText(ir: IR, run: IRTextRun): boolean {
+    return ir.runs.some(
+        (r) =>
+            r.pageIndex === run.pageIndex &&
+            r !== run &&
+            r.text.trim().length > 0 &&
+            (r.font !== run.font || r.weight !== run.weight) &&
+            Math.abs(r.y - run.y) < LINE_Y_TOL &&
+            r.x + r.width >= run.x - CAPTION_GAP &&
+            r.x <= run.x + run.width + CAPTION_GAP,
+    );
+}
+
+function findTableTitles(ir: IR): TitleHit[] {
+    const hits: TitleHit[] = [];
+    for (const run of ir.runs) {
+        if (run.weight !== "bold" || !TABLE_TITLE_RE.test(run.text) || inRunningText(ir, run)) {
+            continue;
+        }
+        const text = captionText(ir, run);
+        const m = text.match(TABLE_TITLE_RE);
+        hits.push({
+            pageIndex: run.pageIndex,
+            y: run.y,
+            title: restoreWordSpaces(m?.[1]?.trim() ?? ""),
+            run,
+        });
+    }
+    return hits;
+}
+
+/**
+ * Keyed tables vertically centre a row's key (a roll band, a severity number)
+ * against its multi-line text, so a row's first text line may carry no key.
+ * When only some lines have content in the key column, every line joins the
+ * nearest keyed line (ties go to the key above).
+ */
+export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
+    const keyRun = (row: RawRow): IRTextRun | undefined =>
+        row.runs.find((r) => r.text.trim().length > 0 && columnOfRun(r.x, colBoundaries) === 0);
+    const anchors = lines.filter((row) => keyRun(row) !== undefined);
+    if (anchors.length === 0 || anchors.length === lines.length) {
+        return [...lines];
+    }
+    // Distances are measured from the key itself: a key set mid-row can share
+    // a baseline group with a neighbouring line of its cell.
+    const grouped = anchors.map((a) => ({
+        anchor: a,
+        keyY: keyRun(a)?.y ?? a.y,
+        row: { y: a.y, runs: [...a.runs] },
+    }));
+    for (const line of lines) {
+        if (anchors.includes(line)) {
+            continue;
+        }
+        // Nearest key; a tie goes to the one above.
+        const nearest = grouped.reduce((best, g) => {
+            const d = Math.abs(g.keyY - line.y);
+            const bestD = Math.abs(best.keyY - line.y);
+            return d < bestD || (d === bestD && g.keyY > best.keyY) ? g : best;
+        });
+        nearest.row.runs.push(...line.runs);
+    }
+    return grouped.map((g) => g.row);
+}
+
+type RawRow = BaselineLine;
+
+/** A run of note markers alone (a dagger): as a superscript it annotates a cell and sits off its baseline. */
+const NOTE_MARKER_ONLY = new RegExp(`^(?:${NOTE_MARKERS.source}|\\s)+$`, "u");
+/** A run set below this share of the table's typical size is a superscript. */
+const SUPERSCRIPT_RATIO = 0.8;
+
+/**
+ * Runs in the table's band. Whitespace-only runs (inter-cell padding) carry no
+ * layout and would bridge columns; note-marker runs carry no value and, set as
+ * superscripts, would bridge lines; page furniture in the margin bands is not
+ * part of any table.
+ */
+function collectTableRuns(
+    ir: IR,
+    bands: MarginBands,
+    pageIndex: number,
+    belowY: number,
+    aboveY: number,
+): IRTextRun[] {
+    const height = ir.pages.find((p) => p.pageIndex === pageIndex)?.height ?? 0;
+    const band = ir.runs.filter(
+        (r) =>
+            r.pageIndex === pageIndex &&
+            r.y < belowY &&
+            r.y > aboveY &&
+            !inMarginBand(r.y, height, bands) &&
+            r.text.trim().length > 0,
+    );
+    // A full-size marker can be a cell's own value ("see the note"); only a
+    // superscript one is dropped.
+    const sizes = band.map((r) => r.size).sort((a, b) => a - b);
+    const typical = sizes[Math.floor(sizes.length / 2)] ?? 0;
+    return band.filter((r) => !(NOTE_MARKER_ONLY.test(r.text) && r.size < SUPERSCRIPT_RATIO * typical));
+}
+
+function groupIntoRows(runs: IRTextRun[]): RawRow[] {
+    const rows = groupByBaseline(
+        [...runs].sort((a, b) => b.y - a.y),
+        Y_TOL,
+    );
+    for (const row of rows) {
+        row.runs.sort((a, b) => a.x - b.x);
+    }
+    return rows.sort((a, b) => b.y - a.y);
+}
+
+/** Runs closer than this many font-sizes are pieces of one header label (a word space). */
+const HEADER_JOIN_FACTOR = 0.45;
+/** Widest plausible glyph advance, in font-sizes (a wide capital). */
+const MAX_GLYPH_ADVANCE = 0.75;
+/** A gap wider than this between joined runs is a word space. */
+const WORD_GAP = 1.5;
+/** A cell's text may start this far left of its column's header edge (centred values). */
+const COLUMN_EDGE_TOLERANCE = 4;
+
+function joinText(a: string, b: string, gap: number): string {
+    return wordBreakBetween(a, b, gap, WORD_GAP) ? `${a} ${b}` : a + b;
+}
+
+/** Merge a header row's runs into its column labels (words of one label sit close together). */
+function mergeAdjacentText(runs: IRTextRun[]): { text: string; x: number; width: number; bold: boolean }[] {
+    const [first, ...rest] = [...runs].sort((a, b) => a.x - b.x);
+    if (first === undefined) {
+        return [];
+    }
+    const merged: { text: string; x: number; width: number; bold: boolean }[] = [];
+    let cur = { text: first.text, x: first.x, width: first.width, bold: first.weight === "bold" };
+    let prev = first;
+    for (const r of rest) {
+        // A run can carry trailing advance past its glyphs; measure the gap
+        // from where its text can plausibly end.
+        const inkEnd = Math.min(
+            cur.x + cur.width,
+            prev.x + prev.text.trimEnd().length * prev.size * MAX_GLYPH_ADVANCE,
+        );
+        const gap = r.x - inkEnd;
+        const joins = gap < HEADER_JOIN_FACTOR * Math.max(r.size, prev.size);
+        prev = r;
+        if (joins) {
+            cur.text = joinText(cur.text, r.text, gap);
+            cur.width = r.x + r.width - cur.x;
+            cur.bold = cur.bold || r.weight === "bold";
+        } else {
+            if (cur.text.trim().length > 0) {
+                merged.push(cur);
+            }
+            cur = { text: r.text, x: r.x, width: r.width, bold: r.weight === "bold" };
+        }
+    }
+    if (cur.text.trim().length > 0) {
+        merged.push(cur);
+    }
+    return merged;
+}
+
+/**
+ * Split runs that span a column edge. A text extractor fuses neighbouring
+ * cells into one run when they sit closer than a word space, so a run crossing
+ * an edge is cut at its word starts, each word placed by its estimated x
+ * (proportional to character offset — exact enough to fall on the right side
+ * of a gutter).
+ */
+function splitAtColumns(runs: readonly IRTextRun[], colBoundaries: readonly number[]): IRTextRun[] {
+    const out: IRTextRun[] = [];
+    for (const r of runs) {
+        const end = r.x + r.width;
+        const crosses = colBoundaries.some((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < end);
+        if (!crosses || !/\s/u.test(r.text.trim()) || r.text.length === 0) {
+            out.push(r);
+            continue;
+        }
+        out.push(...cutAtEdges(r, colBoundaries));
+    }
+    return out;
+}
+
+/**
+ * Split a run that crosses column edges into one piece per column. A text
+ * layer can set a whole row's cells as one run, the wide gap between cells
+ * written as a single space — so letters are not evenly spaced, and a cut is
+ * made at the word break nearest each edge the run crosses. The piece after an
+ * edge starts no further left than it.
+ */
+export function cutAtEdges(r: IRTextRun, colBoundaries: readonly number[]): IRTextRun[] {
+    const perChar = r.width / r.text.length;
+    const breaks = [...r.text.matchAll(/\s+/gu)].map((m) => m.index);
+    const edges = colBoundaries.filter((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < r.x + r.width);
+    const cuts: { at: number; edge: number }[] = [];
+    for (const edge of edges) {
+        const target = (edge - r.x) / perChar;
+        const after = cuts.at(-1)?.at ?? -1;
+        const [best] = breaks
+            .filter((b) => b > after)
+            .sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b);
+        if (best !== undefined) {
+            cuts.push({ at: best, edge });
+        }
+    }
+    const pieces: IRTextRun[] = [];
+    let start = 0;
+    let left = r.x;
+    for (const { at, edge } of [...cuts, { at: r.text.length, edge: r.x + r.width }]) {
+        const text = r.text.slice(start, at).trim();
+        if (text.length > 0) {
+            const x = Math.max(left, r.x + start * perChar);
+            pieces.push({ ...r, text, x, width: Math.max(0, r.x + at * perChar - x) });
+        }
+        start = at;
+        left = edge;
+    }
+    return pieces;
+}
+
+/** The column a run starts in: the last header edge at or left of it. */
+function columnOfRun(x: number, colBoundaries: readonly number[]): number {
+    return columnAt(x, colBoundaries, COLUMN_EDGE_TOLERANCE);
+}
+
+/** Share of body lines that must start a cell at one x for it to be the column's edge. */
+const ALIGN_SHARE = 0.3;
+
+/**
+ * A header label may be inset from its column's text. Where the body lines
+ * consistently start a run a little left of a header-derived edge (within the
+ * header's gap to its left neighbour's own edge, and at most a font size
+ * away), the column really starts there. Mutates `bounds` in place.
+ */
+export function alignBoundariesToData(bounds: number[], body: readonly RawRow[]): void {
+    for (let i = 1; i < bounds.length; i += 1) {
+        const edge = bounds[i];
+        const left = bounds[i - 1];
+        if (edge === undefined || left === undefined) {
+            continue;
+        }
+        const counts = new Map<number, number>();
+        for (const line of body) {
+            const starts = new Set(
+                line.runs
+                    .filter(
+                        (r) => r.text.trim().length > 0 && r.x < edge && edge - r.x <= r.size && r.x > left,
+                    )
+                    .map((r) => Math.round(r.x)),
+            );
+            for (const x of starts) {
+                counts.set(x, (counts.get(x) ?? 0) + 1);
+            }
+        }
+        const best = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+        if (best !== undefined && best[1] >= ALIGN_SHARE * body.length) {
+            bounds[i] = best[0] - COLUMN_EDGE_TOLERANCE / 2;
+        }
+    }
+}
+
+function inferColumnBoundaries(headerRow: RawRow): number[] {
+    const merged = mergeAdjacentText(headerRow.runs);
+    return merged.map((m) => m.x);
+}
+
+function assignToColumns(runs: IRTextRun[], colBoundaries: number[]): TableCell[] {
+    const cells: TableCell[] = Array.from({ length: colBoundaries.length }, (_, i) => ({
+        text: "",
+        colIndex: i,
+        isHeader: false,
+    }));
+
+    // A row may span several printed lines (wrapped cells). Each run is placed
+    // in its column individually — never merged across a column edge — and a
+    // column's pieces are joined line by line in reading order.
+    const lines = groupByBaseline(
+        [...runs].sort((a, b) => b.y - a.y),
+        LINE_Y_TOL,
+    );
+    for (const line of lines) {
+        const prevEnd = new Map<number, number>();
+        for (const r of splitAtColumns(
+            [...line.runs].sort((a, b) => a.x - b.x),
+            colBoundaries,
+        )) {
+            const col = columnOfRun(r.x, colBoundaries);
+            const cell = cells[col];
+            if (r.text.length === 0 || cell === undefined) {
+                continue;
+            }
+            const end = prevEnd.get(col);
+            cell.text =
+                end === undefined
+                    ? cell.text
+                        ? `${cell.text} ${r.text}`
+                        : r.text
+                    : joinText(cell.text, r.text, r.x - end);
+            cell.isHeader = cell.isHeader || r.weight === "bold";
+            prevEnd.set(col, r.x + r.width);
+        }
+    }
+    for (const cell of cells) {
+        cell.text = cell.text.replace(/\s+/gu, " ").trim();
+    }
+    return cells.filter((c) => c.text.length > 0);
+}
+
+export function detectTitledTables(ir: IR): TitledTable[] {
+    const titles = findTableTitles(ir);
+    const bands = marginBandsOf(ir);
+    const tables: TitledTable[] = [];
+
+    for (const title of titles) {
+        // The table runs down to the nearest caption below it in the same
+        // text column, else to the page's text floor.
+        const below = titles.filter(
+            (tt) => tt.pageIndex === title.pageIndex && tt.y < title.y && tt.run.column === title.run.column,
+        );
+        const bottomBound = below.length > 0 ? Math.max(...below.map((tt) => tt.y)) + 10 : 30;
+        const band = collectTableRuns(ir, bands, title.pageIndex, title.y - 5, bottomBound);
+        // The table spans exactly the text columns its header row occupies: a
+        // neighbouring column's prose shares the band, while a wide table may
+        // straddle several columns. The header is looked for in the caption's
+        // own column first.
+        const ownColumn = band.filter((r) => r.column === title.run.column);
+        const header = findHeader(groupIntoRows(ownColumn)) ?? findHeader(groupIntoRows(band));
+        const table =
+            header === null ? null : readTable(band.filter(inColumns(headerColumns(header, band))), title);
+        if (table !== null) {
+            tables.push(table);
+        }
+    }
+    return joinContinuations(tables);
+}
+
+/** A caption marking a table carried over from an earlier page: "… (Continued)". */
+const CONTINUED = /\s*\((?:cont(?:inued|'d|\.)?)\)\s*$/iu;
+
+/**
+ * A continuation is the same table under its base caption. Its rows keep their
+ * own page: each record's span is its row, wherever the table began.
+ */
+export function joinContinuations<T extends DetectedTable>(tables: readonly T[]): T[] {
+    return tables.map((t) => {
+        const title = t.tableTitle ?? "";
+        const base = title.replace(CONTINUED, "");
+        return base === title ? t : { ...t, tableTitle: base };
+    });
+}
+
+/** A gap this many times the table's median line gap ends the table. */
+const TABLE_END_GAP_FACTOR = 3;
+/** A single run this long crossing column edges is running prose, not a cell. */
+const PROSE_RUN_LENGTH = 40;
+/** A run this many times the records' median size is a heading set below the table. */
+const DISPLAY_SIZE_FACTOR = 1.15;
+
+/** A line opening with a bold `Label:` — a field line of prose, not a table record. */
+function opensWithLabel(line: RawRow): boolean {
+    const first = [...line.runs].sort((a, b) => a.x - b.x).find((r) => r.text.trim().length > 0);
+    return first?.weight === "bold" && /:\s*$/u.test(first.text);
+}
+
+/** Cut the lines below a header where the table visibly ends. */
+export function tableBody(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
+    const gaps = lines.slice(1).map((l, i) => (lines[i]?.y ?? l.y) - l.y);
+    const sortedGaps = [...gaps].sort((a, b) => a - b);
+    const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)] ?? 0;
+    const body: RawRow[] = [];
+    for (const [i, line] of lines.entries()) {
+        const recordSize = percentile(
+            body.flatMap((l) => l.runs.map((r) => r.size)).sort((a, b) => a - b),
+            0.5,
+        );
+        const displayed = body.length > 0 && line.runs.some((r) => r.size > DISPLAY_SIZE_FACTOR * recordSize);
+        const proseRun = line.runs.some(
+            (r) =>
+                r.text.trim().length > PROSE_RUN_LENGTH &&
+                colBoundaries.filter((b) => b > r.x + COLUMN_EDGE_TOLERANCE && b < r.x + r.width).length >= 2,
+        );
+        // A record's key is a name or value; a sentence break in it is prose.
+        const key = line.runs
+            .filter((r) => columnOfRun(r.x, colBoundaries) === 0)
+            .map((r) => r.text)
+            .join(" ");
+        // A caption line below the header — the next table's, or prose citing
+        // this one ("Table 2-1: … above lists …") — is no record.
+        const proseKey = /\.\s+\p{Lu}/u.test(key) || isTableCaption(key);
+        // A wide gap ends the table unless the line past it still fills
+        // several columns (a gap between multi-line records).
+        const gapBefore = i === 0 ? 0 : (gaps[i - 1] ?? 0);
+        const wide = (gap: number): boolean => medianGap > 0 && gap > TABLE_END_GAP_FACTOR * medianGap;
+        const columnsOf = (l: RawRow): number =>
+            new Set(l.runs.map((r) => columnOfRun(r.x, colBoundaries))).size;
+        // A section row set apart by a wide gap still belongs to the table
+        // when records resume right after it (before the next wide gap).
+        const resumes = (isRecord: (l: RawRow) => boolean): boolean => {
+            for (let j = i + 1; j < lines.length && !wide(gaps[j - 1] ?? 0); j++) {
+                const next = lines[j];
+                if (next !== undefined && isRecord(next)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const halfTheColumns = colBoundaries.length / 2;
+        const setApart =
+            wide(gapBefore) && columnsOf(line) < 2 && !resumes((l) => columnsOf(l) >= halfTheColumns);
+        // A larger line is the table's own section row while records follow
+        // it — two cells or more, not a line of prose or a `Label:` field
+        // line — and otherwise a heading below the table.
+        const record = (l: RawRow): boolean =>
+            columnsOf(l) >= Math.max(MIN_COLUMNS, halfTheColumns) && !opensWithLabel(l);
+        // In a table of few columns a line of prose fills as many cells as a
+        // record does, so there a larger line set apart by a wide gap is a
+        // heading whatever follows it.
+        const narrow = colBoundaries.length < 2 * MIN_COLUMNS;
+        const heading = displayed && ((narrow && wide(gapBefore)) || !resumes(record));
+        if (proseRun || proseKey || setApart || heading) {
+            break;
+        }
+        body.push(line);
+    }
+    return body;
+}
+
+/**
+ * A table header row: bold and naming at least two columns (a stacked header
+ * may put a single label on a line of its own above it).
+ */
+function isHeaderRow(row: RawRow): boolean {
+    const labels = mergeAdjacentText(headerLabels(row).runs);
+    // `Label:` runs are field labels in prose, not column headings.
+    return labels.length >= MIN_COLUMNS && !labels.some((l) => l.text.trim().endsWith(":"));
+}
+
+/**
+ * A header line's labels: its bold runs. Prose from a neighbouring text column
+ * can share the header's baseline; it is not a column label.
+ */
+function headerLabels(row: RawRow): RawRow {
+    return { ...row, runs: row.runs.filter((r) => r.weight === "bold") };
+}
+
+/**
+ * The table's header: the first header row — or, when a fuller header row
+ * follows it directly, that one, as a stacked header prints some labels' first
+ * words on a line above the rest ("LOCATIONS" over "COVERED"). Each upper label
+ * is then prefixed to the column label it sits over. Returns the header's line
+ * index and its labels.
+ */
+export function stackedHeader(lines: readonly RawRow[]): { index: number; row: RawRow } | null {
+    const index = lines.findIndex(isHeaderRow);
+    const first = lines[index];
+    if (first === undefined) {
+        return null;
+    }
+    const upper = headerLabels(first);
+    const next = lines[index + 1];
+    if (next === undefined || !isHeaderRow(next)) {
+        return { index, row: upper };
+    }
+    const lower = headerLabels(next);
+    const lowerLabels = mergeAdjacentText(lower.runs);
+    if (lowerLabels.length <= mergeAdjacentText(upper.runs).length) {
+        return { index, row: upper };
+    }
+    const runs = lower.runs.map((r) => ({ ...r }));
+    for (const label of mergeAdjacentText(upper.runs)) {
+        const under = lowerLabels.find((l) => label.x < l.x + l.width && l.x < label.x + label.width);
+        const lead =
+            under === undefined
+                ? undefined
+                : runs
+                      .filter((r) => r.x >= under.x - COLUMN_EDGE_TOLERANCE && r.x < under.x + under.width)
+                      .sort((a, b) => a.x - b.x)[0];
+        if (lead !== undefined) {
+            lead.text = `${label.text} ${lead.text}`;
+        }
+    }
+    return { index: index + 1, row: { ...lower, runs } };
+}
+
+function findHeader(lines: readonly RawRow[]): RawRow | null {
+    return stackedHeader(lines)?.row ?? null;
+}
+
+/**
+ * The text columns a table occupies: those holding its header labels. A wide
+ * table's header continues across a gutter on the same baseline in the same
+ * header face; a neighbouring column's prose on that baseline does not share
+ * the face, so it is left out.
+ */
+function headerColumns(header: RawRow, band: readonly IRTextRun[]): Set<number> {
+    const faces = new Set(header.runs.map((r) => `${r.font}|${r.weight}`));
+    const columns = new Set(header.runs.map((r) => r.column));
+    for (const r of band) {
+        if (Math.abs(r.y - header.y) < Y_TOL && faces.has(`${r.font}|${r.weight}`)) {
+            columns.add(r.column);
+        }
+    }
+    return columns;
+}
+
+function inColumns(columns: ReadonlySet<number>): (r: IRTextRun) => boolean {
+    return (r) => columns.has(r.column);
+}
+
+/** Read one captioned table from `tableRuns`, or null when they hold no table. */
+function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null {
+    if (tableRuns.length < 10) {
+        return null;
+    }
+    const lines = groupIntoRows(tableRuns);
+    if (lines.length < 2) {
+        return null;
+    }
+    // The header is the first bold row that names at least two columns (a
+    // stacked header may put a single label on a line of its own above it).
+    const header = stackedHeader(lines);
+    if (header === null) {
+        return null;
+    }
+    const { index: headerIdx, row: headerRow } = header;
+    const colBoundaries = inferColumnBoundaries(headerRow);
+    if (colBoundaries.length < MIN_COLUMNS) {
+        return null;
+    }
+
+    const headerCells = assignToColumns(headerRow.runs, colBoundaries);
+    const headers = headerCells.map((c) => c.text.replace(/\s+/g, " ").trim());
+    const body = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow));
+    alignBoundariesToData(colBoundaries, body);
+
+    // A table printed as side-by-side copies of one column set (its header
+    // repeats) holds a record per copy on each line: each copy is read as its
+    // own table, left copy first.
+    const period = headerPeriod(headers);
+    const dataRows: TableRow[] = [];
+    for (let start = 0; start < headers.length; start += period) {
+        const bounds = colBoundaries.slice(start, start + period);
+        const next = colBoundaries[start + period];
+        const inCopy = (r: IRTextRun): boolean =>
+            r.x >= (bounds[0] ?? 0) - COLUMN_EDGE_TOLERANCE &&
+            (next === undefined || r.x < next - COLUMN_EDGE_TOLERANCE);
+        const copy = body
+            .map((line) => ({ ...line, runs: splitAtColumns(line.runs, colBoundaries).filter(inCopy) }))
+            .filter((line) => line.runs.length > 0);
+        dataRows.push(...readRows(copy, bounds));
+    }
+
+    return dataRows.length > 0
+        ? {
+              pageIndex: title.pageIndex,
+              headers: headers.slice(0, period),
+              rows: dataRows,
+              tableTitle: title.title,
+              runs: [...lines.slice(0, headerIdx + 1), ...body].flatMap((l) => l.runs),
+          }
+        : null;
+}
+
+/**
+ * The width of the column set a header row repeats ("NAME EFFECT NAME EFFECT"
+ * → 2), or the full width when it does not repeat.
+ */
+export function headerPeriod(headers: readonly string[]): number {
+    const keys = headers.map(normalizeHeader);
+    for (let p = MIN_COLUMNS; p < keys.length; p += 1) {
+        if (keys.length % p === 0 && keys.every((k, i) => k === keys[i % p])) {
+            return p;
+        }
+    }
+    return keys.length;
+}
+
+/**
+ * Printed lines below a header → rows: lines gather around their row key, then
+ * wrapped lines rejoin their row (tight spacing AND fewer filled columns than
+ * a typical row).
+ */
+function readRows(body: readonly RawRow[], colBoundaries: number[]): TableRow[] {
+    const lineCells = (row: RawRow): string[] =>
+        colBoundaries.map((_, col) =>
+            row.runs
+                .filter((r) => columnOfRun(r.x, colBoundaries) === col)
+                .sort((a, b) => b.y - a.y || a.x - b.x)
+                .map((r) => r.text)
+                .join(" ")
+                .trim(),
+        );
+    const rows = mergeContinuationRows(groupByKeyAnchors(body, colBoundaries), { cells: lineCells });
+    const dataRows: TableRow[] = [];
+    for (const row of rows) {
+        const cells = assignToColumns(row.runs, colBoundaries);
+        const allBold = row.runs.every((r) => r.weight === "bold");
+        const fewCells = cells.filter((c) => c.text.length > 0).length <= 2;
+        if (allBold && fewCells) {
+            const sectionText = row.runs
+                .map((r) => r.text)
+                .join(" ")
+                .trim();
+            dataRows.push({
+                cells: [],
+                isHeaderRow: false,
+                isSectionHeader: true,
+                sectionName: sectionText,
+            });
+        } else {
+            dataRows.push({
+                cells,
+                isHeaderRow: false,
+                isSectionHeader: false,
+                sectionName: null,
+            });
+        }
+    }
+    return dataRows;
+}

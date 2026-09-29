@@ -4,3 +4,5 @@
 allowBuilds:
     "@biomejs/biome": true
     esbuild: true
+    # Its only install script is an opencollective donation banner.
+    tesseract.js: false

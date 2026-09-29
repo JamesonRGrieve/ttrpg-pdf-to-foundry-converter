@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { inflateSync } from "node:zlib";
-import { PNG } from "pngjs";
+import { unzlibSync } from "fflate";
 import type { Logger } from "../logger.ts";
 import type { ImageAsset, ImageAssets, RawDoc, RawImageXObject } from "../types/ir.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare, numAsc } from "../util/ordered.ts";
+import { encodePngRgba } from "../util/png.ts";
 
 /**
  * Stage 3 — Image recovery, Tier A (spec §6.1). Two rules govern byte-stability:
  *  1. Prefer lossless passthrough. DCTDecode → write JPEG bytes directly;
  *     JPXDecode → write directly. No decode/re-encode round-trip (encoders are
  *     the largest source of cross-platform byte drift).
- *  2. Flate-decoded rasters are re-encoded to PNG with a PINNED encoder, fixed
- *     compression level, fixed filter strategy, and all ancillary chunks
- *     stripped (pngjs writes only IHDR/IDAT/IEND — no tIME/pHYs/gAMA/tEXt).
+ *  2. Flate-decoded rasters are re-encoded to PNG with the in-house encoder
+ *     (`util/png.ts`): pinned zlib, fixed level, filter 0, and only
+ *     IHDR/IDAT/IEND — no tIME/pHYs/gAMA/tEXt.
  *
  * Colorspace conversion is a fixed in-house transform at a stated intent — never
  * a system ICC profile (§6.1). Assets are content-addressed (§6.1): identical
@@ -23,13 +23,6 @@ import { byteCompare, numAsc } from "../util/ordered.ts";
  * TIFF/unknown predictor we don't model) are refused with a warning rather than
  * guessed (§6.3 / §8.6). Tier B raster fallback is a separate, opt-in path.
  */
-
-const PNG_ENCODE_OPTIONS = {
-    // Fixed for determinism. filterType 0 (None) + fixed deflate settings.
-    deflateLevel: 9,
-    deflateStrategy: 3,
-    filterType: 0,
-} as const;
 
 const COMPONENTS_BY_COLORSPACE: Readonly<Record<string, number>> = {
     DeviceGray: 1,
@@ -60,20 +53,25 @@ function paeth(a: number, b: number, c: number): number {
     return pb <= pc ? b : c;
 }
 
+/** A byte of `bytes`, 0 outside it (the predictors' "no neighbour" value). */
+function byteAt(bytes: Uint8Array | null, i: number): number {
+    return bytes?.[i] ?? 0;
+}
+
 /** Reverse PNG per-row predictors (predictor >= 10). Modifies rows in place. */
 function unfilterPng(data: Uint8Array, rowBytes: number, bpp: number): Uint8Array {
     const rows = Math.floor(data.length / (rowBytes + 1));
     const out = new Uint8Array(rows * rowBytes);
     let prevRow: Uint8Array | null = null;
     for (let r = 0; r < rows; r += 1) {
-        const filterType = data[r * (rowBytes + 1)]!;
+        const filterType = byteAt(data, r * (rowBytes + 1));
         const rowStart = r * (rowBytes + 1) + 1;
         const cur = new Uint8Array(rowBytes);
         for (let i = 0; i < rowBytes; i += 1) {
-            const raw = data[rowStart + i]!;
-            const left = i >= bpp ? cur[i - bpp]! : 0;
-            const up = prevRow ? prevRow[i]! : 0;
-            const upLeft = prevRow && i >= bpp ? prevRow[i - bpp]! : 0;
+            const raw = byteAt(data, rowStart + i);
+            const left = i >= bpp ? byteAt(cur, i - bpp) : 0;
+            const up = byteAt(prevRow, i);
+            const upLeft = i >= bpp ? byteAt(prevRow, i - bpp) : 0;
             let value: number;
             switch (filterType) {
                 case 0:
@@ -109,8 +107,8 @@ function unfilterTiff(data: Uint8Array, rowBytes: number, bpp: number): Uint8Arr
     const out = new Uint8Array(rows * rowBytes);
     for (let r = 0; r < rows; r += 1) {
         for (let i = 0; i < rowBytes; i += 1) {
-            const raw = data[r * rowBytes + i]!;
-            const left = i >= bpp ? out[r * rowBytes + i - bpp]! : 0;
+            const raw = byteAt(data, r * rowBytes + i);
+            const left = i >= bpp ? byteAt(out, r * rowBytes + i - bpp) : 0;
             out[r * rowBytes + i] = (raw + left) & 0xff;
         }
     }
@@ -135,9 +133,8 @@ function encodeRasterToPng(
     height: number,
     components: number,
 ): Uint8Array {
-    const png = new PNG({ width, height, colorType: 6, inputColorType: 6, bitDepth: 8 });
-    const rgba = png.data;
     const pixels = width * height;
+    const rgba = new Uint8Array(pixels * 4);
     for (let p = 0; p < pixels; p += 1) {
         const si = p * components;
         let r: number;
@@ -163,7 +160,7 @@ function encodeRasterToPng(
         rgba[di + 2] = b;
         rgba[di + 3] = 255;
     }
-    return new Uint8Array(PNG.sync.write(png, PNG_ENCODE_OPTIONS));
+    return encodePngRgba(rgba, width, height);
 }
 
 function recoverImage(img: RawImageXObject, log: Logger): RasterResult | null {
@@ -189,7 +186,7 @@ function recoverImage(img: RawImageXObject, log: Logger): RasterResult | null {
 
     let decoded: Uint8Array;
     try {
-        decoded = img.filter === "FlateDecode" ? new Uint8Array(inflateSync(img.bytes)) : img.bytes;
+        decoded = img.filter === "FlateDecode" ? unzlibSync(img.bytes) : img.bytes;
     } catch (err) {
         log.warn(
             `image ${img.objectId}: inflate failed (${err instanceof Error ? err.message : "error"}); skipped`,

@@ -1,7 +1,7 @@
 {
     "name": "foundry-pdf-parser",
     "version": "0.1.0",
-    "description": "Deterministic PDF to Foundry VTT compendium parsing engine. Interprets user-supplied profiles at runtime; ships zero third-party data.",
+    "description": "Deterministic PDF to Foundry VTT compendium engine. Infers structure from the PDF alone (text layer + embedded OCR); runs in Node or entirely in the browser; ships zero third-party data.",
     "license": "AGPL-3.0-or-later",
     "type": "module",
     "packageManager": "pnpm@11.1.1",
@@ -9,26 +9,28 @@
         "node": ">=22"
     },
     "bin": {
-        "foundry-pdf-parser": "dist/cli.js"
+        "foundry-pdf-parser": "dist/node/cli.js"
     },
     "exports": {
         ".": "./dist/index.js"
     },
     "files": [
         "dist",
-        "profiles",
         "docs",
         "LICENSE"
     ],
     "scripts": {
-        "build": "tsc -p tsconfig.json",
+        "build": "tsc -p tsconfig.json && node scripts/copy-build-assets.mjs",
         "clean": "rm -rf dist .cache",
-        "cli": "tsx src/cli.ts",
-        "validate-profile": "tsx src/cli.ts validate-profile",
+        "cli": "tsx src/node/cli.ts",
+        "web:assets": "node scripts/copy-web-assets.mjs",
+        "web:dev": "pnpm web:assets && vite",
+        "web:build": "pnpm web:assets && vite build",
+        "web:typecheck": "tsc -p tsconfig.web.json",
+        "test:e2e": "playwright test",
         "fixtures:render": "node scripts/render-fixtures.mjs",
         "golden:update": "tsx scripts/update-golden.ts",
-        "typecheck": "tsc -p tsconfig.json --noEmit",
-        "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
         "lint": "eslint . && biome lint .",
         "lint:fix": "eslint . --fix && biome lint --write .",
         "lint:biome": "biome lint .",
@@ -41,25 +43,25 @@
         "gate:determinism": "node scripts/gate-determinism.mjs",
         "gate:timestamps": "node scripts/gate-timestamp-scan.mjs",
         "gate:titles": "node scripts/gate-title-scan.mjs",
-        "gate:wiki": "node scripts/gate-wiki-scan.mjs",
         "gate:deps": "node scripts/gate-dep-pin.mjs",
         "gate:all": "node scripts/gate-all.mjs",
         "check": "pnpm build && pnpm typecheck && pnpm lint && pnpm format && pnpm test && pnpm gate:all",
         "prepare": "husky || true"
     },
     "dependencies": {
-        "ajv": "^8.17.1",
-        "ajv-formats": "^3.0.1",
+        "@noble/hashes": "2.4.0",
+        "@tesseract.js-data/eng": "1.0.0",
+        "fflate": "0.8.3",
+        "mupdf": "1.28.1",
         "pdf-lib": "1.17.1",
         "pdfjs-dist": "4.10.38",
-        "pngjs": "7.0.0",
-        "re2js": "0.4.3",
-        "yaml": "2.7.0"
+        "tesseract.js": "7.0.0",
+        "tesseract.js-core": "7.0.0"
     },
     "devDependencies": {
         "@biomejs/biome": "^1.9.4",
+        "@playwright/test": "1.63.0",
         "@types/node": "^22.10.5",
-        "@types/pngjs": "^6.0.5",
         "@typescript-eslint/eslint-plugin": "^8.19.0",
         "@typescript-eslint/parser": "^8.19.0",
         "@vitest/coverage-v8": "^2.1.8",
@@ -71,6 +73,7 @@
         "prettier": "^3.4.2",
         "tsx": "^4.19.2",
         "typescript": "^5.7.3",
+        "vite": "8.3.1",
         "vitest": "^2.1.8"
     }
 }

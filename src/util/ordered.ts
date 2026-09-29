@@ -7,9 +7,22 @@
  * stability — comparators are made total by appending a tiebreak key.
  */
 
+const UTF8 = new TextEncoder();
+
 /** Compare two strings by their UTF-8 byte sequence. Deterministic, locale-free. */
 export function byteCompare(a: string, b: string): number {
-    return Buffer.from(a, "utf8").compare(Buffer.from(b, "utf8"));
+    const x = UTF8.encode(a);
+    const y = UTF8.encode(b);
+    for (const [i, xb] of x.entries()) {
+        const yb = y[i];
+        if (yb === undefined) {
+            break;
+        }
+        if (xb !== yb) {
+            return xb < yb ? -1 : 1;
+        }
+    }
+    return numAsc(x.length, y.length);
 }
 
 export type Comparator<T> = (a: T, b: T) => number;

@@ -1,0 +1,11 @@
+{
+    "documents": 1,
+    "engineVersion": "0.2.0",
+    "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
+    "irVersion": 10,
+    "lineKey": "dh2",
+    "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300",
+    "pack": "dh2-wayfarers-field-manual-actors-bestiary",
+    "pageOffset": 1,
+    "renderer": "mupdf@1.28.1/300dpi/gray"
+}

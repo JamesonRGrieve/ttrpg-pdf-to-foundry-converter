@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { inflateSync } from "node:zlib";
+import { unzlibSync } from "fflate";
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream } from "pdf-lib";
+import { PINS } from "../pins.ts";
 import type {
     DocMeta,
     FontWeight,
@@ -23,7 +24,7 @@ import { scanPlacements } from "./placements.ts";
  */
 
 /** Pinned extractor identity recorded in provenance (§9.5). */
-export const EXTRACTOR_ID = "pdfjs-dist 4.10.38 + pdf-lib 1.17.1";
+export const EXTRACTOR_ID = `pdfjs-dist ${PINS["pdfjs-dist"]} + pdf-lib ${PINS["pdf-lib"]}`;
 
 interface PdfjsTextItem {
     str: string;
@@ -232,7 +233,7 @@ function pageContentBytes(doc: PDFDocument, contents: unknown): Uint8Array {
         const filter = nameOf(stream.dict.get(PDFName.of("Filter")));
         if (filter === "FlateDecode") {
             try {
-                chunks.push(new Uint8Array(inflateSync(raw)));
+                chunks.push(unzlibSync(raw));
             } catch {
                 // Undecodable content stream — skip; placements are best-effort.
             }
@@ -309,8 +310,8 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
     // weakens image→entity association; it never affects Tier A asset bytes.
     const placements: ImagePlacement[] = [];
     const pdflibPages = pdflibDoc.getPages();
-    for (let i = 0; i < pdflibPages.length; i += 1) {
-        const leaf = pdflibPages[i]!.node;
+    for (const [i, pdflibPage] of pdflibPages.entries()) {
+        const leaf = pdflibPage.node;
         const content = pageContentBytes(pdflibDoc, leaf.get(PDFName.of("Contents")));
         const xobjectRefs = pageXObjectRefs(pdflibDoc, leaf.Resources() ?? leaf.get(PDFName.of("Resources")));
         for (const placement of scanPlacements(content, xobjectRefs, i)) {
@@ -343,11 +344,18 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
         const textRuns: RawTextRun[] = [];
         for (let p = 1; p <= doc.numPages; p += 1) {
             const page = await doc.getPage(p);
-            const view = page.view; // [x0, y0, x1, y1] in PDF user space
-            const width = view[2]! - view[0]!;
-            const height = view[3]! - view[1]!;
+            // [x0, y0, x1, y1] in PDF user space (pdf.js always gives four numbers).
+            const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = page.view;
+            const width = x1 - x0;
+            const height = y1 - y0;
             const pageIndex = p - 1;
-            pages.push({ pageIndex, width, height, rotation: page.rotate });
+            pages.push({
+                pageIndex,
+                width,
+                height,
+                rotation: page.rotate,
+                viewBox: [x0, y0, x1, y1],
+            });
             // Force font objects into commonObjs before reading text styles.
             await page.getOperatorList();
             const content = await page.getTextContent({ includeMarkedContent: false });
@@ -356,13 +364,14 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
                 if (item.str.length === 0) {
                     continue;
                 }
-                const t = item.transform;
-                const size = Math.hypot(t[2]!, t[3]!);
+                // Text matrix [a, b, c, d, e, f]: size from the (c, d) column, origin (e, f).
+                const [, , c = 0, d = 0, e = 0, f = 0] = item.transform.map(Number);
+                const size = Math.hypot(c, d);
                 const font = resolveFont(page, item.fontName, content.styles);
                 textRuns.push({
                     pageIndex,
-                    x: t[4]!,
-                    y: t[5]!,
+                    x: e,
+                    y: f,
                     width: item.width,
                     height: item.height,
                     text: item.str,

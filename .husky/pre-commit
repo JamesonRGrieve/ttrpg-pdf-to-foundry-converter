@@ -4,9 +4,9 @@
 set -e
 pnpm typecheck
 pnpm lint
+node scripts/lint-ratchet.mjs
 pnpm format
 pnpm test
 node scripts/gate-dep-pin.mjs
 node scripts/gate-timestamp-scan.mjs
 node scripts/gate-title-scan.mjs
-node scripts/gate-wiki-scan.mjs

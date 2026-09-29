@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 /**
  * Content hashing and base62 encoding — the backbone of the engine's stable,
  * content-addressed identifiers (asset ids §6.1, document `_id`s §9.1, cache
- * keys §2.2). All of these must be byte-stable across platforms, so we depend
- * only on the pinned `node:crypto` SHA-256 and a locale-free base62 alphabet.
+ * keys §2.2). All of these must be byte-stable across platforms AND runtimes
+ * (Node CLI and in-browser), so hashing is the pinned pure-JS SHA-256 and
+ * base62 uses a locale-free alphabet.
  */
 
 /** Fixed base62 alphabet. Ordering is part of the wire format — never reorder. */
 const BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-export function sha256Hex(data: Uint8Array | string): string {
-    return createHash("sha256").update(data).digest("hex");
+export function sha256Bytes(data: Uint8Array | string): Uint8Array {
+    return sha256(typeof data === "string" ? utf8ToBytes(data) : data);
 }
 
-export function sha256Bytes(data: Uint8Array | string): Uint8Array {
-    return new Uint8Array(createHash("sha256").update(data).digest());
+export function sha256Hex(data: Uint8Array | string): string {
+    return bytesToHex(sha256Bytes(data));
 }
 
 /**
@@ -43,11 +45,11 @@ export function base62Encode(bytes: Uint8Array): string {
     const base = 62n;
     while (value > 0n) {
         const rem = Number(value % base);
-        out = BASE62_ALPHABET[rem] + out;
+        out = BASE62_ALPHABET.charAt(rem) + out;
         value /= base;
     }
 
-    return BASE62_ALPHABET[0]!.repeat(leadingZeros) + out;
+    return BASE62_ALPHABET.charAt(0).repeat(leadingZeros) + out;
 }
 
 /**
@@ -59,5 +61,5 @@ export function base62Encode(bytes: Uint8Array): string {
 export function id16(preimage: Uint8Array | string): string {
     const digest = sha256Bytes(preimage);
     const encoded = base62Encode(digest);
-    return encoded.slice(0, 16).padStart(16, BASE62_ALPHABET[0]!);
+    return encoded.slice(0, 16).padStart(16, BASE62_ALPHABET.charAt(0));
 }

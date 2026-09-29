@@ -1,0 +1,121 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+:root {
+    --bg: #fafaf8;
+    --fg: #1d1d1b;
+    --muted: #5a5a55;
+    --accent: #2f5d8a;
+    --accent-fg: #ffffff;
+    --border: #c9c9c2;
+    --panel: #ffffff;
+    color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #161615;
+        --fg: #ecece8;
+        --muted: #a8a8a0;
+        --accent: #7fb0e0;
+        --accent-fg: #0d1a26;
+        --border: #3a3a36;
+        --panel: #1f1f1d;
+    }
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font:
+        16px/1.5 system-ui,
+        sans-serif;
+}
+
+main {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+}
+
+.lede {
+    color: var(--muted);
+}
+
+section {
+    margin-top: 2rem;
+}
+
+.drop-zone {
+    display: block;
+    padding: 1.5rem;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    cursor: pointer;
+}
+
+.drop-zone.dragging,
+.drop-zone:focus-within {
+    border-color: var(--accent);
+}
+
+.drop-zone input {
+    display: block;
+    margin-top: 0.75rem;
+}
+
+button,
+.button {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.5rem 1.25rem;
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button:focus-visible,
+.button:focus-visible {
+    outline: 3px solid var(--fg);
+    outline-offset: 2px;
+}
+
+progress {
+    width: 100%;
+}
+
+pre {
+    max-height: 16rem;
+    overflow: auto;
+    padding: 0.75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+td:last-child,
+th:last-child {
+    text-align: right;
+}

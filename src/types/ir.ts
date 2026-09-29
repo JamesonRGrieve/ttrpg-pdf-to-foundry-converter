@@ -17,6 +17,8 @@ export interface RawPage {
     width: number;
     height: number;
     rotation: number;
+    /** Visible page box `[x0, y0, x1, y1]` in PDF user space (the renderer's origin). */
+    viewBox: readonly [number, number, number, number];
 }
 
 export interface RawTextRun {

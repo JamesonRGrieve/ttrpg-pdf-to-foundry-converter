@@ -1,4 +1,8 @@
 dist
+dist-web
+web/public/vendor
+test-results
+playwright-report
 .cache
 node_modules
 coverage

@@ -1,0 +1,107 @@
+{
+    "_id": "sISSdPtbPS0d3rpi",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "effects": [],
+    "flags": {},
+    "name": "Pellet Caster",
+    "sort": 100000,
+    "system": {
+        "attack": {
+            "characteristic": "ballisticSkill",
+            "modifier": 0,
+            "range": {
+                "special": "",
+                "units": "m",
+                "value": 20
+            },
+            "rateOfFire": {
+                "full": 0,
+                "semi": 2,
+                "single": true
+            },
+            "type": "ranged"
+        },
+        "availability": "plentiful",
+        "class": "pistol",
+        "clip": {
+            "max": 8,
+            "type": "",
+            "value": 8
+        },
+        "cost": {
+            "bc": {
+                "homebrew": {
+                    "throneGelt": null
+                },
+                "infamy": null
+            },
+            "dh1": {
+                "throneGelt": null
+            },
+            "dh2": {
+                "homebrew": {
+                    "requisition": null,
+                    "throneGelt": null
+                },
+                "influence": null
+            },
+            "dw": {
+                "homebrew": {
+                    "throneGelt": null
+                },
+                "requisition": null
+            },
+            "ow": {
+                "homebrew": {
+                    "throneGelt": null
+                },
+                "logistics": null
+            },
+            "rt": {
+                "homebrew": {
+                    "throneGelt": null
+                },
+                "profitFactor": null
+            }
+        },
+        "craftsmanship": "common",
+        "damage": {
+            "bonus": 0,
+            "formula": "1d10",
+            "penetration": 0,
+            "type": "impact"
+        },
+        "description": {
+            "dh2": {
+                "chat": "",
+                "summary": "",
+                "value": ""
+            }
+        },
+        "gameSystems": [
+            "dh2"
+        ],
+        "melee": false,
+        "modifications": [],
+        "quantity": 1,
+        "reload": "half",
+        "source": {
+            "dh2": {
+                "book": "wayfarers-field-manual",
+                "page": "1",
+                "provenance": "raw"
+            }
+        },
+        "special": [],
+        "state": {
+            "container": "",
+            "equipped": false,
+            "stowed": false
+        },
+        "weight": 1.5
+    },
+    "type": "weapon"
+}

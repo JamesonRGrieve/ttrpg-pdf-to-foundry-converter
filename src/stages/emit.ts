@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { Entity, EntityGraph, FieldValue } from "../types/entity.ts";
+import type { Entity, EntityGraph, JsonObject, JsonValue } from "../types/entity.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare, numAsc, sortKeysDeep } from "../util/ordered.ts";
 import { slugify } from "../util/slug.ts";
@@ -12,7 +12,7 @@ import { slugify } from "../util/slug.ts";
  *
  * DETERMINISM CONTRACT:
  *  - `_id` = base62(sha256(pack + "\0" + canonical))[0..16] over content only,
- *    excluding `_id`, `_stats`, `sort`, and all Tier C enrichment fields (§9.1).
+ *    excluding `_id`, `_stats`, and `sort` (§9.1).
  *    Image references contribute their CONTENT ADDRESS (`asset:<id>`), not their
  *    deployment path, so a differently-configured asset prefix cannot fork ids
  *    (strengthens §9.1 toward its stated goal of interchangeable corpora).
@@ -41,23 +41,21 @@ export interface EmitResult {
     warnings: string[];
 }
 
-type JsonObject = Record<string, unknown>;
-
-function setPath(target: JsonObject, path: string, value: unknown): void {
+function setPath(target: JsonObject, path: string, value: JsonValue): void {
     const parts = path.split(".");
+    const leaf = parts.pop() ?? path;
     let node = target;
-    for (let i = 0; i < parts.length - 1; i += 1) {
-        const key = parts[i]!;
+    for (const key of parts) {
         const next = node[key];
         if (typeof next !== "object" || next === null || Array.isArray(next)) {
             const created: JsonObject = {};
             node[key] = created;
             node = created;
         } else {
-            node = next as JsonObject;
+            node = next;
         }
     }
-    node[parts[parts.length - 1]!] = value;
+    node[leaf] = value;
 }
 
 function assetPath(prefix: string, assetId: string, ext: string): string {
@@ -71,7 +69,7 @@ export function serializeDocument(doc: unknown): string {
 
 interface BuiltDoc {
     hashPreimageBody: string;
-    /** Tier A content object (no _id/_stats/sort/enrichment). */
+    /** Content object (no _id/_stats/sort). */
     content: JsonObject;
     name: string;
 }
@@ -93,7 +91,8 @@ function buildTierAContent(entity: Entity, assetExt: Map<string, string>, cfg: E
         setPath(hashProjection, path, `asset:${assetId}`);
     }
 
-    const name = typeof entity.fields["name"] === "string" ? (entity.fields["name"] as string) : "entry";
+    const rawName = entity.fields["name"];
+    const name = typeof rawName === "string" ? rawName : "entry";
     const canonical = JSON.stringify(sortKeysDeep(hashProjection));
     return { hashPreimageBody: canonical, content, name };
 }
@@ -136,12 +135,6 @@ export function emit(graph: EntityGraph, assetExt: Map<string, string>, cfg: Emi
         doc["_id"] = id;
         doc["sort"] = entity.ordinal * SORT_STRIDE;
         doc["_stats"] = { createdTime: 0, modifiedTime: 0 };
-        // Tier C enrichment written last, after the id is fixed (§10.6).
-        for (const [path, value] of Object.entries(entity.enrichmentFields)) {
-            if (value !== null) {
-                setPath(doc, path, value as FieldValue);
-            }
-        }
 
         const fileName = `${slugify(built.name)}_${id}.json`;
         files.push({

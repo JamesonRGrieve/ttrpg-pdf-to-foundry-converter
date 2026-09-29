@@ -49,6 +49,26 @@ module.exports = {
                 "no-console": "off",
             },
         },
+        {
+            // CommonJS entry points (e.g. the OCR worker plugged into tesseract.js's
+            // CommonJS worker runtime) must use require().
+            files: ["*.cjs", "src/**/*.cjs"],
+            rules: {
+                "@typescript-eslint/no-require-imports": "off",
+            },
+        },
     ],
-    ignorePatterns: ["dist", ".cache", "node_modules", "fixtures/rendered", "golden", "coverage", "*.py"],
+    ignorePatterns: [
+        "dist",
+        "dist-web",
+        "web/public/vendor",
+        "test-results",
+        "playwright-report",
+        ".cache",
+        "node_modules",
+        "fixtures/rendered",
+        "golden",
+        "coverage",
+        "*.py",
+    ],
 };

@@ -1,165 +1,103 @@
 # foundry-pdf-parser
 
-A deterministic interpreter that turns a **complete PDF** plus a **user-supplied
-profile** into a Foundry VTT compendium pack corpus. The engine contains no
-knowledge of any specific document and ships no third-party data: every
-document-specific behavior — which typography marks a record, how fields are
-extracted, how they map onto Foundry documents — arrives as profile _data_ at
-runtime. Same PDF + same profile + same engine version gives byte-identical
-output, everywhere.
+Turns a PDF into Foundry VTT compendium packs for the wh40k-rpg system. You give
+it a PDF and nothing else. It reads the text layer, renders and OCRs every page,
+corrects the text layer against what is actually printed, works out the layout
+(tables, statblocks, catalogue entries, headings), and writes documents in the
+system's own schema.
+
+It runs in two places with identical results:
+
+- **In the browser.** A static page does the whole conversion inside the tab.
+  The PDF never leaves the machine.
+- **From the command line** (Node ≥ 22).
+
+Same PDF + same engine version gives byte-identical output in either.
 
 ## Hard constraints
 
-These are load-bearing and demonstrable by running the shipped artifact:
+- **The PDF is the only content input.** No profiles, no config files, no path
+  or file name inspection. Besides where output and caches go, the one user
+  choice is the **target schema**: which of the system's game lines (`dh2` by
+  default) to write. It selects a mechanical structure — document types, field
+  paths, value types and bounds — never content: a schema holds no enumerated
+  entries and no per-entry values, and the user's PDF supplies every value.
+- **No document identification.** The engine never works out which book or game
+  line a PDF is; the target schema comes only from the user. It recognizes
+  generic layout (aligned columns, captioned tables, characteristic grids, bold
+  field labels under display-face headings) and maps it onto the chosen
+  schema's vocabulary.
+- **No third-party content ships.** No titles, names or text from any
+  publication appear in the source, tests or fixtures. The fixtures are
+  synthetic.
+- **Encrypted PDFs are refused**, never decrypted (exit `3`, nothing written).
 
-- **No profile, no output (fail closed).** `run` without `--profile` in a
-  non-interactive context exits `2` and writes nothing. The engine never
-  synthesizes or auto-selects a profile.
-- **No wiki data is distributed.** No bundled URLs, no cached index, no shipped
-  lockfile, no mirrored images — a fresh clone contains zero wiki-derived bytes.
-  Enrichment resolves links on your machine at runtime and is never redistributed
-  (the lockfile and any localized images are gitignored and user-local).
-- **Enrichment stores links only.** By default enrichment records resolved image
-  **URLs** and nothing else. Downloading remote image bytes (`--localize-images`)
-  is opt-in, off by default, and gated behind an interactive confirmation into a
-  separate subtree — never implied by any other flag.
-- **Encrypted/DRM'd PDFs are refused, never decrypted.** An encrypted input exits
-  `3` with no password attempt.
-- **Zero commercial data.** The engine ships no profiles for commercial products
-  and no commercial titles, authors, or ISBNs anywhere. The one bundled profile
-  targets a synthetic, free-content (`CC0-1.0`) fixture as a working
-  demonstration.
-
-Exit codes: `0` success, `1` recoverable error (e.g. an unmatched _required_
-field at end of run), `2` no profile supplied, `3` encrypted input refused.
-
-## Determinism tiers
-
-| Tier               | Scope                                      | Guarantee                                                                                            |
-| ------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| **A — Core**       | PDF → entities + embedded image extraction | Byte-identical across platforms, runtimes, and cold/warm cache. Gated and blocking.                  |
-| **B — Raster**     | Vector art rendered to a bitmap            | Byte-identical only for a pinned renderer on a pinned platform. Opt-in, non-blocking cross-platform. |
-| **C — Enrichment** | Wiki image-link resolution                 | Deterministic given a fixed lockfile; the network itself is not deterministic.                       |
-
-**Tier A output is byte-identical whether or not Tier B or C ran** — enrichment
-is written into designated fields after each document `_id` is fixed and never
-perturbs identity. Full detail in [docs/determinism.md](./docs/determinism.md).
-
-### Compiled packs caveat
-
-All determinism guarantees, golden tests, and CI gates operate on the
-`_source/*.json` pack corpus the engine emits. If that corpus is later compiled
-downstream into a binary Foundry **LevelDB** pack, that artifact is **not**
-byte-reproducible — storage-engine layout and compaction are not stable. That is
-expected and out of scope; do not file a determinism bug against the LevelDB
-output.
-
-## Install and usage
-
-Requires Node ≥ 22 and pnpm.
+## Using it
 
 ```bash
 pnpm install
-pnpm cli run <pdf> --profile <profile.yml>
+
+# browser: builds and serves the upload page
+pnpm web:dev
+
+# command line
+pnpm cli infer <pdf> [--out-dir <dir>] [--assets-dir <dir>] [--cache-dir <dir>] [--ocr-workers <n>]
+pnpm cli batch <dir> [<dir>…]
 ```
 
-`pnpm cli` runs the CLI from source (`tsx src/cli.ts`). To use the compiled
-binary instead, `pnpm build` and run the `foundry-pdf-parser` bin.
+CLI output defaults to `<os tmp>/foundry-pdf-parser/`. The browser page offers
+the same output as a zip. Packs land at `<line>/<line>-<book>-<category>/_source/<slug>_<id>.json`.
+The book segment comes from the PDF's own metadata title.
 
-### Commands
+## How it works
 
+1. **Extract**: text runs (position, font, size, weight) and embedded images,
+   via pinned `pdfjs-dist` and `pdf-lib`.
+2. **OCR**: every page is rendered with pinned `mupdf` at 300 DPI and read by
+   Tesseract's LSTM engine (pinned `tesseract.js`, plain-SIMD WASM core, pinned
+   model data). All of it is served locally, never from a CDN.
+3. **Arbitrate**: the text layer is kept where it is intact. OCR corrects it
+   where it demonstrably fails: custom font encodings, letter-spaced display
+   text, split drop caps, ligature fragments, small-caps faces (detected per
+   font from the text layer itself), and text that exists only as outlines.
+4. **Normalize**: canonical text, quantized geometry, gutter-based text columns,
+   a total reading order.
+5. **Infer**: tables are classified by header vocabulary and read row by row.
+   Catalogue entries are typed by their field labels or their section heading.
+   Statblocks are found by their 3×3 characteristic grid. Result tables with
+   `Name: effect` rows become one item per result.
+6. **Emit**: one stable JSON document per entity, with a content-derived `_id`,
+   the system's cost/variant/provenance shapes, and per-pack provenance.
+
+The engine core (`src/`) is runtime-neutral; `src/node/` holds the CLI and its
+filesystem caches, and `web/` holds the upload page and its worker.
+
+## Checking output
+
+- `node scripts/validate-output.mjs <packs root>` runs the wh40k-rpg system's own
+  pack validators (schema, actor completeness, Zod content gate).
+- `tsx scripts/audit-output.ts --output <packs> --reference <canonical packs> --line dh2 --book "<source book>"`
+  compares against a canonical compendium tree: per-type coverage and
+  field-level disagreements. Only RAW-provenance reference entries count.
+- `tsx scripts/bench-ocr.ts --pdf <file> --reference <dir>` scores text-layer,
+  OCR-only and arbitrated readings against verified page transcriptions.
+
+## Tests
+
+```bash
+pnpm test            # unit, golden and determinism tests
+pnpm gate:all        # dependency pins, timestamps, title denylist, refusal, cold/warm determinism
+pnpm test:e2e        # browser: converts a fixture in Chromium and requires byte-identity with the CLI golden
+node scripts/lint-ratchet.mjs   # lint warnings may only fall (baseline: .lint-baseline.json)
 ```
-foundry-pdf-parser run <pdf> --profile <path>   Parse a PDF into the pack corpus.
-foundry-pdf-parser detect <pdf>                 Show metadata + ranked profile suggestions (advisory).
-foundry-pdf-parser validate-profile <path>      Validate a profile against the schema.
-```
 
-`detect` scores each candidate profile's fingerprint against the document's
-structure and prints a non-binding ranked list; it never applies a profile. The
-input to `run` is a **complete PDF only** — there is no `--from-markdown`, no
-`--resume`, and no entry point that starts from an intermediate representation.
+`pnpm test:e2e` uses Playwright's managed Chromium; set `E2E_CHROMIUM=/path/to/chromium`
+to use an installed one.
 
-### Flags for `run`
-
-| Flag                     | Effect                                                                    |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `--profile <path>`       | **Required.** Profile file (YAML or JSON).                                |
-| `--repo-root <dir>`      | Engine repo root (default: cwd); anchors default paths.                   |
-| `--packs-dir <dir>`      | Output pack corpus root.                                                  |
-| `--assets-dir <dir>`     | Extracted image asset root.                                               |
-| `--cache-dir <dir>`      | Intermediate cache directory.                                             |
-| `--asset-ref-prefix <s>` | Image-reference prefix written into documents.                            |
-| `--enrich`               | Enable Tier C wiki link enrichment (off by default).                      |
-| `--refresh-enrichment`   | Re-resolve enrichment instead of using the lockfile.                      |
-| `--offline`              | Hard-disable all network access.                                          |
-| `--localize-images`      | Download resolved wiki images (requires `--enrich`; interactive confirm). |
-| `--dry-run`              | Compute output but do not write to disk.                                  |
-| `--log-level <level>`    | `debug` \| `info` \| `warn` \| `error` (default `info`).                  |
-
-Diagnostics go to stderr; stdout stays clean for machine-consumable output.
-
-## Paths and layout
-
-Defaults assume a sibling-submodule layout, and every path is overridable:
-
-- **Input** — source PDFs are read-only input at `../pdfs`; the engine never
-  writes there.
-- **Output** — the sibling `.foundry-system` pack tree:
-  `.../.foundry-system/src/packs/<group>/<pack>/_source/<slug>_<id>.json`.
-- **Images** — extracted embedded images under the configured asset tree; Tier B
-  rasters live in a separate subtree so Tier A gates can exclude them by path.
-- **Cache** — `.cache/` holds regenerable intermediates (IR + assets keyed by PDF
-  content hash + engine version + IR version). Gitignored; deleting it and
-  re-running yields identical output.
-
-## Pipeline
-
-The full flow is a fixed sequence of stages; `run` executes them in order after
-the profile has been supplied.
-
-1. **Extract** — one pinned extractor reads text runs (position, font, size,
-   weight), embedded image XObjects, and best-effort image placements from the
-   PDF; encrypted input is refused here.
-2. **Normalize** — erases extractor nondeterminism: canonicalizes text, quantizes
-   geometry, canonicalizes font identity, and imposes a total column-major
-   reading order, producing the canonical IR.
-3. **Images** — recovers embedded images as content-addressed Tier A assets
-   (lossless passthrough or a pinned re-encode), deduplicated by their bytes.
-4. **Detect** — scores user-supplied profile fingerprints against the document
-   and _suggests_ candidates; advisory only and run only for the `detect`
-   command, since `run` is given the profile explicitly.
-5. **Apply** — interprets the validated profile against the IR: segments blocks,
-   extracts fields through the DSL, associates images by geometry, and binds
-   instances into entities; an unmatched required field is a fatal-at-end error.
-6. **Enrich** — optional Tier C wiki link resolution, written only into
-   designated enrichment fields, reproducible from a local lockfile.
-7. **Emit** — serializes each entity to stable per-document JSON with a
-   content-derived `_id`, byte-sorted keys, and fixed non-content fields.
-
-## Status and known limitations
-
-- **Image recovery (Tier A)** implements lossless passthrough for `DCTDecode`
-  (JPEG) and `JPXDecode` (JPEG 2000), and re-encodes `FlateDecode` rasters to PNG
-  with a pinned encoder for RGB / Gray / CMYK at 8 bits per component, handling
-  PNG and TIFF row predictors (and no-predictor). CMYK→RGB uses a fixed in-house
-  transform, never a system ICC profile.
-- **Not yet implemented:** LZW/CCITT filters, indexed/palette colorspaces,
-  sub-byte bit depths, and unmodeled predictors are refused with a warning rather
-  than guessed. **Tier B raster fallback** (rendering vector art to a bitmap) is a
-  reserved, separate path — configured but not yet wired to the pipeline or the
-  CLI.
-- **Enrichment** targets a configured
-  wiki via the MediaWiki `api.php` (structured API, never HTML
-  scraping), rate-limited and offline-aware. It resolves links only.
-
-## Documentation
-
-- [docs/profiles.md](./docs/profiles.md) — the profile DSL reference.
-- [docs/determinism.md](./docs/determinism.md) — the determinism model.
-- [docs/profile.schema.json](./docs/profile.schema.json) — the JSON Schema
-  profiles are validated against.
+The fixture PDFs are rendered reproducibly from `fixtures/src` by
+`pnpm fixtures:render` (Typst, fixed creation timestamp); regenerate the goldens
+afterwards with `pnpm golden:update`.
 
 ## License
 
-AGPL-3.0-or-later. Every source file carries an
-`// SPDX-License-Identifier: AGPL-3.0-or-later` header.
+AGPL-3.0-or-later. Every source file carries an SPDX header.

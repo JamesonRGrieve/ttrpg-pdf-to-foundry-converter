@@ -12,6 +12,17 @@
     },
     "formatter": { "enabled": false },
     "files": {
-        "ignore": ["dist", ".cache", "node_modules", "fixtures/rendered", "golden", "coverage"]
+        "ignore": [
+            "dist",
+            "dist-web",
+            "web/public/vendor",
+            "test-results",
+            "playwright-report",
+            ".cache",
+            "node_modules",
+            "fixtures/rendered",
+            "golden",
+            "coverage"
+        ]
     }
 }

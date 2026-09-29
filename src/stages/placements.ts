@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ImagePlacement } from "../types/ir.ts";
 
+const LATIN1 = new TextDecoder("latin1");
+
 /**
  * Minimal PDF content-stream interpreter for image placement (spec §6.3).
  * Tracks the graphics-state CTM stack (`q`/`Q`/`cm`) and, on each `/Name Do`
@@ -32,7 +34,7 @@ function apply(m: Matrix, x: number, y: number): [number, number] {
 
 /** Tokenize the ASCII operators/operands we care about from a content stream. */
 function tokenize(content: Uint8Array): string[] {
-    const text = Buffer.from(content).toString("latin1");
+    const text = LATIN1.decode(content);
     const re = /\/[^\s/<>[\]()]+|-?\d*\.?\d+|[A-Za-z'"*]+/g;
     return [...text.matchAll(re)].map((m) => m[0]);
 }

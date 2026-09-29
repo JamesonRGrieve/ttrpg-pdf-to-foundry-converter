@@ -48,8 +48,24 @@ export function canonicalizeText(input: string): string {
     return s.trim();
 }
 
+/** Escape text for inclusion in HTML element content. */
+/**
+ * Whether two adjacent text fragments are separate words: they sit further
+ * apart than `wordGap`, or the first ends on sentence punctuation and the next
+ * begins with a letter (a word space an extractor dropped).
+ */
+export function wordBreakBetween(prev: string, next: string, gap: number, wordGap: number): boolean {
+    return gap > wordGap || (/[,.:;!?]$/u.test(prev) && /^\p{L}/u.test(next));
+}
+
+/** Printed note markers (footnote daggers etc.) that annotate a value, never part of it. */
+export const NOTE_MARKERS = /[†‡*§¶]+/gu;
+
+export function escapeHtml(text: string): string {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Strip a PDF font subset prefix such as `ABCDEF+Helvetica` → `Helvetica`. */
 export function stripSubsetPrefix(fontName: string): string {
-    const m = /^[A-Z]{6}\+(.+)$/.exec(fontName);
-    return m ? m[1]! : fontName;
+    return /^[A-Z]{6}\+(.+)$/.exec(fontName)?.[1] ?? fontName;
 }

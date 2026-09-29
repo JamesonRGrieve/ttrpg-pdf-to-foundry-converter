@@ -1,0 +1,1089 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { describe, expect, it } from "vitest";
+import { headerRole, isAttributeScale, mergedHeaderRoles, normalizeHeader } from "../../src/infer/columns.ts";
+import {
+    detectEntries,
+    type Entry,
+    headingOf,
+    type TextLine,
+    valueUnfinished,
+    withoutFigures,
+} from "../../src/infer/detect-entries.ts";
+import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
+import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
+import { entryItem, entryType, typeNamedBy } from "../../src/infer/entry-types.ts";
+import {
+    cleanName,
+    endsMidSentence,
+    readsAsProse,
+    rejoinSplitWords,
+    restoreWordSpaces,
+    splitTier,
+    startsLikeName,
+    titleCase,
+    wordsOf,
+} from "../../src/infer/names.ts";
+import { parseNpc, rejoinSmallCaps, specialAbilities, splitFields } from "../../src/infer/npc.ts";
+import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts";
+import {
+    citeFirstPage,
+    fitModifications,
+    introducingEntry,
+    isBlank,
+    kindEntry,
+    mergeInto,
+    modalHeadingSizes,
+    nameKey,
+} from "../../src/infer/pipeline.ts";
+import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
+import { buildItem, costShape, DEFAULT_LINE, packName, toHtml } from "../../src/infer/schema.ts";
+import type { DetectedTable } from "../../src/infer/types.ts";
+import type { Entity } from "../../src/types/entity.ts";
+import type { IR, IRTextRun } from "../../src/types/ir.ts";
+import { inMarginBand, measureMarginBands } from "../../src/util/page-bands.ts";
+
+function irOf(pageIndexes: number[], runs: IRTextRun[]): IR {
+    return {
+        irVersion: 0,
+        pages: pageIndexes.map((p) => ({ pageIndex: p, width: 600, height: 800, rotation: 0, columns: 1 })),
+        runs,
+        sizeBuckets: [],
+        fonts: [],
+        meta: { title: null, author: null, producer: null, creator: null, creationDate: null },
+        fingerprint: {
+            pageSizes: [],
+            orientation: "portrait",
+            columns: 1,
+            fonts: [],
+            sizeBuckets: [],
+            marginBox: { left: 0, right: 0, top: 0, bottom: 0 },
+        },
+    };
+}
+
+function irRun(text: string, pageIndex: number, y: number): IRTextRun {
+    return {
+        pageIndex,
+        band: 0,
+        x: 300,
+        y,
+        width: 10,
+        height: 8,
+        text,
+        font: "f",
+        weight: "normal",
+        italic: false,
+        size: 8,
+        sizeBucket: 0,
+        column: 0,
+        indent: 0,
+        renderOrder: 0,
+    };
+}
+
+describe("columns", () => {
+    it("maps schema field headers, including letter-spaced display text", () => {
+        expect(headerRole("DAM")).toBe("damage");
+        expect(headerRole("Rate of Fire")).toBe("rof");
+        expect(headerRole("D AM")).toBe("damage");
+        expect(headerRole("Locations Covered")).toBe("locations");
+        expect(headerRole("Mystery")).toBeNull();
+        expect(normalizeHeader("  Max  Ag ")).toBe("max ag");
+    });
+
+    it("splits a merged header only when every word is a role", () => {
+        expect(mergedHeaderRoles("Clip Rld")).toEqual(["clip", "reload"]);
+        expect(mergedHeaderRoles("Clip Colour")).toBeNull();
+    });
+
+    it("treats a table led by an availability, weight or cost column as a scale", () => {
+        expect(isAttributeScale(["availability"])).toBe(true);
+        expect(isAttributeScale(["weight", "availability"])).toBe(true);
+        expect(isAttributeScale(["name"])).toBe(false);
+        expect(isAttributeScale(["roll"])).toBe(false);
+        expect(isAttributeScale(null)).toBe(false);
+    });
+});
+
+describe("names", () => {
+    it("title-cases all-caps names, leaving mixed case and short function words alone", () => {
+        expect(titleCase("HALL OF THE LANTERN-BEARER")).toBe("Hall of the Lantern-Bearer");
+        expect(titleCase("Already Cased")).toBe("Already Cased");
+        expect(titleCase("McAllister Lamp")).toBe("McAllister Lamp");
+        expect(titleCase("lamplighter")).toBe("Lamplighter");
+        expect(titleCase("WIck Keeper")).toBe("Wick Keeper");
+        expect(titleCase("LamPLighter")).toBe("Lamplighter");
+        expect(titleCase("MARSH world")).toBe("Marsh World");
+        expect(titleCase("lantern heavy Trike")).toBe("Lantern Heavy Trike");
+        expect(titleCase("Lantern (any Oil)")).toBe("Lantern (any Oil)");
+        expect(titleCase("wick-waRden hollis")).toBe("Wick-Warden Hollis");
+        expect(titleCase("Hollis LAMPWRIGHT, WicK KeepeR")).toBe("Hollis Lampwright, Wick Keeper");
+        expect(titleCase("LanTern KEEPER")).toBe("Lantern Keeper");
+        expect(titleCase("Lantern of ASHWICK")).toBe("Lantern of Ashwick");
+        expect(titleCase("Lantern Mk IV")).toBe("Lantern Mk IV");
+        expect(cleanName("  QUIET TREAD† :")).toBe("Quiet Tread");
+        expect(cleanName("Hood/ Cowl")).toBe("Hood/Cowl");
+        expect(cleanName("Hard (-20)/ GM's call")).toBe("Hard (-20)/ GM's call");
+    });
+
+    it("rejoins a word the text layer split, when the prose spells it whole", () => {
+        // The prose holds the split banner once, and the whole word more often.
+        const prose = wordsOf(
+            "LANTERN WRIGHT. Old Lanternwright tends the wicks; Lanternwright's lamps glow.",
+        );
+        expect(prose.slice(0, 3)).toEqual(["lantern", "wright", "old"]);
+        expect(rejoinSplitWords("Lantern Wright", prose)).toBe("Lanternwright");
+        expect(rejoinSplitWords(titleCase("LanTern WRIGHT"), prose)).toBe("Lanternwright");
+        expect(rejoinSplitWords("Wick Keeper", prose)).toBe("Wick Keeper");
+        // Two words the prose uses apart more often stay apart.
+        expect(rejoinSplitWords("Hive World", wordsOf("a hive world; the hive world; a hiveworld"))).toBe(
+            "Hive World",
+        );
+    });
+
+    it("tells a title-like name from a sentence", () => {
+        expect(readsAsProse("Lantern of the Deep Ward")).toBe(false);
+        expect(readsAsProse("Glow-globe")).toBe(false);
+        expect(readsAsProse("Some lanterns are only lit at dusk")).toBe(true);
+        expect(startsLikeName("“Lamp’s Glow” Oil Flask")).toBe(true);
+        expect(startsLikeName("(Heavy) Lantern")).toBe(true);
+        expect(startsLikeName("lantern oil")).toBe(false);
+        expect(endsMidSentence("Half Action unless")).toBe(true);
+        expect(endsMidSentence("Lantern of")).toBe(true);
+        expect(endsMidSentence("Lantern of the Deep Ward")).toBe(false);
+        expect(endsMidSentence("Wick trimmer")).toBe(false);
+    });
+
+    it("keeps connecting words lower case inside a title", () => {
+        expect(titleCase("CLUES FROM THE REEDS")).toBe("Clues from the Reeds");
+    });
+
+    it("restores a word space the text layer dropped inside a title", () => {
+        expect(restoreWordSpaces("Glow CriticalEffects - Arm")).toBe("Glow Critical Effects - Arm");
+        expect(restoreWordSpaces("Lantern Fuel")).toBe("Lantern Fuel");
+    });
+
+    it("takes a schema tier out of a statblock heading", () => {
+        expect(splitTier("REEDSTALKER (Elite)")).toEqual({ name: "Reedstalker", tier: "elite" });
+        expect(splitTier("Lamp (Brass)")).toEqual({ name: "Lamp (Brass)", tier: null });
+    });
+});
+
+describe("row merging", () => {
+    type Line = { y: number; runs: IRTextRun[] };
+    /** A line at `y` filling `cells` table columns (one run per column) in `font`. */
+    const line = (y: number, cells: number, text = "X", font = "f"): Line => ({
+        y,
+        runs: Array.from({ length: cells }, (_, i) => ({ ...irRun(text, 0, y), x: 100 * i, font })),
+    });
+    /** A line whose runs are the given cell texts, one per column ("" leaves a column empty). */
+    const textLine = (y: number, texts: string[]): Line => ({
+        y,
+        runs: texts.map((t, i) => ({ ...irRun(t, 0, y), x: 100 * i })),
+    });
+    /** One cell per run by x (100 pt columns), so empty columns stay in place. */
+    const shape = {
+        cells: (row: Line): string[] => {
+            const out = ["", "", "", ""];
+            for (const r of row.runs) {
+                const col = Math.round(r.x / 100) % out.length;
+                out[col] = `${out[col]} ${r.text}`.trim();
+            }
+            return out;
+        },
+    };
+
+    it("joins a key-only line and a mid-sentence line to their row even at uniform spacing", () => {
+        const rows = [
+            textLine(100, ["Glow Aura", "Sheds light."]),
+            textLine(90, ["Deep Ward", "Wards off the"]),
+            textLine(80, ["Charm", "unquiet dead."]),
+            textLine(70, ["Tidal", "Moves water."]),
+            textLine(60, ["Pull", ""]),
+            textLine(50, ["Hush", "Silences."]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 90, 70, 50]);
+    });
+
+    it("joins a line that wraps several unfinished cells, one of them mid-sentence", () => {
+        const rows = [
+            textLine(100, ["Deep", "Glow 40,", "Soothes the"]),
+            textLine(90, ["Ward", "Glow Aura", "restless."]),
+            textLine(80, ["Tide Call", "Glow 30", "Calls the"]),
+            textLine(70, ["Hush", "Glow 20", "Silences."]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 80, 70]);
+    });
+
+    it("treats a capitalized key line as a new record unless the row above ends on a connecting word", () => {
+        const rows = [
+            line(100, 4, "Bastion of"),
+            line(90, 2, "Iron Will"),
+            line(75, 4, "Lamp"),
+            line(65, 2, "Rope"),
+            line(50, 4),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 75, 65, 50]);
+    });
+
+    it("joins a capitalized fragment of a wide row at the leading inside a row", () => {
+        const wide = {
+            cells: (row: Line): string[] => {
+                const out: string[] = Array.from({ length: 12 }, () => "");
+                for (const r of row.runs) {
+                    const col = Math.round(r.x / 100);
+                    out[col] = `${out[col] ?? ""} ${r.text}`.trim();
+                }
+                return out;
+            },
+        };
+        const rows = [line(100, 9, "Lamp"), line(92, 2, "Oil"), line(75, 9), line(60, 9), line(45, 9)];
+        expect(mergeContinuationRows(rows, wide).map((r) => r.y)).toEqual([100, 75, 60, 45]);
+    });
+
+    it("joins a tightly spaced line that fills fewer columns than a typical row", () => {
+        const rows = [line(100, 4), line(90, 2, "x"), line(75, 4), line(60, 4), line(50, 1), line(35, 4)];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 75, 60, 35]);
+    });
+
+    it("keeps full rows separate even when a section row makes their spacing look tight", () => {
+        const rows = [
+            line(100, 1),
+            line(80, 4),
+            line(70, 4),
+            line(60, 4),
+            line(40, 1),
+            line(20, 4),
+            line(10, 4),
+        ];
+        expect(mergeContinuationRows(rows, shape)).toHaveLength(7);
+    });
+
+    it("never joins a line set in another face (a section label or footnote)", () => {
+        const rows = [line(100, 4), line(90, 1, "x", "label-face"), line(75, 4), line(65, 1), line(50, 4)];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 90, 75, 50]);
+    });
+
+    it("keeps a uniformly spaced record with blank cells when its cells stand alone", () => {
+        const rows = [line(100, 4), line(85, 2), line(70, 4), line(55, 4)];
+        expect(mergeContinuationRows(rows, shape)).toHaveLength(4);
+    });
+});
+
+describe("page numbering", () => {
+    it("finds the folio offset from margin numbers agreeing across pages", () => {
+        const runs = [3, 4, 5, 6].map((p) => irRun(String(p + 2), p, 20));
+        const numbering = inferPageNumbering(irOf([3, 4, 5, 6], runs));
+        expect(numbering.offset).toBe(2);
+        expect(printedPage(numbering, 10)).toBe("12");
+    });
+
+    it("falls back to 1-based PDF pages without consistent folios", () => {
+        expect(printedPage(inferPageNumbering(irOf([], [])), 0)).toBe("1");
+    });
+});
+
+describe("npc statblocks", () => {
+    it("ends a banner's name at its first standalone number, the headline value", () => {
+        expect(splitBannerText("MIRE HOUND (TROOP) 9")).toEqual({ name: "MIRE HOUND (TROOP)", number: 9 });
+        expect(splitBannerText("REED KING (MASTER) 14 PEN SPECIAL:")).toEqual({
+            name: "REED KING (MASTER)",
+            number: 14,
+        });
+        expect(splitBannerText("2 LANTERN-BEARER")).toEqual({ name: "LANTERN-BEARER", number: null });
+    });
+
+    it("rejoins letter-split small-caps labels", () => {
+        expect(rejoinSmallCaps("H ALF 3 C HARGE 9")).toBe("HALF 3 CHARGE 9");
+    });
+
+    it("splits labelled fields", () => {
+        expect(splitFields("Wounds: 12 Movement: 3/6/9/18 Skills: Awareness")).toEqual({
+            wounds: "12",
+            movement: "3/6/9/18",
+            skills: "Awareness",
+        });
+    });
+
+    it("parses characteristics, tier, panel movement and threat", () => {
+        const npc = parseNpc({
+            pageIndex: 0,
+            name: "MIRE HOUND (Troop)",
+            bannerNumber: 9,
+            labels: ["ws", "bs", "s", "t", "ag", "int", "per", "wp", "fel"],
+            values: [30, 0, 35, 33, 40, 12, 38, 25, 5],
+            associatedText: ["H ALF 5 FULL 10 CHARGE 15 RUN 30 THREAT 7"],
+            blocks: [
+                { label: null, text: "H ALF 5 FULL 10 CHARGE 15 RUN 30 THREAT 7", pageIndex: 0 },
+                { label: "Special", text: "Tearing", pageIndex: 0 },
+                { label: "Skills", text: "Awareness (Per)", pageIndex: 0 },
+                {
+                    label: "Marsh Stride",
+                    text: "The hound ignores difficult terrain in wetlands.",
+                    pageIndex: 1,
+                },
+            ],
+        });
+        expect(npc.name).toBe("Mire Hound");
+        expect(npc.abilities).toEqual([
+            { name: "Marsh Stride", text: "The hound ignores difficult terrain in wetlands.", pageIndex: 1 },
+        ]);
+        expect(npc.system["tier"]).toBe("troop");
+        expect(npc.system["wounds"]).toEqual({ max: 9, value: 9, critical: 0 });
+        expect(npc.system["threatLevel"]).toBe(7);
+        expect(npc.system["movement"]).toEqual({ half: 5, full: 10, charge: 15, run: 30 });
+    });
+
+    it("reads printed fate points", () => {
+        const npc = parseNpc({
+            pageIndex: 0,
+            name: "LAMP WARDEN",
+            bannerNumber: 14,
+            labels: [],
+            values: [],
+            associatedText: ["Gear: lantern, staff", "Fate Points: 3"],
+            blocks: [],
+        });
+        expect(npc.system["fate"]).toEqual({ value: 3, max: 3 });
+    });
+
+    it("reads the panel threat, not a rule note labelled with it", () => {
+        const npc = parseNpc({
+            pageIndex: 0,
+            name: "GLOOM LORD (Master)",
+            bannerNumber: 40,
+            labels: [],
+            values: [],
+            associatedText: [
+                "THREAT 45",
+                "† Rising Threat: Add 5 to this NPC's Threat for each boon after the second.",
+            ],
+            blocks: [],
+        });
+        expect(npc.system["threatLevel"]).toBe(45);
+    });
+
+    it("keeps named rules as abilities, not statblock, weapon or power fields", () => {
+        const block = (label: string | null, text: string) => ({ label, text, pageIndex: 0 });
+        expect(
+            specialAbilities([
+                block(null, "HALF 3"),
+                block("Fate Points", "2"),
+                block("Range", "Self"),
+                block("Effect", "The lamp flares."),
+                block("Talents", "Keen Eye"),
+                block("Psychic Powers", "Kindle, Glimmer Ward (see below)"),
+                block("Glimmer Ward", "A ward of light."),
+                block("CruisingSPEED", "30 KPH"),
+                block("Crew", "Rider"),
+                block("Lantern Sight", "Sees in the dark."),
+                block("Empty Rule", ""),
+            ]),
+        ).toEqual([{ name: "Lantern Sight", text: "Sees in the dark.", pageIndex: 0 }]);
+    });
+
+    it("splits a panel into labelled blocks, continuing unlabelled lines", () => {
+        const line = (y: number, parts: [string, "bold" | "normal", number][], page = 0) => ({
+            y,
+            runs: parts.map(([text, weight, x]) => ({
+                ...irRun(text, page, y),
+                x,
+                weight,
+                width: 6 * text.length,
+            })),
+        });
+        expect(
+            panelBlocks([
+                line(300, [["HALF 3 FULL 6", "normal", 100]]),
+                line(290, [
+                    ["Lantern Sight:", "bold", 100],
+                    ["Sees in", "normal", 190],
+                ]),
+                line(280, [["the dark.", "normal", 100]]),
+                line(
+                    700,
+                    [
+                        ["Gear:", "bold", 100],
+                        ["staff", "normal", 140],
+                    ],
+                    1,
+                ),
+            ]),
+        ).toEqual([
+            { label: null, text: "HALF 3 FULL 6", pageIndex: 0 },
+            { label: "Lantern Sight", text: "Sees in the dark.", pageIndex: 0 },
+            { label: "Gear", text: "staff", pageIndex: 1 },
+        ]);
+    });
+
+    it("reads a label whose first word slipped out of bold, set solid against the rest", () => {
+        const run = (text: string, x: number, width: number, weight: "bold" | "normal"): IRTextRun => ({
+            ...irRun(text, 0, 300),
+            x,
+            width,
+            weight,
+        });
+        const label = (gap: number) =>
+            panelBlocks([
+                {
+                    y: 300,
+                    runs: [
+                        run("Warden", 100, 20, "normal"),
+                        run("Oath:", 120 + gap, 30, "bold"),
+                        run("Never sleeps.", 160 + gap, 60, "normal"),
+                    ],
+                },
+            ]);
+        expect(label(0)).toEqual([{ label: "Warden Oath", text: "Never sleeps.", pageIndex: 0 }]);
+        expect(label(20)[0]?.label).toBeNull();
+    });
+
+    it("never takes a neighbouring column's field label as the name banner", () => {
+        const bold = (text: string, x: number, y: number, size: number, column = 0): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: 6 * text.length,
+            size,
+            weight: "bold",
+            column,
+        });
+        const values = [
+            [31, 42, 27],
+            [35, 30, 18],
+            [33, 29, 12],
+        ];
+        const grid = values.flatMap((row, r) =>
+            row.map((v, c) => bold(String(v), 200 + 30 * c, 480 - 25 * r, 13)),
+        );
+        const ir = irOf(
+            [0],
+            [
+                ...grid,
+                bold("LAMP", 120, 520, 9),
+                bold("WARDEN", 150, 520, 9),
+                bold("Fate Points:", 310, 512, 10, 1),
+            ],
+        );
+        expect(detectNumericGrids(ir).map((g) => g.name)).toEqual(["LAMP WARDEN"]);
+    });
+
+    it("follows statblock text that runs on through the next column onto the next page", () => {
+        const at = (
+            text: string,
+            page: number,
+            x: number,
+            y: number,
+            column: number,
+            bold = false,
+        ): IRTextRun => ({
+            ...irRun(text, page, y),
+            x,
+            width: 6 * text.length,
+            size: bold ? 13 : 9,
+            weight: bold ? "bold" : "normal",
+            column,
+        });
+        const label = (text: string, value: string, page: number, x: number, y: number, column: number) => [
+            { ...at(text, page, x, y, column), weight: "bold" as const },
+            at(value, page, x + 6 * text.length + 4, y, column),
+        ];
+        const grid = [
+            [31, 42, 27],
+            [35, 30, 18],
+            [33, 29, 12],
+        ].flatMap((row, r) => row.map((v, c) => at(String(v), 0, 60 + 30 * c, 300 - 25 * r, 0, true)));
+        const ir = irOf(
+            [0, 1],
+            [
+                ...grid,
+                at("LAMP", 0, 60, 340, 0, true),
+                at("WARDEN", 0, 100, 340, 0, true),
+                ...label("Skills:", "Awareness", 0, 60, 220, 0),
+                at("and more awareness", 0, 60, 208, 0),
+                ...label("Talents:", "Keen Eye", 0, 330, 700, 1),
+                at("and a keener eye", 0, 330, 688, 1),
+                ...label("Ember Rule:", "Glows.", 1, 60, 700, 0),
+            ],
+        );
+        const blocks = detectNumericGrids(ir)[0]?.blocks ?? [];
+        expect(blocks.map((b) => [b.label, b.pageIndex])).toEqual([
+            ["Skills", 0],
+            ["Talents", 0],
+            ["Ember Rule", 1],
+        ]);
+    });
+
+    it("reads a grid of only two values, but not a block of one repeated value", () => {
+        const bold = (text: string, x: number, y: number, size: number): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: 6 * text.length,
+            size,
+            weight: "bold",
+        });
+        const gridOf = (values: number[][]): IRTextRun[] =>
+            values.flatMap((row, r) => row.map((v, c) => bold(String(v), 200 + 30 * c, 480 - 25 * r, 13)));
+        const names = (values: number[][]): string[] =>
+            detectNumericGrids(
+                irOf([0], [...gridOf(values), bold("PLAIN", 120, 520, 9), bold("FOLK", 156, 520, 9)]),
+            ).map((g) => g.name);
+        expect(
+            names([
+                [25, 25, 30],
+                [30, 25, 25],
+                [25, 25, 30],
+            ]),
+        ).toEqual(["PLAIN FOLK"]);
+        expect(
+            names([
+                [3, 3, 3],
+                [3, 3, 3],
+                [3, 3, 3],
+            ]),
+        ).toEqual([]);
+    });
+});
+
+describe("entry typing", () => {
+    const entry = (
+        heading: string,
+        fields: [string, string][],
+        sections: string[] = [],
+        body = "Prose.",
+    ): Entry => ({
+        heading: { text: heading, size: 11, style: "h", pageIndex: 0 },
+        sections,
+        fields,
+        body,
+    });
+
+    it("types by fields first", () => {
+        expect(
+            entryType(
+                entry("STEADY HAND", [
+                    ["Tier", "1"],
+                    ["Aptitudes", "Agility, Finesse"],
+                ]),
+            ),
+        ).toBe("talent");
+        expect(
+            entryType(
+                entry("SPARK", [
+                    ["Focus Power", "Willpower"],
+                    ["Sustained", "No"],
+                ]),
+            ),
+        ).toBe("psychicPower");
+        expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
+    });
+
+    it("leaves a creature statblock's text section untyped, whatever rules sit inside it", () => {
+        expect(
+            entryType(
+                entry("LAMP WARDEN", [
+                    ["Skills", "Awareness (Per) +10"],
+                    ["Traits", "Dark-sight"],
+                    ["Focus Power", "Willpower"],
+                    ["Sustained", "No"],
+                ]),
+            ),
+        ).toBeNull();
+    });
+
+    it("falls back to the enclosing section's schema type word", () => {
+        expect(entryType(entry("LONG SIGHT", [], ["Chapter One", "Traits"]))).toBe("trait");
+        expect(entryType(entry("long SIGHT", [["Effect", "Sees far."]], ["Chapter One", "Traits"]))).toBe(
+            "trait",
+        );
+        expect(entryType(entry("act i: LONG NIGHT", [], ["Chapter One", "Traits"]))).toBeNull();
+        // Upgrades listed together are told apart by what each is used with.
+        const upgrades = ["Gear", "Armour and Weapon Upgrades"];
+        expect(entryType(entry("GLOW WARD", [["Used With", "Any armour."]], upgrades))).toBe(
+            "armourModification",
+        );
+        expect(entryType(entry("GLOW EDGE", [["Used With", "Any melee weapon."]], upgrades))).toBe(
+            "weaponModification",
+        );
+        expect(entryType(entry("GLOW CHARM", [["Effect", "Glows."]], upgrades))).toBe("weaponModification");
+        expect(entryType(entry("NOTHING", [], ["Introduction"]))).toBeNull();
+    });
+
+    it("never types a section heading under its own section", () => {
+        for (const heading of ["TRAITS", "ACQUIRING TRAITS", "carried on from a quote.”"]) {
+            expect(entryType(entry(heading, [], ["Chapter One", "Traits"]))).toBeNull();
+        }
+        expect(entryType(entry("GLOWING WEAPONS", [], ["Traits", "Trait Descriptions"]))).toBe("trait");
+        expect(entryType(entry("TIERS AND CATEGORIES", [], ["Traits", "Gaining Talents"]))).toBeNull();
+        expect(entryType(entry("WEAPON FOCUS", [["Tier", "1"]], ["Talents"]))).toBe("talent");
+        expect(typeNamedBy("Table 2-1: Mutations")).toBe("mutation");
+    });
+
+    it("builds a talent's tier, aptitudes and prerequisites", () => {
+        const item = entryItem(
+            entry("STEADY HAND", [
+                ["Tier", "2"],
+                ["Prerequisites", "Agility 30"],
+                ["Aptitudes", "Agility, Finesse"],
+            ]),
+            "talent",
+        );
+        expect(item.name).toBe("Steady Hand");
+        expect(item.system).toMatchObject({
+            tier: 2,
+            aptitudes: ["Agility", "Finesse"],
+            prerequisites: { text: "Agility 30" },
+        });
+    });
+});
+
+describe("margin bands", () => {
+    it("finds a recurring foot cluster and no band at an edge without one", () => {
+        const pages = 10;
+        const baselines = [
+            // A folio on every page at 2% of the height, body text from 6% up.
+            ...Array.from({ length: pages }, () => ({ y: 16, pageHeight: 800 })),
+            ...Array.from({ length: 400 }, (_, i) => ({ y: 48 + (i % 700), pageHeight: 800 })),
+        ];
+        const bands = measureMarginBands(baselines, pages);
+        expect(bands.bottom).toBeGreaterThan(16 / 800);
+        expect(bands.bottom).toBeLessThanOrEqual(48 / 800);
+        expect(bands.top).toBe(1);
+        expect(inMarginBand(16, 800, bands)).toBe(true);
+        expect(inMarginBand(48, 800, bands)).toBe(false);
+    });
+});
+
+describe("table continuations", () => {
+    it("gives a continued table its base caption, keeping its own page", () => {
+        const table = (pageIndex: number, tableTitle: string): DetectedTable => ({
+            pageIndex,
+            headers: ["A", "B"],
+            rows: [],
+            tableTitle,
+        });
+        const joined = joinContinuations([
+            table(40, "Glow Rites"),
+            table(41, "Glow Rites (Continued)"),
+            table(41, "Hush"),
+        ]);
+        expect(joined.map((t) => [t.pageIndex, t.tableTitle])).toEqual([
+            [40, "Glow Rites"],
+            [41, "Glow Rites"],
+            [41, "Hush"],
+        ]);
+    });
+
+    it("reads on past a section row set apart when records resume after it", () => {
+        const at = (text: string, x: number, y: number): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: 20,
+        });
+        const record = (y: number) => ({ y, runs: [0, 100, 200, 300].map((x) => at("v", x, y)) });
+        const section = (y: number) => ({ y, runs: [at("Section", 0, y)] });
+        const prose = (y: number) => ({ y, runs: [{ ...at("A line of running prose.", 0, y), width: 380 }] });
+        const edges = [0, 100, 200, 300];
+        // Records 6pt apart; a section row 20pt below them, then records again.
+        const resuming = [record(500), record(494), record(488), section(468), record(462), record(456)];
+        expect(tableBody(resuming, edges)).toHaveLength(6);
+        // The same row with nothing tabular after it ends the table.
+        const ending = [record(500), record(494), record(488), section(468), section(462)];
+        expect(tableBody(ending, edges)).toHaveLength(3);
+        // Prose citing the table by its caption is no record.
+        const citing = [record(500), record(494), { y: 488, runs: [at("Table 3-1: Lamps", 0, 488)] }];
+        expect(tableBody(citing, edges)).toHaveLength(2);
+        // A heading set larger than the records, straight below them, ends the table.
+        const heading = { y: 482, runs: [{ ...at("LAMP LORE", 0, 482), size: 12 }, at("ember", 200, 482)] };
+        expect(tableBody([record(500), record(494), record(488), heading, prose(476)], edges)).toHaveLength(
+            3,
+        );
+        // …and so does one followed by `Label:` field lines, however many cells they touch.
+        const field = {
+            y: 476,
+            runs: [{ ...at("Value:", 0, 476), weight: "bold" as const }, at("200 xp", 100, 476)],
+        };
+        expect(tableBody([record(500), record(494), record(488), heading, field], edges)).toHaveLength(3);
+        // In a two-column table, a larger line set apart by a wide gap ends it
+        // even when a two-cell line follows.
+        const pair = (y: number) => ({ y, runs: [at("v", 0, y), at("v", 100, y)] });
+        const twoColumns = [pair(500), pair(494), pair(488), { ...heading, y: 460 }, pair(454)];
+        expect(tableBody(twoColumns, [0, 100])).toHaveLength(3);
+        // A larger section row followed by records stays in the table.
+        expect(tableBody([record(500), record(494), heading, record(488), record(482)], edges)).toHaveLength(
+            5,
+        );
+    });
+
+    it("measures a centred key from the key itself, not its baseline group", () => {
+        const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
+        // Key 01-05 sits mid-cell and shares a baseline group with the text
+        // line 4pt above it; the cell's last line is nearer 01-05's key than
+        // the next key, though farther from that group's baseline.
+        const rows = groupByKeyAnchors(
+            [
+                { y: 516, runs: [at("Ember Skin: burns", 100, 516)] },
+                { y: 506, runs: [at("01-05", 20, 502), at("to the touch and", 100, 506)] },
+                { y: 484, runs: [at("never cools.", 100, 484)] },
+                { y: 468, runs: [at("Ash Eyes: sees", 100, 468)] },
+                { y: 464, runs: [at("06-10", 20, 464)] },
+            ],
+            [0, 80],
+        );
+        expect(rows.map((r) => r.runs.map((x) => x.text))).toEqual([
+            ["01-05", "to the touch and", "Ember Skin: burns", "never cools."],
+            ["06-10", "Ash Eyes: sees"],
+        ]);
+    });
+});
+
+describe("headings", () => {
+    const body = { style: "body|10|normal", size: 10 };
+    /** A line of runs (text, x, width) in one face at `size`. */
+    const heading = (parts: [string, number, number][], size = 12): TextLine => ({
+        pageIndex: 0,
+        column: 0,
+        y: 500,
+        runs: parts.map(([text, x, width]) => ({ ...irRun(text, 0, 500), x, width, font: "display", size })),
+        text: parts.map(([t]) => t).join(" "),
+        right: Math.max(...parts.map(([, x, w]) => x + w)),
+    });
+
+    it("keeps a heading that sets a name within it in italics, not one mixing faces", () => {
+        const line = heading([
+            ["Captain Vane’s", 100, 80],
+            ["Lantern", 185, 45],
+        ]);
+        const [roman, name] = line.runs;
+        if (roman === undefined || name === undefined) {
+            throw new Error("two runs expected");
+        }
+        const italic = { ...line, runs: [roman, { ...name, font: "display-italic", italic: true }] };
+        expect(headingOf(italic, body, false)?.text).toBe("Captain Vane’s Lantern");
+        const mixed = { ...line, runs: [roman, { ...name, font: "other" }] };
+        expect(headingOf(mixed, body, false)).toBeNull();
+    });
+
+    it("keeps a heading whose word space is a little wide", () => {
+        const wide = heading([
+            ["LANTERN’S", 100, 60],
+            ["WAKE", 175, 40],
+        ]);
+        expect(headingOf(wide, body, false)?.text).toBe("LANTERN’S WAKE");
+    });
+
+    it("rejects bold labels spread apart like table cells, not a letter-spaced display heading", () => {
+        const spreadOut: [string, number, number][] = [
+            ["LANTERN", 100, 50],
+            ["WAKE", 200, 40],
+        ];
+        const cells = heading(spreadOut);
+        const bold = { ...cells, runs: cells.runs.map((r) => ({ ...r, weight: "bold" as const })) };
+        expect(headingOf(bold, body, false)).toBeNull();
+        expect(headingOf(cells, body, false)?.text).toBe("LANTERN WAKE");
+    });
+
+    it("rejects a line of labelled values, however it is spaced", () => {
+        const values = heading([
+            ["FRONT:12", 100, 40],
+            ["SIDE:9", 180, 30],
+        ]);
+        expect(headingOf(values, body, false)).toBeNull();
+    });
+
+    it("reads a small capitals heading whose case the text layer scrambled", () => {
+        const faces = new Set(["display|normal"]);
+        const scrambled = heading([["STARTING wicks", 100, 70]], 8.5);
+        expect(headingOf(scrambled, body, false, faces)?.text).toBe("STARTING wicks");
+        const titled = heading([["Starting Wicks", 100, 70]], 8.5);
+        expect(headingOf(titled, body, false, faces)).toBeNull();
+        // Case lost only partly: scrambled inside a word, or title case beside capitals.
+        const inWord = heading([["wICK Ward", 100, 70]], 8.5);
+        expect(headingOf(inWord, body, false, faces)?.text).toBe("wICK Ward");
+        const mixed = heading([["Wick AWARENESS", 100, 70]], 8.5);
+        expect(headingOf(mixed, body, false, faces)?.text).toBe("Wick AWARENESS");
+        const lowerFirst = heading([["sacred wick Burner", 100, 70]], 8.5);
+        expect(headingOf(lowerFirst, body, false, faces)?.text).toBe("sacred wick Burner");
+        // Display type with no capitals left may wrap on a function word.
+        expect(headingOf(heading([["the lantern of", 100, 70]]), body, false)?.text).toBe("the lantern of");
+        expect(headingOf(heading([["The Lantern of", 100, 70]]), body, false)).toBeNull();
+    });
+});
+
+describe("figures in the text column", () => {
+    /** A one-run line at (x, y) on page 0, column 0, `width` wide, in `font` at `size`. */
+    const line = (text: string, x: number, y: number, width: number, font = "body", size = 10): TextLine => ({
+        pageIndex: 0,
+        column: 0,
+        y,
+        runs: [{ ...irRun(text, 0, y), x, width, font, size }],
+        text,
+        right: x + width,
+    });
+    /** Body lines on the column edge (x 50), 12pt apart from `top`. */
+    const body = (top: number, count: number): TextLine[] =>
+        Array.from({ length: count }, (_, i) => line(`Body line ${i}`, 50, top - 12 * i, 240));
+
+    it("drops freely placed labels mixing styles at uneven spacing", () => {
+        const figure = [
+            line("Lantern Rites", 110, 600, 150, "display", 27),
+            line("Kindle", 90, 560, 40, "bold", 12),
+            line("WILLPOWER 30", 150, 546, 60, "caps", 10),
+            line("Light a wick", 70, 530, 60, "italic", 11.5),
+            line("Banish Gloom", 200, 505, 70, "bold", 12),
+            line("200 XP", 130, 497, 30, "caps", 10),
+        ];
+        const lines = [...body(700, 6), ...figure, ...body(470, 4)];
+        const kept = withoutFigures(lines);
+        expect(kept).toHaveLength(10);
+        expect(kept.some((l) => figure.includes(l))).toBe(false);
+    });
+
+    it("keeps centred text, text wrapped round a picture, and inset sidebars", () => {
+        const centred = [120, 100, 130, 90, 110].map((x, i) =>
+            line(
+                `Centred ${i}`,
+                x,
+                600 - 17 * i - (i % 2) * 9,
+                2 * (150 - x),
+                i % 2 ? "bold" : "caps",
+                10 + i,
+            ),
+        );
+        const wrapped = [70, 76, 83, 88, 95].map((x, i) =>
+            line(`Wrapped ${i}`, x, 460 - 12 * i, 290 - x, ["a", "b", "c", "d", "e"][i], 10),
+        );
+        const inset = [80, 80, 80, 80, 80].map((x, i) =>
+            line(`Inset ${i}`, x, 380 - 13 * i - (i % 2) * 7, 200, ["a", "b", "c", "d", "e"][i], 10),
+        );
+        const lines = [...body(700, 6), ...centred, ...body(520, 3), ...wrapped, ...body(400, 1), ...inset];
+        expect(withoutFigures(lines)).toHaveLength(lines.length);
+    });
+});
+
+describe("entry detection", () => {
+    /** A run at (x, y) on page 0 in `font` at `size`. */
+    const run = (text: string, y: number, font: string, size: number): IRTextRun => ({
+        ...irRun(text, 0, y),
+        x: 60,
+        width: text.length * size * 0.5,
+        font,
+        size,
+    });
+    const body = "Lorem glow text that fills the body style with plenty of characters.";
+
+    it("keeps a table caption out of the heading chain", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("Table 9-2: Glow Rating", 660, "h", 14),
+                run(body, 640, "b", 10),
+                run("DIM GLOW", 620, "h", 12),
+                run(body, 600, "b", 10),
+            ],
+        );
+        const entries = detectEntries(ir, new Set());
+        expect(entries.map((e) => e.heading.text)).toEqual(["GLOW SECTION", "DIM GLOW"]);
+        expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
+    });
+
+    it("continues a field that reaches the text measure despite a stray run past it", () => {
+        const label = "Requires:";
+        const value = "Glow Lore (Lamps) +10 or Dim";
+        const bodyRight = 60 + body.length * 5;
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                { ...run(label, 450, "b", 10), weight: "bold" },
+                { ...run(value, 450, "b", 10), x: bodyRight - value.length * 5 },
+                run("Lore (Wards)", 438, "b", 10),
+                run(body, 426, "b", 10),
+                { ...run("7", 300, "b", 10), x: bodyRight + 30 },
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields).toEqual([["Requires", `${value} Lore (Wards)`]]);
+    });
+
+    it("reads no heading or body from a table's lines", () => {
+        const header = run("WEIGHT", 660, "h", 14);
+        const cells = [run("+2 kg", 640, "b", 10), run("+1 kg", 620, "b", 10)];
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                header,
+                ...cells,
+                run(body, 600, "b", 10),
+            ],
+        );
+        expect(detectEntries(ir, new Set()).map((e) => e.heading.text)).toEqual(["GLOW SECTION", "WEIGHT"]);
+        const entries = detectEntries(ir, new Set([header, ...cells]));
+        expect(entries.map((e) => e.heading.text)).toEqual(["GLOW SECTION"]);
+        expect(entries[0]?.body).not.toContain("kg");
+    });
+});
+
+describe("entry fields", () => {
+    it("treats a value ending on a separator or conjunction as wrapped", () => {
+        expect(valueUnfinished("Glow Aura, Deep Ward,")).toBe(true);
+        expect(valueUnfinished("Strength 40 or")).toBe(true);
+        expect(valueUnfinished("Glow Aura, Deep Ward")).toBe(false);
+        expect(valueUnfinished("Fervour")).toBe(false);
+    });
+});
+
+describe("consolidation helpers", () => {
+    it("treats nested empty values as blank", () => {
+        expect(isBlank({ dh2: { value: "", chat: "" } })).toBe(true);
+        expect(isBlank({ dh2: { value: "x" } })).toBe(false);
+    });
+
+    it("fills blanks from another reading without overwriting authored values", () => {
+        const base = { system: { tier: 2, aptitudes: [] as string[] } };
+        mergeInto(base, { system: { tier: 1, aptitudes: ["Agility"] } });
+        expect(base).toEqual({ system: { tier: 2, aptitudes: ["Agility"] } });
+    });
+
+    it("cites a merged entity by the page its earliest reading is on", () => {
+        const reading = (pageIndex: number, page: string): Entity => ({
+            blockId: `b${pageIndex}`,
+            documentType: "Item",
+            group: DEFAULT_LINE,
+            pack: "p",
+            ordinal: pageIndex,
+            fields: { name: "Lamp", system: { source: { dh2: { provenance: "raw", book: "b", page } } } },
+            images: {},
+            provenance: { pageIndex, y: 0 },
+        });
+        const prose = reading(12, "12");
+        citeFirstPage(prose, [prose, reading(9, "9"), reading(15, "15")], DEFAULT_LINE);
+        expect(prose.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "9" } },
+        });
+
+        const row = { ...reading(14, "14"), blockId: "table:trait" };
+        citeFirstPage(prose, [prose, reading(9, "9"), row], DEFAULT_LINE);
+        expect(prose.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "14" } },
+        });
+    });
+
+    it("files an upgrade's table row with its entry's modification type", () => {
+        const reading = (blockId: string, type: string, name: string): Entity => ({
+            blockId,
+            documentType: "Item",
+            group: DEFAULT_LINE,
+            pack: `${DEFAULT_LINE}-b-${type}`,
+            ordinal: 0,
+            fields: { name, type },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const row = reading("table:weaponModification", "weaponModification", "Glow Ward");
+        const other = reading("table:weaponModification", "weaponModification", "Glow Edge");
+        const entities = [row, other, reading("entry:armourModification", "armourModification", "GLOW WARD")];
+        fitModifications(entities, DEFAULT_LINE, "b");
+        expect([row.fields["type"], row.blockId, row.pack]).toEqual([
+            "armourModification",
+            "table:armourModification",
+            packName(DEFAULT_LINE, "b", "items-armor-mods"),
+        ]);
+        expect(other.fields["type"]).toBe("weaponModification");
+    });
+
+    it("keys names so a summary listing meets its variable-level entry", () => {
+        expect(nameKey("Glow Aura (X)")).toBe(nameKey("GLOW AURA"));
+        expect(nameKey("Lamp (Brass)")).not.toBe(nameKey("Lamp"));
+    });
+});
+
+describe("entry components", () => {
+    it("finds the heading size a type's entries are usually set in", () => {
+        const at = (size: number): Entry => ({
+            heading: { text: "X", size, style: "h", pageIndex: 0 },
+            sections: [],
+            fields: [],
+            body: "",
+        });
+        const modal = modalHeadingSizes([
+            { entry: at(10.5), type: "trait" },
+            { entry: at(10.5), type: "trait" },
+            { entry: at(8.5), type: "trait" },
+            { entry: at(12), type: "condition" },
+        ]);
+        expect(modal.get("trait")).toBe(10.5);
+        expect(modal.get("condition")).toBe(12);
+    });
+
+    it("names a one-word sub-heading as a kind of its same-typed parent", () => {
+        const sub = (text: string): Entry => ({
+            heading: { text, size: 8.5, style: "h", pageIndex: 0 },
+            sections: ["GEAR", "LANTERN"],
+            fields: [],
+            body: "Burns longer.",
+        });
+        expect(kindEntry(sub("SPIKED"), "cybernetic", "cybernetic")?.heading.text).toBe("SPIKED LANTERN");
+        expect(kindEntry(sub("OIL RESERVOIR"), "cybernetic", "cybernetic")).toBeNull();
+        expect(kindEntry(sub("WICK-GUARD"), "cybernetic", "cybernetic")).toBeNull();
+        expect(kindEntry(sub("SPIKED"), "gear", "cybernetic")).toBeNull();
+        expect(kindEntry(sub("SPIKED"), undefined, "cybernetic")).toBeNull();
+    });
+});
+
+describe("statblock prose", () => {
+    const heading = (text: string, pageIndex: number): Entry => ({
+        heading: { text, size: 8, style: "h", pageIndex },
+        sections: [],
+        fields: [],
+        body: `${text} prose.`,
+    });
+
+    it("takes the same-named heading on the statblock's page or the page before", () => {
+        const entries = [heading("MIRE HOUND", 40), heading("MIRE HOUND", 71), heading("REED KING", 72)];
+        expect(introducingEntry(entries, "Mire Hound", 72)?.heading.pageIndex).toBe(71);
+        expect(introducingEntry(entries, "Mire Hound", 12)).toBeNull();
+        expect(introducingEntry(entries, "Reed King", 71)).toBeNull();
+    });
+});
+
+describe("schema", () => {
+    it("builds physical items with the standard cost shape, provenance and state", () => {
+        const doc = buildItem({
+            type: "gear",
+            name: "Lamp",
+            line: DEFAULT_LINE,
+            book: "b",
+            page: "3",
+            description: "<p>x</p>",
+            system: {},
+        });
+        const system = doc["system"] as Record<string, unknown>;
+        expect(system["cost"]).toEqual(costShape());
+        expect(system["source"]).toEqual({ dh2: { provenance: "raw", book: "b", page: "3" } });
+        expect(system["state"]).toEqual({ equipped: false, stowed: false, container: "" });
+        expect(system["gameSystems"]).toEqual(["dh2"]);
+    });
+
+    it("gives XP-cost and affliction items no acquisition cost", () => {
+        const doc = buildItem({
+            type: "talent",
+            name: "T",
+            line: DEFAULT_LINE,
+            book: "b",
+            page: "1",
+            description: "",
+            system: {},
+        });
+        expect((doc["system"] as Record<string, unknown>)["cost"]).toBeUndefined();
+    });
+
+    it("names packs line-book-category and escapes HTML paragraphs", () => {
+        expect(packName("dh2", "field-manual", "items-weapons")).toBe("dh2-field-manual-items-weapons");
+        expect(toHtml("a < b\n\nc & d")).toBe("<p>a &lt; b</p><p>c &amp; d</p>");
+    });
+});

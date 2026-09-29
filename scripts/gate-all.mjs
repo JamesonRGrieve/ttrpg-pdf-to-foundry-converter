@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Runs every non-test CI gate in sequence. The vitest suite (golden G4,
-// determinism, image dedup G11, enrichment isolation G14, schema G7) runs
-// separately via `pnpm test`; these are the file-scan and CLI-behavior gates.
+// determinism, image dedup G11) runs separately via `pnpm test`; these are the
+// file-scan and CLI-behavior gates.
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,6 @@ const gates = [
     "gate-dep-pin.mjs",
     "gate-timestamp-scan.mjs",
     "gate-title-scan.mjs",
-    "gate-wiki-scan.mjs",
     "gate-refusals.mjs",
     "gate-determinism.mjs",
 ];

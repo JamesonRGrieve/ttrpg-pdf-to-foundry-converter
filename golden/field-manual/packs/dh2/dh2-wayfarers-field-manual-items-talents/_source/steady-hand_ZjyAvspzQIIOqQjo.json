@@ -1,0 +1,40 @@
+{
+    "_id": "ZjyAvspzQIIOqQjo",
+    "_stats": {
+        "createdTime": 0,
+        "modifiedTime": 0
+    },
+    "effects": [],
+    "flags": {},
+    "name": "Steady Hand",
+    "sort": 1200000,
+    "system": {
+        "aptitudes": [
+            "Ballistic Skill",
+            "Finesse"
+        ],
+        "benefit": "<p>The wayfarer has learned to still a trembling grip. Once per round, he may ignore a penalty imposed by his own move: ment when making a ranged attack.</p>",
+        "description": {
+            "dh2": {
+                "chat": "",
+                "summary": "",
+                "value": "<p>The wayfarer has learned to still a trembling grip. Once per round, he may ignore a penalty imposed by his own move: ment when making a ranged attack.</p>"
+            }
+        },
+        "gameSystems": [
+            "dh2"
+        ],
+        "prerequisites": {
+            "text": "Agility 30"
+        },
+        "source": {
+            "dh2": {
+                "book": "wayfarers-field-manual",
+                "page": "2",
+                "provenance": "raw"
+            }
+        },
+        "tier": 1
+    },
+    "type": "talent"
+}
