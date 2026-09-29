@@ -28,6 +28,7 @@ import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts
 import {
     citeFirstPage,
     fitModifications,
+    infer,
     introducingEntry,
     isBlank,
     kindEntry,
@@ -36,8 +37,10 @@ import {
     nameKey,
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
-import { buildItem, costShape, DEFAULT_LINE, packName, toHtml } from "../../src/infer/schema.ts";
+import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
+import { TARGETS } from "../../src/infer/targets.ts";
 import type { DetectedTable } from "../../src/infer/types.ts";
+import { createLogger } from "../../src/logger.ts";
 import type { Entity } from "../../src/types/entity.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 import { inMarginBand, measureMarginBands } from "../../src/util/page-bands.ts";
@@ -870,6 +873,27 @@ describe("entry detection", () => {
         size,
     });
     const body = "Lorem glow text that fills the body style with plenty of characters.";
+
+    it("writes the document in the chosen target schema", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("TRAITS", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("GLOW SIGHT", 660, "h", 12),
+                run(body, 640, "b", 10),
+            ],
+        );
+        const keyed = (line: Line) =>
+            infer(ir, createLogger("error"), TARGETS[line]).graph.entities.map((e) => {
+                const system = e.fields["system"];
+                const game =
+                    system !== null && typeof system === "object" && !Array.isArray(system) ? system : {};
+                return [e.pack.split("-")[0], game["gameSystems"], Object.keys(Object(game["source"]))];
+            });
+        expect(keyed("rt")).toEqual([["rt", ["rt"], ["rt"]]]);
+        expect(keyed("dh2")).toEqual([["dh2", ["dh2"], ["dh2"]]]);
+    });
 
     it("keeps a table caption out of the heading chain", () => {
         const ir = irOf(

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { infer } from "./infer/pipeline.ts";
+import type { TargetSchema } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
 import { recognizeDocument, type OcrPageStore } from "./ocr/recognize.ts";
@@ -54,6 +55,8 @@ export interface IrCache {
 }
 
 export interface EngineOptions {
+    /** The user's choice of output schema (game line); never inferred from the document. */
+    target: TargetSchema;
     ocr: OcrEngine;
     ocrStore: OcrPageStore;
     /** Pages rendered ahead of recognition (bounds memory). */
@@ -103,7 +106,7 @@ export async function runEngine(pdfBytes: Uint8Array, opts: EngineOptions): Prom
     if (read === null) {
         return { encrypted: true };
     }
-    const inferred = infer(read.ir, opts.log);
+    const inferred = infer(read.ir, opts.log, opts.target);
     const assetExt = new Map(read.assets.assets.map((a) => [a.assetId, a.ext] as const));
     const emitted = emit(inferred.graph, assetExt, { assetRefPrefix: opts.assetRefPrefix });
 

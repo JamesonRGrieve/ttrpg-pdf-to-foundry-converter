@@ -47,6 +47,9 @@ test("converts the fixture in-browser, byte-identical to the CLI golden", async 
     }
     const offOrigin = watchOffOrigin(page, new URL(baseURL).origin);
     await page.goto("/");
+    const target = page.getByLabel("Output schema (game line)");
+    await expect(target).toHaveValue("dh2");
+    await expect(target.locator("option")).toHaveCount(7);
     await page
         .getByLabel(/drop a pdf here/i)
         .setInputFiles(resolve(repoRoot, "fixtures/rendered/field-manual.pdf"));

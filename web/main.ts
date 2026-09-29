@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { DEFAULT_LINE, LINES } from "../src/infer/schema.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
 
 /**
@@ -23,6 +24,15 @@ const progress = element("ocr-progress", HTMLProgressElement);
 const log = element("log", HTMLPreElement);
 const packs = element("packs", HTMLTableElement);
 const download = element("download", HTMLAnchorElement);
+const target = element("target", HTMLSelectElement);
+
+for (const line of LINES) {
+    const option = document.createElement("option");
+    option.value = line;
+    option.textContent = line;
+    option.selected = line === DEFAULT_LINE;
+    target.append(option);
+}
 
 let chosen: File | null = null;
 let worker: Worker | null = null;
@@ -77,6 +87,7 @@ function finish(): void {
     worker = null;
     convert.disabled = chosen === null;
     input.disabled = false;
+    target.disabled = false;
 }
 
 async function start(): Promise<void> {
@@ -87,6 +98,7 @@ async function start(): Promise<void> {
     resetResult();
     convert.disabled = true;
     input.disabled = true;
+    target.disabled = true;
     status.textContent = `Reading ${file.name}…`;
     const pdf = await file.arrayBuffer();
 
@@ -97,7 +109,7 @@ async function start(): Promise<void> {
         switch (message.type) {
             case "ready": {
                 status.textContent = "Converting…";
-                const request: RunRequest = { type: "run", pdf };
+                const request: RunRequest = { type: "run", pdf, target: target.value };
                 engine.postMessage(request, [pdf]);
                 break;
             }

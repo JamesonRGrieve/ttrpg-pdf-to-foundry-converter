@@ -3,6 +3,8 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { LINES } from "../infer/schema.ts";
+import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../infer/targets.ts";
 import { createLogger, type Logger, type LogLevel } from "../logger.ts";
 import { RENDER_DPI } from "../ocr/render.ts";
 import type { OcrEngine } from "../ocr/types.ts";
@@ -13,7 +15,8 @@ import { FileOcrPageStore } from "./ocr-store.ts";
 import { NodeTesseractEngine } from "./tesseract-node.ts";
 
 /**
- * CLI. The only input is a complete PDF; the engine infers everything else.
+ * CLI. The only content input is a complete PDF; the engine infers its
+ * structure, and writes it in the target schema the user chooses (`--target`).
  * An encrypted input is refused with exit 3 and nothing is written.
  */
 
@@ -24,6 +27,7 @@ Commands:
   batch <dir> [dir...]     Convert every PDF under the directories (recursive).
 
 Options:
+  --target <line>          Output schema: ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
   --out-dir <dir>          Pack output root (default: <tmp>/foundry-pdf-parser/packs).
   --assets-dir <dir>       Extracted image root (default: <tmp>/foundry-pdf-parser/assets).
   --cache-dir <dir>        IR/OCR cache (default: <tmp>/foundry-pdf-parser/cache).
@@ -41,6 +45,7 @@ function isLogLevel(value: string): value is LogLevel {
 
 interface CliOptions {
     config: EngineConfig;
+    target: TargetSchema;
     dryRun: boolean;
 }
 
@@ -81,7 +86,12 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
         }
         overrides.logLevel = level;
     }
-    return { config: makeConfig(overrides), dryRun: values["dry-run"] === true };
+    const targetId = str("target");
+    const target = targetId === undefined ? DEFAULT_TARGET : targetFor(targetId);
+    if (target === null) {
+        return `--target must be one of ${LINES.join(", ")}, got ${JSON.stringify(targetId)}`;
+    }
+    return { config: makeConfig(overrides), target, dryRun: values["dry-run"] === true };
 }
 
 function write(result: EngineResult, config: EngineConfig, log: Logger): void {
@@ -102,6 +112,7 @@ function write(result: EngineResult, config: EngineConfig, log: Logger): void {
 
 async function convert(pdfPath: string, engine: OcrEngine, opts: CliOptions, log: Logger): Promise<ExitCode> {
     const result = await runEngine(new Uint8Array(readFileSync(pdfPath)), {
+        target: opts.target,
         ocr: engine,
         ocrStore: new FileOcrPageStore(opts.config.cacheDir),
         irCache: new FileIrCache(opts.config.cacheDir),
@@ -151,6 +162,7 @@ async function main(): Promise<ExitCode> {
         args: rest,
         allowPositionals: true,
         options: {
+            target: { type: "string" },
             "out-dir": { type: "string" },
             "assets-dir": { type: "string" },
             "cache-dir": { type: "string" },

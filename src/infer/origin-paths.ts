@@ -3,7 +3,7 @@ import type { JsonObject, JsonValue } from "../types/entity.ts";
 import { type Entry, PARAGRAPH_BREAK } from "./detect-entries.ts";
 import { CHARACTERISTICS } from "./entry-types.ts";
 import { FUNCTION_WORDS, readsAsProse } from "./names.ts";
-import type { OriginStep } from "./schema.ts";
+import type { OriginStepDef } from "./targets.ts";
 
 /**
  * Origin-path rules blocks, found by structure: a heading followed directly
@@ -14,13 +14,20 @@ import type { OriginStep } from "./schema.ts";
  * All vocabulary here is the system's origin-path schema.
  */
 
-/** Creation-step words as they appear inside grant labels. */
-const STEP_WORDS: readonly [RegExp, OriginStep][] = [
-    [/\bhome ?world\b/iu, "homeWorld"],
-    [/\bbackground\b/iu, "background"],
-    [/\brole\b/iu, "role"],
-    [/\belite advance\b/iu, "elite"],
-];
+/** A step label as a pattern: its words, any spacing between them, an optional plural. */
+function labelPattern(label: string, plural: boolean): RegExp {
+    const words = label.split(/\s+/u).map((w) => w.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"));
+    return new RegExp(`\\b${words.join("\\s*")}${plural ? "s?" : ""}\\b`, "iu");
+}
+
+/** The first of the target's steps one of whose labels `text` names. */
+function stepNamedIn(
+    text: string,
+    steps: readonly OriginStepDef[],
+    plural: boolean,
+): OriginStepDef | undefined {
+    return steps.find((s) => s.labels.some((label) => labelPattern(label, plural).test(text)));
+}
 
 type GrantField =
     | "modifiers"
@@ -71,7 +78,7 @@ const GRANTED_SKILL_LEVEL = "known";
 
 export interface OriginPathReading {
     name: string;
-    step: OriginStep;
+    step: OriginStepDef;
     pageIndex: number;
     /** The origin's introductory prose (plain text). */
     description: string;
@@ -87,17 +94,9 @@ export interface OriginPathReading {
     fromTable?: boolean;
 }
 
-/** Creation steps as a table caption names them ("Random Home World", "Divinations"). */
-const CAPTION_STEPS: readonly [RegExp, OriginStep][] = [
-    [/\bhome ?worlds?\b/iu, "homeWorld"],
-    [/\bbackgrounds?\b/iu, "background"],
-    [/\broles?\b/iu, "role"],
-    [/\belite advances?\b/iu, "elite"],
-    [/\bdivinations?\b/iu, "divination"],
-];
-
-export function originStepNamedBy(caption: string): OriginStep | null {
-    return CAPTION_STEPS.find(([re]) => re.test(caption))?.[1] ?? null;
+/** The target's creation step a table caption names ("Random Home World", "Divinations"). */
+export function originStepNamedBy(caption: string, steps: readonly OriginStepDef[]): OriginStepDef | null {
+    return stepNamedIn(caption, steps, true) ?? null;
 }
 
 /** A roll-band cell: "01", "02-05", "100". */
@@ -125,7 +124,7 @@ export function characteristicChanges(effect: string): Record<string, number> {
 
 /** Origins listed by a table whose caption names their step: one per row. */
 export function readOriginTable(
-    step: OriginStep,
+    step: OriginStepDef,
     rows: readonly (readonly string[])[],
     pageIndex: number,
 ): OriginPathReading[] {
@@ -440,24 +439,27 @@ function grantsOf(labels: readonly Entry[]): {
 }
 
 /**
- * Steps a section heading can name, matched with spaces removed: display
- * headings are often letter-spaced ("ELITE ADV ANCES"). Only words long enough
- * not to occur inside others.
+ * A step label matched in a section heading with spaces removed (display
+ * headings are often letter-spaced: "ELITE ADV ANCES") must be at least this
+ * long, so it cannot occur inside another word.
  */
-const SPACELESS_STEPS: readonly [string, OriginStep][] = [
-    ["eliteadvance", "elite"],
-    ["homeworld", "homeWorld"],
-    ["background", "background"],
-    ["divination", "divination"],
-];
+const MIN_SPACELESS_LABEL = 8;
 
 /** The step named by the nearest enclosing section that names one. */
-function stepOfSections(sections: readonly string[]): OriginStep | undefined {
+function stepOfSections(
+    sections: readonly string[],
+    steps: readonly OriginStepDef[],
+): OriginStepDef | undefined {
+    const squash = (s: string): string => s.replace(/\s+/gu, "").toLowerCase();
     for (const section of [...sections].reverse()) {
-        const squashed = section.replace(/\s+/gu, "").toLowerCase();
-        const hit = SPACELESS_STEPS.find(([word]) => squashed.includes(word));
+        const hit = steps.find((s) =>
+            s.labels.some(
+                (label) =>
+                    squash(label).length >= MIN_SPACELESS_LABEL && squash(section).includes(squash(label)),
+            ),
+        );
         if (hit !== undefined) {
-            return hit[1];
+            return hit;
         }
     }
     return undefined;
@@ -489,7 +491,10 @@ export function wordPrefix(prefix: string, text: string): string | null {
 }
 
 /** Read every origin-path rules block among the document's entries (in order). */
-export function readOriginPaths(entries: readonly Entry[]): OriginPathReading[] {
+export function readOriginPaths(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
     const out: OriginPathReading[] = [];
     entries.forEach((owner, i) => {
         const labels: Entry[] = [];
@@ -501,12 +506,12 @@ export function readOriginPaths(entries: readonly Entry[]): OriginPathReading[] 
         }
         const fielded = labels.filter((l) => labelField(l.heading.text) !== undefined);
         const step =
-            fielded
-                .flatMap((l) => STEP_WORDS.filter(([re]) => re.test(l.heading.text)).map(([, s]) => s))
-                .at(0) ??
-            stepOfSections(owner.sections) ??
-            // Of the creation steps, only an elite advance is bought with experience.
-            (fielded.some((l) => labelField(l.heading.text) === "xpCost") ? "elite" : undefined);
+            fielded.map((l) => stepNamedIn(l.heading.text, steps, false)).find((s) => s !== undefined) ??
+            stepOfSections(owner.sections, steps) ??
+            // A rules block with an experience cost is the step bought with experience.
+            (fielded.some((l) => labelField(l.heading.text) === "xpCost")
+                ? steps.find((s) => s.boughtWithXp === true)
+                : undefined);
         // Prose rules and prerequisites alone describe a step in general; a
         // rules block grants something.
         const grantsSomething = fielded.some(

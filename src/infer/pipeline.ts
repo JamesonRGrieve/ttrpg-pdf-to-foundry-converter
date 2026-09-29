@@ -36,14 +36,13 @@ import {
     buildOriginPath,
     buildVehicle,
     CRAFT_SEGMENT,
-    DEFAULT_LINE,
     itemSegment,
-    originSegment,
     packName,
     toHtml,
     type ItemType,
     type Line,
 } from "./schema.ts";
+import type { TargetSchema } from "./targets.ts";
 import type { ContentType, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
 
@@ -127,12 +126,15 @@ export function nameKey(name: string): string {
 class EntityCollector {
     readonly entities: Entity[] = [];
     readonly warnings: string[] = [];
+    readonly line: Line;
 
     constructor(
-        readonly line: Line,
+        readonly target: TargetSchema,
         readonly book: string,
         readonly numbering: PageNumbering,
-    ) {}
+    ) {
+        this.line = target.line;
+    }
 
     page(pageIndex: number): string {
         return printedPage(this.numbering, pageIndex);
@@ -312,7 +314,7 @@ function extractTables(
     for (const table of tables) {
         // A caption naming a creation step ("Random Home World", "Divinations")
         // lists origins of that step.
-        const originStep = originStepNamedBy(table.tableTitle ?? "");
+        const originStep = originStepNamedBy(table.tableTitle ?? "", out.target.originSteps);
         if (originStep !== null) {
             const rows = table.rows
                 .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
@@ -555,7 +557,7 @@ function extractEntries(
 function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
     out.add(
         "Item",
-        originSegment(origin.step),
+        origin.step.segment,
         buildOriginPath({
             name: cleanName(origin.name),
             step: origin.step,
@@ -570,12 +572,12 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
             ...(origin.requirements === undefined ? {} : { requirements: origin.requirements }),
         }),
         origin.pageIndex,
-        origin.fromTable === true ? `table:origin:${origin.step}` : `origin:${origin.step}`,
+        origin.fromTable === true ? `table:origin:${origin.step.key}` : `origin:${origin.step.key}`,
     );
 }
 
 function extractOriginPaths(entries: readonly Entry[], out: EntityCollector): void {
-    for (const origin of readOriginPaths(entries)) {
+    for (const origin of readOriginPaths(entries, out.target.originSteps)) {
         addOrigin(out, origin);
     }
 }
@@ -793,15 +795,18 @@ function consolidate(
     return merged.sort((a, b) => a.ordinal - b.ordinal || byteCompare(a.blockId, b.blockId));
 }
 
-export function infer(ir: IR, log: Logger): InferResult {
-    // The engine never works out which game line a document belongs to; every
-    // document is keyed to the system's canonical default line.
-    const line = DEFAULT_LINE;
+/**
+ * Infer the document's compendium entities, written in `target`'s structure.
+ * The engine never works out which game line a document belongs to: the
+ * target is the user's choice of output schema.
+ */
+export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
+    const line = target.line;
     const book = inferBookSlug(ir);
     const numbering = inferPageNumbering(ir);
-    log.info(`book "${book}", page offset ${numbering.offset}`);
+    log.info(`book "${book}", page offset ${numbering.offset}, target ${line}`);
 
-    const out = new EntityCollector(line, book, numbering);
+    const out = new EntityCollector(target, book, numbering);
     const descriptions = new Map<string, string>();
     const { tables, unclassified, tableRuns } = extractTables(ir, out, log);
     const detected = detectEntries(ir, tableRuns);

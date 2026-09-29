@@ -3,7 +3,7 @@
 import { zipSync } from "fflate";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
-import { createLogger, MemoryOcrPageStore, RENDER_DPI, runEngine } from "../src/index.ts";
+import { createLogger, MemoryOcrPageStore, RENDER_DPI, runEngine, targetFor } from "../src/index.ts";
 import type { PackSummary, RunRequest, WorkerMessage } from "./protocol.ts";
 import { BrowserTesseractEngine } from "./tesseract-browser.ts";
 
@@ -34,10 +34,16 @@ function post(message: WorkerMessage, transfer: Transferable[] = []): void {
 
 async function run(request: RunRequest): Promise<void> {
     const log = createLogger("info", "", (_level, line) => post({ type: "log", line }));
+    const target = targetFor(request.target);
+    if (target === null) {
+        post({ type: "error", message: `unknown target schema ${JSON.stringify(request.target)}` });
+        return;
+    }
     const vendorBase = new URL(`${import.meta.env.BASE_URL}vendor/tesseract/`, self.location.origin).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
     try {
         const result = await runEngine(new Uint8Array(request.pdf), {
+            target,
             ocr,
             ocrStore: new MemoryOcrPageStore(),
             maxInFlight: ocrWorkers * 2,

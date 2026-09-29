@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { DEFAULT_TARGET } from "../../src/infer/targets.ts";
 import { createLogger } from "../../src/logger.ts";
 import { FileIrCache } from "../../src/node/ir-cache.ts";
 import { FileOcrPageStore } from "../../src/node/ocr-store.ts";
@@ -43,6 +44,7 @@ export async function runCase(
     const engine = await NodeTesseractEngine.create(FIXTURE_OCR_WORKERS, RENDER_DPI);
     try {
         const result = await runEngine(new Uint8Array(readFileSync(resolve(repoRoot, entry.pdf))), {
+            target: DEFAULT_TARGET,
             ocr: engine,
             ocrStore: new FileOcrPageStore(cacheDir),
             irCache: new FileIrCache(cacheDir),

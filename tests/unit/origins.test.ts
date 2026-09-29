@@ -10,6 +10,9 @@ import {
     readOriginTable,
     splitTopLevel,
 } from "../../src/infer/origin-paths.ts";
+import { DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
+
+const STEPS = DEFAULT_TARGET.originSteps;
 
 const entry = (text: string, pageIndex: number, sections: string[], body = ""): Entry => ({
     heading: { text, size: 10, style: "h", pageIndex },
@@ -51,8 +54,16 @@ describe("origin list parsing", () => {
     });
 
     it("recognises a caption naming a creation step", () => {
-        expect(originStepNamedBy("Random Home World")).toBe("homeWorld");
-        expect(originStepNamedBy("Omens")).toBeNull();
+        expect(originStepNamedBy("Random Home World", STEPS)?.key).toBe("homeWorld");
+        expect(originStepNamedBy("Omens", STEPS)).toBeNull();
+    });
+
+    it("recognises only the chosen target's creation steps", () => {
+        const voidSteps = TARGETS.rt.originSteps;
+        expect(originStepNamedBy("Random Lure of the Void", voidSteps)?.key).toBe("lureOfTheVoid");
+        expect(originStepNamedBy("Random Lure of the Void", STEPS)).toBeNull();
+        expect(originStepNamedBy("Trials and Travails", voidSteps)?.index).toBe(4);
+        expect(originStepNamedBy("Divinations", voidSteps)).toBeNull();
     });
 });
 
@@ -87,9 +98,9 @@ describe("origin rules blocks", () => {
                 "A reed worlder starts with 7+1d5 wounds.",
             ),
         ];
-        const [origin] = readOriginPaths(entries);
+        const [origin] = readOriginPaths(entries, STEPS);
         expect(origin?.name).toBe("REED WORLD");
-        expect(origin?.step).toBe("homeWorld");
+        expect(origin?.step.key).toBe("homeWorld");
         expect(origin?.modifiers).toEqual({ agility: 5, strength: -5 });
         expect(origin?.grants).toMatchObject({
             woundsFormula: "7+1d5",
@@ -107,8 +118,8 @@ describe("origin rules blocks", () => {
             entry("STARTING TALENTS", 20, s, "Wick Training (Oil or Tallow)"),
             entry("BACKGROUND APTITUDE", 20, s, "Finesse or Offence"),
         ];
-        const [origin] = readOriginPaths(entries);
-        expect(origin?.step).toBe("background");
+        const [origin] = readOriginPaths(entries, STEPS);
+        expect(origin?.step.key).toBe("background");
         expect(origin?.grants["skills"]).toEqual([
             { name: "Lantern Lore", specialization: "Reeds", level: "known" },
             { name: "Lantern Lore", specialization: "Tides", level: "known" },
@@ -125,7 +136,7 @@ describe("origin rules blocks", () => {
             entry("ROLE APTITUDES", 40, s, "Finesse, Perception"),
             entry("ROLE TALENT", 40, s, "Wick Training"),
         ];
-        const [origin] = readOriginPaths(entries);
+        const [origin] = readOriginPaths(entries, STEPS);
         expect(origin?.name).toBe("LAMPLIGHTER");
         expect(origin?.description).toBe("Keepers of the wick.");
     });
@@ -139,9 +150,9 @@ describe("origin rules blocks", () => {
             entry("PREREQUISITES", 50, s, "Willpower 35"),
             entry("EQUIPMENT", 50, s, "Lantern"),
         ];
-        const [origin] = readOriginPaths(entries);
+        const [origin] = readOriginPaths(entries, STEPS);
         expect(origin?.name).toBe("WARDEN");
-        expect(origin?.step).toBe("elite");
+        expect(origin?.step.key).toBe("elite");
     });
 
     it("ignores a section that only describes a step in prose", () => {
@@ -151,7 +162,7 @@ describe("origin rules blocks", () => {
             entry("INSTANT CHANGES", 30, s, "Explains what changes."),
             entry("UNLOCKED ADVANCES", 30, s, "Explains what unlocks."),
         ];
-        expect(readOriginPaths(entries)).toEqual([]);
+        expect(readOriginPaths(entries, STEPS)).toEqual([]);
     });
 });
 
@@ -161,7 +172,11 @@ describe("origin tables", () => {
             ["01-05", "The reeds remember.", "Increase this character's Perception by 5."],
             ["06-10", "Silence is a lantern.", "This character gains the Hush talent."],
         ];
-        const origins = readOriginTable("divination", rows, 7);
+        const divination = STEPS.find((s) => s.key === "divination");
+        if (divination === undefined) {
+            throw new Error("the default target has a divination step");
+        }
+        const origins = readOriginTable(divination, rows, 7);
         expect(origins.map((o) => [o.name, o.modifiers])).toEqual([
             ["The reeds remember.", { perception: 5 }],
             ["Silence is a lantern.", {}],

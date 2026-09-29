@@ -5,6 +5,8 @@
 export interface RunRequest {
     type: "run";
     pdf: ArrayBuffer;
+    /** The chosen output schema's line id. */
+    target: string;
 }
 
 export interface PackSummary {

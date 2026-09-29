@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadManifest, runCase } from "../../scripts/lib/run-case.ts";
+import { DEFAULT_TARGET } from "../../src/infer/targets.ts";
 import { createLogger } from "../../src/logger.ts";
 import { MemoryOcrPageStore } from "../../src/ocr/recognize.ts";
 import type { OcrEngine } from "../../src/ocr/types.ts";
@@ -53,6 +54,7 @@ describe("encrypted refusal", () => {
             close: async () => undefined,
         };
         const result = await runEngine(bytes, {
+            target: DEFAULT_TARGET,
             ocr,
             ocrStore: new MemoryOcrPageStore(),
             maxInFlight: 1,

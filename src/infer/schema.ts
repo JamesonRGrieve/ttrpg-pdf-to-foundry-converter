@@ -62,27 +62,12 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
 
 export const ACTOR_SEGMENT = "actors-bestiary";
 
-/** The system's character-creation steps an origin path belongs to (DH2 order). */
-export type OriginStep = "homeWorld" | "background" | "role" | "elite" | "divination";
-
-const ORIGIN_STEP_INDEX: Record<OriginStep, number> = {
-    homeWorld: 1,
-    background: 2,
-    role: 3,
-    elite: 4,
-    divination: 5,
-};
-
-const ORIGIN_SEGMENT: Record<OriginStep, string> = {
-    homeWorld: "origins-homeworlds",
-    background: "origins-backgrounds",
-    role: "origins-roles",
-    elite: "origins-elite-advances",
-    divination: "origins-divinations",
-};
-
-export function originSegment(step: OriginStep): string {
-    return ORIGIN_SEGMENT[step];
+/** A character-creation step of the target line (see `targets.ts`). */
+export interface OriginStep {
+    /** The system's step key. */
+    key: string;
+    /** Position in the line's creation sequence. */
+    index: number;
 }
 
 export interface OriginPathInput {
@@ -110,8 +95,8 @@ export function buildOriginPath(input: OriginPathInput): JsonObject {
         name: input.name,
         type: "originPath",
         system: {
-            step: input.step,
-            stepIndex: ORIGIN_STEP_INDEX[input.step],
+            step: input.step.key,
+            stepIndex: input.step.index,
             xpCost: input.xpCost ?? 0,
             requirements: { text: input.requirements ?? "", previousSteps: [], excludedSteps: [] },
             gameSystem: input.line,

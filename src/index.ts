@@ -16,6 +16,8 @@ export {
     type ReadDocument,
 } from "./run.ts";
 export { MemoryOcrPageStore, type OcrPageStore } from "./ocr/recognize.ts";
+export { LINES, type Line } from "./infer/schema.ts";
+export { DEFAULT_TARGET, TARGETS, targetFor, type TargetSchema } from "./infer/targets.ts";
 export { RENDER_DPI, RENDERER_ID } from "./ocr/render.ts";
 export {
     CORE_BUILD,
