@@ -87,7 +87,9 @@ for (const { dir, manifest } of moduleManifests(root)) {
 }
 const docs = moduleDocuments(root);
 for (const { module, pack, type, doc } of docs) {
-    if (!(String(doc.type) in (registered[type] ?? {}))) {
+    // Only document classes the system subtypes (Item, Actor) carry a `type`;
+    // a RollTable or JournalEntry has none to register.
+    if (registered[type] !== undefined && !(String(doc.type) in registered[type])) {
         moduleFailures.push(
             `${module}/${pack}: ${String(doc.name)} has unregistered ${type} type "${String(doc.type)}"`,
         );

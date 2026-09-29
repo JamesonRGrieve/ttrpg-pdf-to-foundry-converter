@@ -126,11 +126,17 @@ function findTableTitles(ir: IR): TitleHit[] {
     return hits;
 }
 
+/** Share of keys that must follow a finished sentence for a table's keys to head their rows. */
+const HEADED_KEY_SHARE = 0.8;
+
 /**
- * Keyed tables vertically centre a row's key (a roll band, a severity number)
- * against its multi-line text, so a row's first text line may carry no key.
- * When only some lines have content in the key column, every line joins the
- * nearest keyed line (ties go to the key above).
+ * Keyed tables set a row's key (a roll band, a severity number) either on the
+ * row's first line or vertically centred against its multi-line text. Keys
+ * head their rows when the first line carries one, every key's line opens its
+ * text, and the line before each later key finishes a sentence (the previous
+ * row's end); then every line joins the key above it. Otherwise, when only some lines have content in the
+ * key column, every line joins the nearest keyed line (ties go to the key
+ * above).
  */
 export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
     const keyRun = (row: RawRow): IRTextRun | undefined =>
@@ -138,6 +144,36 @@ export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: reado
     const anchors = lines.filter((row) => keyRun(row) !== undefined);
     if (anchors.length === 0 || anchors.length === lines.length) {
         return [...lines];
+    }
+    const lineText = (row: RawRow): string =>
+        [...row.runs]
+            .sort((a, b) => a.x - b.x)
+            .map((r) => r.text)
+            .join(" ")
+            .trim();
+    const later = anchors.slice(1).map((a) => lines[lines.indexOf(a) - 1]);
+    const finished = later.filter((prev) => prev !== undefined && /[.!?)]["”’]?$/u.test(lineText(prev)));
+    // A key heading its row opens the row's text; a centred key may sit mid-sentence.
+    const opensText = (row: RawRow): boolean => {
+        const key = keyRun(row);
+        const text = lineText({ y: row.y, runs: row.runs.filter((r) => r !== key) });
+        return /^[\p{Lu}\p{N}"“‘']/u.test(text);
+    };
+    if (
+        lines[0] === anchors[0] &&
+        anchors.every(opensText) &&
+        finished.length >= HEADED_KEY_SHARE * later.length
+    ) {
+        const rows: RawRow[] = [];
+        for (const line of lines) {
+            const current = rows.at(-1);
+            if (anchors.includes(line) || current === undefined) {
+                rows.push({ y: line.y, runs: [...line.runs] });
+            } else {
+                current.runs.push(...line.runs);
+            }
+        }
+        return rows;
     }
     // Distances are measured from the key itself: a key set mid-row can share
     // a baseline group with a neighbouring line of its cell.
@@ -223,7 +259,27 @@ function joinText(a: string, b: string, gap: number): string {
 }
 
 /** Merge a header row's runs into its column labels (words of one label sit close together). */
-function mergeAdjacentText(runs: IRTextRun[]): { text: string; x: number; width: number; bold: boolean }[] {
+/** Fewest body lines that must start a cell at one x for it to be a column edge. */
+const MIN_ALIGNED_ROWS = 3;
+
+/**
+ * Where the lines below a header start their cells: every x at which at least
+ * MIN_ALIGNED_ROWS lines start a run. A header label there opens a column,
+ * however narrow the gap before it.
+ */
+function cellEdges(below: readonly RawRow[]): number[] {
+    const starts = below.flatMap((line) => [
+        ...new Set(line.runs.filter((r) => r.text.trim().length > 0).map((r) => Math.round(r.x))),
+    ]);
+    return [...new Set(starts)].filter(
+        (x) => starts.filter((s) => Math.abs(s - x) <= COLUMN_EDGE_TOLERANCE).length >= MIN_ALIGNED_ROWS,
+    );
+}
+
+function mergeAdjacentText(
+    runs: IRTextRun[],
+    edges: readonly number[],
+): { text: string; x: number; width: number; bold: boolean }[] {
     const [first, ...rest] = [...runs].sort((a, b) => a.x - b.x);
     if (first === undefined) {
         return [];
@@ -239,7 +295,9 @@ function mergeAdjacentText(runs: IRTextRun[]): { text: string; x: number; width:
             prev.x + prev.text.trimEnd().length * prev.size * MAX_GLYPH_ADVANCE,
         );
         const gap = r.x - inkEnd;
-        const joins = gap < HEADER_JOIN_FACTOR * Math.max(r.size, prev.size);
+        const joins =
+            gap < HEADER_JOIN_FACTOR * Math.max(r.size, prev.size) &&
+            !edges.some((x) => Math.abs(r.x - x) <= COLUMN_EDGE_TOLERANCE);
         prev = r;
         if (joins) {
             cur.text = joinText(cur.text, r.text, gap);
@@ -357,8 +415,8 @@ export function alignBoundariesToData(bounds: number[], body: readonly RawRow[])
     }
 }
 
-function inferColumnBoundaries(headerRow: RawRow): number[] {
-    const merged = mergeAdjacentText(headerRow.runs);
+function inferColumnBoundaries(headerRow: RawRow, edges: readonly number[]): number[] {
+    const merged = mergeAdjacentText(headerRow.runs, edges);
     return merged.map((m) => m.x);
 }
 
@@ -527,8 +585,8 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
  * A table header row: bold and naming at least two columns (a stacked header
  * may put a single label on a line of its own above it).
  */
-function isHeaderRow(row: RawRow): boolean {
-    const labels = mergeAdjacentText(headerLabels(row).runs);
+function isHeaderRow(row: RawRow, edges: readonly number[]): boolean {
+    const labels = mergeAdjacentText(headerLabels(row).runs, edges);
     // `Label:` runs are field labels in prose, not column headings.
     return labels.length >= MIN_COLUMNS && !labels.some((l) => l.text.trim().endsWith(":"));
 }
@@ -545,27 +603,29 @@ function headerLabels(row: RawRow): RawRow {
  * The table's header: the first header row — or, when a fuller header row
  * follows it directly, that one, as a stacked header prints some labels' first
  * words on a line above the rest ("LOCATIONS" over "COVERED"). Each upper label
- * is then prefixed to the column label it sits over. Returns the header's line
- * index and its labels.
+ * is then prefixed to the column label it sits over. Labels are read against
+ * the cell edges of the lines below. Returns the header's line index and its
+ * labels.
  */
 export function stackedHeader(lines: readonly RawRow[]): { index: number; row: RawRow } | null {
-    const index = lines.findIndex(isHeaderRow);
+    const index = lines.findIndex((line, i) => isHeaderRow(line, cellEdges(lines.slice(i + 1))));
     const first = lines[index];
     if (first === undefined) {
         return null;
     }
+    const edges = cellEdges(lines.slice(index + 1));
     const upper = headerLabels(first);
     const next = lines[index + 1];
-    if (next === undefined || !isHeaderRow(next)) {
+    if (next === undefined || !isHeaderRow(next, edges)) {
         return { index, row: upper };
     }
     const lower = headerLabels(next);
-    const lowerLabels = mergeAdjacentText(lower.runs);
-    if (lowerLabels.length <= mergeAdjacentText(upper.runs).length) {
+    const lowerLabels = mergeAdjacentText(lower.runs, edges);
+    if (lowerLabels.length <= mergeAdjacentText(upper.runs, edges).length) {
         return { index, row: upper };
     }
     const runs = lower.runs.map((r) => ({ ...r }));
-    for (const label of mergeAdjacentText(upper.runs)) {
+    for (const label of mergeAdjacentText(upper.runs, edges)) {
         const under = lowerLabels.find((l) => label.x < l.x + l.width && l.x < label.x + label.width);
         const lead =
             under === undefined
@@ -621,14 +681,15 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
         return null;
     }
     const { index: headerIdx, row: headerRow } = header;
-    const colBoundaries = inferColumnBoundaries(headerRow);
+    const edges = cellEdges(lines.slice(headerIdx + 1));
+    const colBoundaries = inferColumnBoundaries(headerRow, edges);
     if (colBoundaries.length < MIN_COLUMNS) {
         return null;
     }
 
     const headerCells = assignToColumns(headerRow.runs, colBoundaries);
     const headers = headerCells.map((c) => c.text.replace(/\s+/g, " ").trim());
-    const body = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow));
+    const body = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges));
     alignBoundariesToData(colBoundaries, body);
 
     // A table printed as side-by-side copies of one column set (its header

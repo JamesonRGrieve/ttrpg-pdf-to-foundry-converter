@@ -36,6 +36,7 @@ import {
     readOriginTable,
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
+import { buildRollTable, rollResults } from "./roll-tables.ts";
 import { mapRow, type RowCells, rowType } from "./rows.ts";
 import {
     ACTOR_SEGMENT,
@@ -320,6 +321,8 @@ function extractTables(
     const tables = [...titled, ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex))];
     let unclassified = 0;
     for (const table of tables) {
+        // A captioned roll table is a RollTable, whatever items its rows also define.
+        addRollTable(table, out);
         // A caption naming a creation step ("Random Home World", "Divinations")
         // lists origins of that step.
         const originStep = originStepNamedBy(table.tableTitle ?? "", out.target.originSteps);
@@ -662,6 +665,37 @@ function extractOriginPaths(entries: readonly Entry[], out: EntityCollector): vo
 }
 
 /** A table row's cell texts in column order ("" for an empty cell). */
+/** Pack segment roll tables are emitted into. */
+const ROLL_TABLE_SEGMENT = "rolltables";
+
+/** Emit a captioned table whose rows are die results as a RollTable. */
+function addRollTable(table: DetectedTable, out: EntityCollector): void {
+    if (table.tableTitle === null) {
+        return;
+    }
+    const rows = table.rows
+        .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
+        .map((r) => rowTexts(r, table.headers.length));
+    const roll = rollResults(rows);
+    if (roll === null) {
+        return;
+    }
+    out.add(
+        "RollTable",
+        ROLL_TABLE_SEGMENT,
+        buildRollTable({
+            name: cleanName(table.tableTitle),
+            line: out.line,
+            book: out.book,
+            page: out.page(table.pageIndex),
+            die: roll.die,
+            results: roll.results,
+        }),
+        table.pageIndex,
+        "table:roll",
+    );
+}
+
 function rowTexts(row: TableRow, columns: number): string[] {
     return Array.from({ length: columns }, (_, col) => row.cells.find((c) => c.colIndex === col)?.text ?? "");
 }

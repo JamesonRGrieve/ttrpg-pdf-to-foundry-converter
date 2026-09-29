@@ -106,6 +106,30 @@ describe("titled tables", () => {
         expect(tables[0]?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("1d10 E");
     });
 
+    it("splits header labels set closer than a word space where the rows start their cells", () => {
+        const ir = irOf([
+            run("Table 1-5: Wick Mishaps", 60, 700, bold),
+            run("ROLL D10", 60, 680, { ...bold, width: 44 }),
+            run("EFFECT", 106, 680, { ...bold, width: 33 }),
+            run("1-3", 60, 660),
+            run("The wick smokes and the lamp dims.", 106, 660),
+            run("4-7", 60, 640),
+            run("The flame gutters out.", 106, 640),
+            run("8-9", 60, 620),
+            run("The oil catches alight.", 106, 620),
+            run("10", 60, 600),
+            run("The lamp shatters.", 106, 600),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["ROLL D10", "EFFECT"]);
+        expect(table?.rows.map((r) => r.cells.find((c) => c.colIndex === 0)?.text)).toEqual([
+            "1-3",
+            "4-7",
+            "8-9",
+            "10",
+        ]);
+    });
+
     it("keeps a full-size marker that is a cell's own value", () => {
         const ir = irOf([
             run("Table 1-2: Launchers", 60, 700, bold),

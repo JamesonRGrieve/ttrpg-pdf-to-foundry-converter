@@ -823,6 +823,40 @@ describe("table continuations", () => {
             ["06-10", "Ash Eyes: sees"],
         ]);
     });
+
+    it("gives a key heading its row every line down to the next key", () => {
+        const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
+        // Each key sits on its row's first line; a row's last line lies nearer
+        // the next key than its own.
+        const rows = groupByKeyAnchors(
+            [
+                { y: 702, runs: [at("1", 20, 702), at("The flame gutters and the", 100, 702)] },
+                { y: 688, runs: [at("wick smokes.", 100, 688)] },
+                { y: 675, runs: [at("2", 20, 675), at("The lamp goes out.", 100, 675)] },
+                { y: 661, runs: [at("3", 20, 661), at("The oil catches and", 100, 661)] },
+                { y: 648, runs: [at("spreads.", 100, 648)] },
+            ],
+            [0, 80],
+        );
+        expect(rows.map((r) => r.runs.map((x) => x.text))).toEqual([
+            ["1", "The flame gutters and the", "wick smokes."],
+            ["2", "The lamp goes out."],
+            ["3", "The oil catches and", "spreads."],
+        ]);
+        // A key beside a line that continues a sentence is centred, not heading.
+        const centred = groupByKeyAnchors(
+            [
+                { y: 702, runs: [at("1", 20, 702), at("The flame gutters.", 100, 702)] },
+                { y: 688, runs: [at("Soot: the wick", 100, 688)] },
+                { y: 675, runs: [at("2", 20, 675), at("smokes and dims.", 100, 675)] },
+            ],
+            [0, 80],
+        );
+        expect(centred.map((r) => r.runs.map((x) => x.text))).toEqual([
+            ["1", "The flame gutters."],
+            ["2", "smokes and dims.", "Soot: the wick"],
+        ]);
+    });
 });
 
 describe("headings", () => {
