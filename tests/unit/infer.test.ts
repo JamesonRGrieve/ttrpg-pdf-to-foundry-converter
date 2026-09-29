@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { headerRole, isAttributeScale, mergedHeaderRoles, normalizeHeader } from "../../src/infer/columns.ts";
+import {
+    headerRole,
+    isAdvanceList,
+    isAttributeScale,
+    mergedHeaderRoles,
+    normalizeHeader,
+} from "../../src/infer/columns.ts";
 import {
     detectEntries,
+    endsSentence,
     type Entry,
     headingOf,
     type TextLine,
@@ -35,6 +42,7 @@ import {
     mergeInto,
     modalHeadingSizes,
     nameKey,
+    siblingKinds,
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
 import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
@@ -43,7 +51,7 @@ import type { DetectedTable } from "../../src/infer/types.ts";
 import { createLogger } from "../../src/logger.ts";
 import type { Entity } from "../../src/types/entity.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
-import { inMarginBand, measureMarginBands } from "../../src/util/page-bands.ts";
+import { inMarginBand, inSideMargin, measureMarginBands } from "../../src/util/page-bands.ts";
 
 function irOf(pageIndexes: number[], runs: IRTextRun[]): IR {
     return {
@@ -103,6 +111,9 @@ describe("columns", () => {
         expect(isAttributeScale(["availability"])).toBe(true);
         expect(isAttributeScale(["weight", "availability"])).toBe(true);
         expect(isAttributeScale(["name"])).toBe(false);
+        expect(headerRole("Advance")).toBe("advance");
+        expect(isAdvanceList(["advance"])).toBe(true);
+        expect(isAdvanceList(["name"])).toBe(false);
         expect(isAttributeScale(["roll"])).toBe(false);
         expect(isAttributeScale(null)).toBe(false);
     });
@@ -577,6 +588,12 @@ describe("entry typing", () => {
                 ]),
             ),
         ).toBe("psychicPower");
+        const sustain = entry("SPARK", [
+            ["Threshold", "8"],
+            ["Sustain", "No"],
+        ]);
+        expect(entryType(sustain)).toBe("psychicPower");
+        expect(entryItem(sustain, "psychicPower").system["sustained"]).toBe("No");
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
     });
 
@@ -591,6 +608,52 @@ describe("entry typing", () => {
                 ]),
             ),
         ).toBeNull();
+    });
+
+    it("gives a field-less entry the kind most of its siblings are typed by their fields", () => {
+        const talents = ["Talents"];
+        const run = [
+            entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], talents),
+            entry("LAMP SENSE", [["Prerequisites", "Per 30"]], talents),
+            entry("QUIET TREAD", [], talents),
+            entry("EMBER HAND", [["Prerequisites", "WP 30"]], talents),
+        ];
+        const kinds = siblingKinds(run, entryType);
+        expect(run.map((e) => kinds.get(e))).toEqual(["talent", "talent", "talent", "talent"]);
+        // Too few typed siblings establish no run.
+        const short = run.slice(1);
+        expect(short.map((e) => siblingKinds(short, entryType).get(e))).toEqual([
+            "talent",
+            undefined,
+            "talent",
+        ]);
+    });
+
+    it("gives no kind to a sibling before the run, heading entries, with foreign fields or a question", () => {
+        const talents = ["Talents"];
+        const run = [
+            entry("LAMP CARE", [], talents),
+            entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], talents),
+            entry("LAMP SENSE", [["Prerequisites", "Per 30"]], talents),
+            entry("USES OF FLAME", [], talents),
+            entry("KINDLING", [], [...talents, "USES OF FLAME"]),
+            entry("WICK LENGTHS", [["Short", "1 hour"]], talents),
+            entry("WHAT IS A WICK?", [], talents),
+            entry("EMBER HAND", [["Prerequisites", "WP 30"]], talents),
+        ];
+        const kinds = siblingKinds(run, entryType);
+        const untyped = ["LAMP CARE", "USES OF FLAME", "KINDLING", "WICK LENGTHS", "WHAT IS A WICK?"];
+        expect(run.filter((e) => untyped.includes(e.heading.text)).map((e) => kinds.get(e))).toEqual(
+            untyped.map(() => undefined),
+        );
+    });
+
+    it("drops a prerequisite's closing full stop", () => {
+        const item = entryItem(
+            entry("LAMP SENSE", [["Prerequisites", "Perception 30."]], ["Talents"]),
+            "talent",
+        );
+        expect(item.system["prerequisites"]).toEqual({ text: "Perception 30" });
     });
 
     it("falls back to the enclosing section's schema type word", () => {
@@ -618,6 +681,9 @@ describe("entry typing", () => {
         expect(entryType(entry("GLOWING WEAPONS", [], ["Traits", "Trait Descriptions"]))).toBe("trait");
         expect(entryType(entry("TIERS AND CATEGORIES", [], ["Traits", "Gaining Talents"]))).toBeNull();
         expect(entryType(entry("WEAPON FOCUS", [["Tier", "1"]], ["Talents"]))).toBe("talent");
+        // A talent printed with prerequisites but no tier, under a Talents section.
+        expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Talents", "A"]))).toBe("talent");
+        expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Traits"]))).toBe("trait");
         expect(typeNamedBy("Table 2-1: Mutations")).toBe("mutation");
     });
 
@@ -653,6 +719,13 @@ describe("margin bands", () => {
         expect(bands.top).toBe(1);
         expect(inMarginBand(16, 800, bands)).toBe(true);
         expect(inMarginBand(48, 800, bands)).toBe(false);
+    });
+
+    it("places text wholly beyond the text block's sides in a side margin", () => {
+        expect(inSideMargin(566, 588, 600)).toBe(true);
+        expect(inSideMargin(10, 30, 600)).toBe(true);
+        expect(inSideMargin(376, 525, 600)).toBe(false);
+        expect(inSideMargin(540, 590, 600)).toBe(false);
     });
 });
 
@@ -777,12 +850,30 @@ describe("headings", () => {
     it("rejects bold labels spread apart like table cells, not a letter-spaced display heading", () => {
         const spreadOut: [string, number, number][] = [
             ["LANTERN", 100, 50],
-            ["WAKE", 200, 40],
+            ["WAKE", 175, 40],
         ];
         const cells = heading(spreadOut);
         const bold = { ...cells, runs: cells.runs.map((r) => ({ ...r, weight: "bold" as const })) };
         expect(headingOf(bold, body, false)).toBeNull();
         expect(headingOf(cells, body, false)?.text).toBe("LANTERN WAKE");
+        // A space glyph in the gap makes it a word space, however wide it measures.
+        const [lantern, wake] = bold.runs;
+        if (lantern === undefined || wake === undefined) {
+            throw new Error("two runs expected");
+        }
+        const spaced = { ...bold, runs: [lantern, { ...lantern, x: 165, width: 2, text: " " }, wake] };
+        expect(headingOf(spaced, body, false)?.text).toBe("LANTERN WAKE");
+    });
+
+    it("rejects display text sharing a baseline with text far across the page", () => {
+        const apart = heading(
+            [
+                ["Lanterns &", 100, 160],
+                ["Wakes", 370, 130],
+            ],
+            32,
+        );
+        expect(headingOf(apart, body, false)).toBeNull();
     });
 
     it("rejects a line of labelled values, however it is spaced", () => {
@@ -791,6 +882,15 @@ describe("headings", () => {
             ["SIDE:9", 180, 30],
         ]);
         expect(headingOf(values, body, false)).toBeNull();
+    });
+
+    it("reads no heading from a line of italics at body size, but does from larger italics", () => {
+        const italic = (size: number): TextLine => {
+            const line = heading([["The Lamp Is Lit", 100, 80]], size);
+            return { ...line, runs: line.runs.map((r) => ({ ...r, italic: true, font: "quote-italic" })) };
+        };
+        expect(headingOf(italic(body.size), body, false)).toBeNull();
+        expect(headingOf(italic(16), body, false)?.text).toBe("The Lamp Is Lit");
     });
 
     it("reads a small capitals heading whose case the text layer scrambled", () => {
@@ -958,6 +1058,12 @@ describe("entry fields", () => {
         expect(valueUnfinished("Strength 40 or")).toBe(true);
         expect(valueUnfinished("Glow Aura, Deep Ward")).toBe(false);
         expect(valueUnfinished("Fervour")).toBe(false);
+    });
+
+    it("treats a value ending a sentence as complete", () => {
+        expect(endsSentence("Agility 40, Acrobatics.")).toBe(true);
+        expect(endsSentence("the lamp.”")).toBe(true);
+        expect(endsSentence("Common Lore (Lamps) +10 or Glow")).toBe(false);
     });
 });
 

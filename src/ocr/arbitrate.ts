@@ -571,11 +571,19 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         if (consumed(index)) {
             return;
         }
-        // A host takes over the position of donor runs it absorbed whole (a
-        // drop cap, a ligature piece), never of a run that survives beside it.
-        const absorbed = [...(donors.get(index) ?? [])].filter(consumed).map((d) => at(runs, d).x);
-        const x = Math.min(run.x, ...absorbed);
-        out.push({ ...run, text: at(texts, index), x, width: run.width + (run.x - x) });
+        // A host takes over the extent of donor runs it absorbed whole (a drop
+        // cap, small capitals after an initial, a ligature piece), never of a
+        // run that survives beside it; the merged word is set in the size that
+        // carries most of its letters, not its initial's.
+        const pieces = [run, ...[...(donors.get(index) ?? [])].filter(consumed).map((d) => at(runs, d))];
+        const x = Math.min(...pieces.map((p) => p.x));
+        const right = Math.max(...pieces.map((p) => p.x + p.width));
+        const lettersBySize = new Map<number, number>();
+        for (const p of pieces) {
+            lettersBySize.set(p.fontSize, (lettersBySize.get(p.fontSize) ?? 0) + p.text.trim().length);
+        }
+        const [[fontSize] = [run.fontSize]] = [...lettersBySize].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+        out.push({ ...run, text: at(texts, index), x, width: right - x, fontSize });
     });
 
     let inserted = 0;

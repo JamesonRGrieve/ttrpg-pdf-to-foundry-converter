@@ -92,8 +92,12 @@ export function typeNamedBy(text: string): ItemType | null {
     return SECTION_TYPES.find(([re]) => re.test(text))?.[1] ?? null;
 }
 
-/** Type words of the kinds that identify themselves by field blocks (see SECTION_TYPES). */
-const FIELDED_TYPE_WORDS = /\b(?:talents?|skills?|psychic powers?)\b/iu;
+/** The kinds that identify themselves by field blocks (see SECTION_TYPES), by the word a section names them with. */
+const FIELDED_KINDS: readonly [RegExp, ItemType][] = [
+    [/\btalents?\b/iu, "talent"],
+    [/\bskills?\b/iu, "skill"],
+    [/\bpsychic powers?\b/iu, "psychicPower"],
+];
 
 /**
  * The field-less type an entry takes from its nearest enclosing section that
@@ -106,7 +110,21 @@ function sectionType(sections: readonly string[]): ItemType | null {
         if (type !== null) {
             return type;
         }
-        if (FIELDED_TYPE_WORDS.test(section)) {
+        if (FIELDED_KINDS.some(([re]) => re.test(section))) {
+            return null;
+        }
+    }
+    return null;
+}
+
+/** The fielded kind the nearest enclosing section naming any catalogue kind names, if fielded. */
+function fieldedSectionKind(sections: readonly string[]): ItemType | null {
+    for (const section of [...sections].reverse()) {
+        const fielded = FIELDED_KINDS.find(([re]) => re.test(section))?.[1];
+        if (fielded !== undefined) {
+            return fielded;
+        }
+        if (typeNamedBy(section) !== null) {
             return null;
         }
     }
@@ -121,10 +139,14 @@ export function entryType(entry: Entry): ItemType | null {
     if (has(fields, "skills") && has(fields, "talents", "traits")) {
         return null;
     }
-    if (has(fields, "focus power", "sustained", "psychic power")) {
+    if (has(fields, "focus power", "sustained", "sustain", "psychic power")) {
         return "psychicPower";
     }
     if (has(fields, "tier")) {
+        return "talent";
+    }
+    // A talent printed with its prerequisites but no tier, under a Talents section.
+    if (has(fields, "prerequisite", "prerequisites") && fieldedSectionKind(entry.sections) === "talent") {
         return "talent";
     }
     if (
@@ -197,7 +219,10 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 system["tier"] = Number(tier[0]);
             }
             system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? "");
-            system["prerequisites"] = { text: text("prerequisites") ?? text("prerequisite") ?? "" };
+            // A closing full stop ends the printed sentence; it is not part of the value.
+            system["prerequisites"] = {
+                text: (text("prerequisites") ?? text("prerequisite") ?? "").replace(/\.\s*$/u, ""),
+            };
             system["benefit"] = html;
             break;
         }
@@ -209,6 +234,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 ["focus power", "focusPower"],
                 ["range", "range"],
                 ["sustained", "sustained"],
+                ["sustain", "sustained"],
                 ["subtype", "subtype"],
             ] as const) {
                 const value = text(label);

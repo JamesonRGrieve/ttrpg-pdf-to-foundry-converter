@@ -35,7 +35,8 @@ export type Role =
     | "action"
     | "sustained"
     | "subtype"
-    | "roll";
+    | "roll"
+    | "advance";
 
 /** Normalized header text (or a word within it) → role. Order matters: first match wins. */
 const HEADER_ROLES: readonly [RegExp, Role][] = [
@@ -67,6 +68,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(sustained|sustain)$/u, "sustained"],
     [/^(subtype|sub type|keywords?)$/u, "subtype"],
     [/^(d\d+|roll|result)$/u, "roll"],
+    [/^advances?$/u, "advance"],
 ];
 
 export function normalizeHeader(header: string): string {
@@ -122,4 +124,13 @@ const SCALE_ROLES: ReadonlySet<Role> = new Set(["availability", "weight", "cost"
  */
 export function isAttributeScale(leadRoles: readonly Role[] | null | undefined): boolean {
     return leadRoles?.some((r) => SCALE_ROLES.has(r)) ?? false;
+}
+
+/**
+ * A table keyed by "Advance" lists what a character may buy — skills,
+ * talents and the like side by side, each with its price — and defines none
+ * of them: it is no catalogue.
+ */
+export function isAdvanceList(leadRoles: readonly Role[] | null | undefined): boolean {
+    return leadRoles?.includes("advance") ?? false;
 }

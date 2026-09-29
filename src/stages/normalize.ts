@@ -11,7 +11,7 @@ import type {
 import { groupByBaseline } from "../util/baselines.ts";
 import { columnAt } from "../util/columns.ts";
 import { byteCompare, chain, numAsc } from "../util/ordered.ts";
-import { inFurnitureBand } from "../util/page-bands.ts";
+import { inFurnitureBand, inSideMargin } from "../util/page-bands.ts";
 import { BAND_HEIGHT, quantizeCoord, quantizeSize, quantizeWidth } from "../util/rounding.ts";
 import { percentile } from "../util/stats.ts";
 import { canonicalizeText, stripSubsetPrefix } from "../util/text.ts";
@@ -55,6 +55,12 @@ const MIN_COLUMN_LINES = 3;
 const FULL_MEASURE_SHARE = 0.85;
 /** A gap between lines this many times their typical gap sets a block apart. */
 const REGION_GAP_FACTOR = 2.5;
+/** Fewest pages of a parity a column layout recurs on to be one of the document's layouts. */
+const MIN_LAYOUT_PAGES = 2;
+/** Points a page's column edge may stray from its layout's and still follow it. */
+const LAYOUT_TOLERANCE = 4;
+/** Narrowest share of the page width a layout's text column spans. */
+const MIN_COLUMN_SHARE = 0.15;
 
 function canonFontName(raw: string): string {
     return stripSubsetPrefix(raw).toLowerCase();
@@ -66,6 +72,14 @@ interface PageGeometry {
     marginTop: number;
     marginBottom: number;
     columnLefts: number[];
+    /** Where each column but the last ends: the start of the gutter channel after it. */
+    columnRights: number[];
+}
+
+/** A document column layout: each gutter (the column edges after the first) and where the column before it ends. */
+interface DocumentLayout {
+    gutters: number[];
+    rights: number[];
 }
 
 /**
@@ -85,6 +99,7 @@ function detectGeometry(runs: readonly RawTextRun[], page: RawPage): PageGeometr
             marginTop: page.height,
             marginBottom: 0,
             columnLefts: [0],
+            columnRights: [],
         };
     }
     let marginLeft = Number.POSITIVE_INFINITY;
@@ -100,12 +115,17 @@ function detectGeometry(runs: readonly RawTextRun[], page: RawPage): PageGeometr
 
     // Per whole point across the text block: how many runs cover it. Page
     // furniture in the top/bottom margin bands (a centred running head or
-    // footer) spans the gutter by design and is not evidence against it.
+    // footer) spans the gutter by design and is not evidence against it, and
+    // a thumb-index tab out in a side margin is no column.
     const origin = Math.floor(marginLeft);
     const span = Math.max(0, Math.ceil(marginRight) - origin);
     const coverage = new Array<number>(span).fill(0);
     for (const r of runs) {
-        if (r.width <= 0 || inFurnitureBand(r.y, page.height)) {
+        if (
+            r.width <= 0 ||
+            inFurnitureBand(r.y, page.height) ||
+            inSideMargin(r.x, r.x + r.width, page.width)
+        ) {
             continue;
         }
         const from = Math.max(0, Math.floor(r.x) - origin);
@@ -116,6 +136,7 @@ function detectGeometry(runs: readonly RawTextRun[], page: RawPage): PageGeometr
     }
     const maxCrossing = GUTTER_MAX_CROSSING_RUNS;
     const columnLefts = [marginLeft];
+    const columnRights: number[] = [];
     let gapStart = -1;
     for (let i = 0; i <= span; i += 1) {
         const open = i < span && (coverage[i] ?? 0) <= maxCrossing;
@@ -125,11 +146,12 @@ function detectGeometry(runs: readonly RawTextRun[], page: RawPage): PageGeometr
             // A gutter must have content on both sides and be wide enough.
             if (gapStart > 0 && i < span && i - gapStart >= GUTTER_MIN_WIDTH) {
                 columnLefts.push(origin + i);
+                columnRights.push(origin + gapStart);
             }
             gapStart = -1;
         }
     }
-    return { marginLeft, marginRight, marginTop, marginBottom, columnLefts };
+    return { marginLeft, marginRight, marginTop, marginBottom, columnLefts, columnRights };
 }
 
 /** Each run's column (numbered in reading order) and every column's left edge. */
@@ -146,20 +168,45 @@ function pageLayout(runs: readonly RawTextRun[], columnLefts: readonly number[])
 }
 
 /**
- * The document's gutter per facing parity: the modal second-column edge of its
- * two-column pages. Recto and verso pages mirror their margins, so each parity
- * keeps its own.
+ * The document's column layouts per facing parity, most columns first. A
+ * layout is the modal edge set of the pages with that many columns, kept when
+ * it recurs on at least MIN_LAYOUT_PAGES of them and every column is at least
+ * MIN_COLUMN_SHARE of the page wide (a table's cell edges are not a page
+ * layout); where each column ends is the median over those pages. Recto and
+ * verso pages mirror their margins, so each parity keeps its own.
  */
-function documentGutters(geometries: ReadonlyMap<number, PageGeometry>): Map<number, number> {
-    const byParity = new Map<number, number[]>();
+function documentLayouts(
+    geometries: ReadonlyMap<number, PageGeometry>,
+    pageWidths: ReadonlyMap<number, number>,
+): Map<number, DocumentLayout[]> {
+    const byShape = new Map<string, { parity: number; count: number; pages: PageGeometry[] }>();
     for (const [pageIndex, geom] of geometries) {
-        const gutter = geom.columnLefts[1];
-        if (geom.columnLefts.length === 2 && gutter !== undefined) {
-            const parity = pageIndex % 2;
-            byParity.set(parity, [...(byParity.get(parity) ?? []), quantizeCoord(gutter)]);
+        const count = geom.columnLefts.length;
+        if (count >= 2) {
+            const key = `${pageIndex % 2}:${count}`;
+            const shape = byShape.get(key) ?? { parity: pageIndex % 2, count, pages: [] };
+            shape.pages.push(geom);
+            byShape.set(key, shape);
         }
     }
-    return new Map([...byParity].map(([parity, gutters]) => [parity, mode(gutters)] as const));
+    const minWidth = MIN_COLUMN_SHARE * Math.min(...pageWidths.values());
+    const out = new Map<number, DocumentLayout[]>();
+    for (const shape of [...byShape.values()].sort((a, b) => numAsc(b.count, a.count))) {
+        const gutters = Array.from({ length: shape.count - 1 }, (_, i) =>
+            mode(shape.pages.map((g) => quantizeCoord(g.columnLefts[i + 1] ?? 0))),
+        );
+        const supporting = shape.pages.filter((g) =>
+            gutters.every((gutter, i) => Math.abs((g.columnLefts[i + 1] ?? 0) - gutter) <= LAYOUT_TOLERANCE),
+        );
+        const narrowest = Math.min(...gutters.slice(1).map((g, i) => g - (gutters[i] ?? 0)));
+        if (supporting.length >= MIN_LAYOUT_PAGES && narrowest >= minWidth) {
+            const rights = gutters.map((_, i) =>
+                percentile(supporting.map((g) => g.columnRights[i] ?? 0).sort(numAsc), 0.5),
+            );
+            out.set(shape.parity, [...(out.get(shape.parity) ?? []), { gutters, rights }]);
+        }
+    }
+    return out;
 }
 
 /**
@@ -194,27 +241,32 @@ function gapPieces<T extends { y: number }>(lines: readonly T[]): T[][] {
 
 /**
  * Columns of a page the whole-page gutter test reads as one column because a
- * block spans the gutter somewhere (a full-width figure, diagram or table
- * above or below two text columns). The page is cut into horizontal regions
- * at the lines that cross the document's gutter; a region that no line
- * crosses and whose sides are both prose columns reads as two columns, and
+ * block spans the gutters somewhere (a full-width figure, diagram or table
+ * above or below the text columns). The page is cut into horizontal regions
+ * at the lines that cross one of a document layout's `gutters`; a region that
+ * no line crosses and whose every column is prose reads as those columns, and
  * everything else as one. Columns are numbered top region first, left to
  * right. Returns null when no region splits.
  */
 function regionLayout(
     runs: readonly RawTextRun[],
     page: RawPage,
-    gutter: number,
+    { gutters, rights }: DocumentLayout,
     marginLeft: number,
 ): ColumnLayout | null {
     const crosses = (r: RawTextRun): boolean =>
-        r.width > 0 && r.x < gutter - COLUMN_EDGE_TOLERANCE && r.x + r.width > gutter - GUTTER_MIN_WIDTH;
-    const body = runs.filter((r) => !inFurnitureBand(r.y, page.height));
+        r.width > 0 &&
+        gutters.some(
+            (gutter) => r.x < gutter - COLUMN_EDGE_TOLERANCE && r.x + r.width > gutter - GUTTER_MIN_WIDTH,
+        );
+    const body = runs.filter(
+        (r) => !inFurnitureBand(r.y, page.height) && !inSideMargin(r.x, r.x + r.width, page.width),
+    );
     if (body.length === 0) {
         return null;
     }
-    // The text block's own extent: a folio or running head in the margin
-    // would widen the measure past any line of prose.
+    // The text block's own extent: a folio, running head or thumb-index tab
+    // in the margin would widen the measure past any line of prose.
     const bodyLeft = Math.min(...body.map((r) => r.x));
     const bodyRight = Math.max(...body.map((r) => r.x + r.width));
     const lines = groupByBaseline(
@@ -231,18 +283,22 @@ function regionLayout(
             segments.push({ open, lines: [line] });
         }
     }
-    const onLeft = (r: RawTextRun): boolean => r.x < gutter - COLUMN_EDGE_TOLERANCE;
-    const twoColumns = (piece: typeof lines): boolean => {
+    /** The column a run starts in: how many gutters lie left of it. */
+    const columnIn = (r: RawTextRun): number =>
+        gutters.filter((gutter) => r.x >= gutter - COLUMN_EDGE_TOLERANCE).length;
+    // Each column's measure runs from its edge to where the layout ends it,
+    // short of the gutter channel beside it (the last to the text block's edge).
+    const measures = [bodyLeft, ...gutters].map((left, i) => (rights[i] ?? bodyRight) - left);
+    const allColumns = (piece: typeof lines): boolean => {
         const pieceRuns = piece.flatMap((l) => l.runs);
-        return (
-            proseColumn(pieceRuns.filter(onLeft), gutter - bodyLeft) &&
+        return measures.every((measure, i) =>
             proseColumn(
-                pieceRuns.filter((r) => !onLeft(r)),
-                bodyRight - gutter,
-            )
+                pieceRuns.filter((r) => columnIn(r) === i),
+                measure,
+            ),
         );
     };
-    // An open segment splits from its first to its last two-column piece;
+    // An open segment splits from its first to its last all-column piece;
     // pieces set off beyond them (a table's caption and header above its
     // spanning rows) stay with the one-column block they sit against.
     const blocks: { split: boolean; lines: typeof lines }[] = segments.flatMap((s) => {
@@ -250,7 +306,7 @@ function regionLayout(
             return [{ split: false, lines: s.lines }];
         }
         const pieces = gapPieces(s.lines);
-        const qualified = pieces.map(twoColumns);
+        const qualified = pieces.map(allColumns);
         const first = qualified.indexOf(true);
         const last = qualified.lastIndexOf(true);
         return pieces.map((piece, i) => ({ split: first >= 0 && i >= first && i <= last, lines: piece }));
@@ -260,17 +316,17 @@ function regionLayout(
     }
 
     // Consecutive blocks of the same kind form one region; each region opens
-    // one column, or two when split.
+    // one column, or the layout's columns when split.
     const lefts: number[] = [];
     const regions = blocks.map((block, i) => {
         if (i === 0 || blocks[i - 1]?.split !== block.split) {
-            lefts.push(marginLeft, ...(block.split ? [gutter] : []));
+            lefts.push(marginLeft, ...(block.split ? gutters : []));
         }
-        return { split: block.split, base: lefts.length - (block.split ? 2 : 1) };
+        return { split: block.split, base: lefts.length - (block.split ? gutters.length + 1 : 1) };
     });
     const columnOf = new Map<RawTextRun, number>();
     const place = (r: RawTextRun, region: { split: boolean; base: number } | undefined): void => {
-        columnOf.set(r, (region?.base ?? 0) + (region?.split === true && !onLeft(r) ? 1 : 0));
+        columnOf.set(r, (region?.base ?? 0) + (region?.split === true ? columnIn(r) : 0));
     };
     blocks.forEach((block, i) => {
         for (const r of block.lines.flatMap((l) => l.runs)) {
@@ -320,16 +376,23 @@ export function normalize(raw: RawDoc): IR {
             (page) => [page.pageIndex, detectGeometry(runsByPage.get(page.pageIndex) ?? [], page)] as const,
         ),
     );
-    const gutters = documentGutters(geometries);
+    const layouts = documentLayouts(
+        geometries,
+        new Map(sortedPages.map((p) => [p.pageIndex, p.width] as const)),
+    );
 
     for (const page of sortedPages) {
         const pageRuns = runsByPage.get(page.pageIndex) ?? [];
         const geom = geometries.get(page.pageIndex) ?? detectGeometry(pageRuns, page);
-        const gutter = gutters.get(page.pageIndex % 2);
-        const layout =
-            (geom.columnLefts.length === 1 && gutter !== undefined
-                ? regionLayout(pageRuns, page, gutter, geom.marginLeft)
-                : null) ?? pageLayout(pageRuns, geom.columnLefts);
+        // The first of the document's layouts (most columns first) any region splits by.
+        const regional =
+            geom.columnLefts.length === 1
+                ? (layouts.get(page.pageIndex % 2) ?? []).reduce<ColumnLayout | null>(
+                      (found, candidate) => found ?? regionLayout(pageRuns, page, candidate, geom.marginLeft),
+                      null,
+                  )
+                : null;
+        const layout = regional ?? pageLayout(pageRuns, geom.columnLefts);
         const columns = layout.lefts.length;
         pageColumnCounts.push(columns);
         pages.push({

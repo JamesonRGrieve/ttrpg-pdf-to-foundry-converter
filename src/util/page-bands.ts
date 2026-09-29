@@ -84,3 +84,15 @@ export function marginBandsOf(ir: IR): MarginBands {
 export function inMarginBand(y: number, pageHeight: number, bands: MarginBands): boolean {
     return y < pageHeight * bands.bottom || y > pageHeight * bands.top;
 }
+
+/**
+ * Share of the page width, left and right, that is side margin: text set
+ * wholly inside it (a thumb-index tab, a marginal note) lies outside the
+ * text block.
+ */
+export const SIDE_MARGIN = 0.07;
+
+/** Whether text spanning `left`..`right` lies wholly in a side margin of a page `pageWidth` wide. */
+export function inSideMargin(left: number, right: number, pageWidth: number): boolean {
+    return left >= pageWidth * (1 - SIDE_MARGIN) || right <= pageWidth * SIDE_MARGIN;
+}

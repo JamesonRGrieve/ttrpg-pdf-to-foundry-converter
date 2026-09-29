@@ -6,7 +6,14 @@ import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml } from "../util/text.ts";
 import { inferBookSlug } from "./book.ts";
 import { classifyTable } from "./classify.ts";
-import { headerRole, isAttributeScale, mergedHeaderRoles, normalizeHeader, type Role } from "./columns.ts";
+import {
+    headerRole,
+    isAdvanceList,
+    isAttributeScale,
+    mergedHeaderRoles,
+    normalizeHeader,
+    type Role,
+} from "./columns.ts";
 import { detectEntries, type Entry } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
 import { detectTables } from "./detect-tables.ts";
@@ -345,7 +352,9 @@ function extractTables(
             continue;
         }
         const roles = columnRoles(table);
-        if (isAttributeScale(roles[0])) {
+        // A table with an Advance column anywhere (a banner word can take the
+        // first header slot) lists purchases, not a catalogue.
+        if (isAttributeScale(roles[0]) || isAdvanceList(roles.flatMap((r) => r ?? []))) {
             unclassified += 1;
             continue;
         }
@@ -501,15 +510,84 @@ function addVehicle(out: EntityCollector, entry: Entry): boolean {
 /** Blank lines between paragraphs of an entry body. */
 const PARAGRAPH_SPLIT = /\n{2,}/u;
 
+/** Fewest siblings typed by their own fields that establish a run of catalogue entries. */
+const MIN_TYPED_SIBLINGS = 3;
+/** Share of those siblings that must agree on one kind. */
+const SIBLING_AGREEMENT = 2 / 3;
+
+/**
+ * Entries under one section in one heading style are one run of catalogue
+ * entries. When most of them are typed by their own fields, a sibling printed
+ * with nothing to identify it (a talent with no prerequisites) is of that
+ * kind too — unless it is not a catalogue entry at all: it stands before the
+ * first typed entry (the section's preamble), heads entries
+ * of its own (a section among the entries), carries fields none of the typed
+ * siblings use, or is set as a question (a sidebar title).
+ */
+export function siblingKinds(
+    entries: readonly Entry[],
+    typeOf: (entry: Entry) => ItemType | null,
+): Map<Entry, ItemType> {
+    const heads = new Set(
+        entries.flatMap((entry, i) => {
+            const next = entries[i + 1];
+            const depth = entry.sections.length;
+            return next !== undefined &&
+                next.sections[depth] === entry.heading.text &&
+                entry.sections.every((s, j) => next.sections[j] === s)
+                ? [entry]
+                : [];
+        }),
+    );
+    const labelsOf = (entry: Entry): string[] => entry.fields.map(([label]) => label.toLowerCase());
+    const groups = new Map<string, Entry[]>();
+    for (const entry of entries) {
+        const key = `${entry.sections.join("\u0000")}\u0001${entry.heading.style}`;
+        groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }
+    const out = new Map<Entry, ItemType>();
+    for (const members of groups.values()) {
+        const kinds = members.map(typeOf);
+        const typed = kinds.filter((k): k is ItemType => k !== null);
+        const counts = new Map<ItemType, number>();
+        for (const k of typed) {
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        const [kind, count] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+        const agreed =
+            kind !== null && typed.length >= MIN_TYPED_SIBLINGS && count >= SIBLING_AGREEMENT * typed.length;
+        const siblingLabels = new Set(members.filter((_, i) => kinds[i] === kind).flatMap(labelsOf));
+        const firstTyped = kinds.findIndex((k) => k === kind);
+        const alike = (entry: Entry, i: number): boolean =>
+            i > firstTyped &&
+            !heads.has(entry) &&
+            !/\?\s*$/u.test(entry.heading.text) &&
+            (entry.fields.length === 0 || labelsOf(entry).some((label) => siblingLabels.has(label)));
+        members.forEach((entry, i) => {
+            const own = kinds[i];
+            if (own !== null && own !== undefined) {
+                out.set(entry, own);
+            } else if (agreed && alike(entry, i)) {
+                out.set(entry, kind);
+            }
+        });
+    }
+    return out;
+}
+
 function extractEntries(
     entries: readonly Entry[],
     out: EntityCollector,
     descriptions: Map<string, string>,
 ): number {
     const vehicles = new Set(entries.filter((entry) => addVehicle(out, entry)));
+    const kinds = siblingKinds(
+        entries.filter((entry) => !vehicles.has(entry)),
+        entryType,
+    );
     const typed = entries.flatMap((entry) => {
-        const type = vehicles.has(entry) ? null : entryType(entry);
-        return type === null ? [] : [{ entry, type }];
+        const type = kinds.get(entry);
+        return type === undefined ? [] : [{ entry, type }];
     });
     const modal = modalHeadingSizes(typed);
     const headingTypes = new Map<string, string>(typed.map(({ entry, type }) => [entry.heading.text, type]));

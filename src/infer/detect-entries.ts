@@ -2,7 +2,7 @@
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { groupByBaseline } from "../util/baselines.ts";
 import { byteCompare, numAsc } from "../util/ordered.ts";
-import { inMarginBand, marginBandsOf } from "../util/page-bands.ts";
+import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { wordBreakBetween } from "../util/text.ts";
 import { isTableCaption } from "./detect-titled-tables.ts";
@@ -41,6 +41,11 @@ const WORD_GAP_FACTOR = 0.2;
 // A display face's word space can run past one font-size (≈1.25×); table
 // header labels sit further apart (≈1.4× and up).
 const HEADING_MAX_GAP_FACTOR = 1.3;
+/**
+ * A gap inside a non-bold heading wider than this many font-sizes parts two
+ * pieces of text; a letter-spaced display heading spaces far tighter.
+ */
+const DISPLAY_MAX_GAP_FACTOR = 2.5;
 /** A heading line within this many heading-sizes below another continues it. */
 const HEADING_WRAP_FACTOR = 1.6;
 /** A gap above a body line wider than this many font-sizes opens a paragraph. */
@@ -234,6 +239,10 @@ export function headingOf(
     if (style === body.style || (size < body.size - LEVEL_STEP && !capsHeading(line, face, headingFaces))) {
         return null;
     }
+    // A line set wholly in italics at body size is a quotation or emphasis, not a heading.
+    if (runs.every((r) => r.italic) && size <= body.size + LEVEL_STEP) {
+        return null;
+    }
     // A field label or a sentence is not a heading, and a line carrying a value
     // outside parentheses — a word starting with a digit or sign ("12", "+10",
     // "2kg", "01-15") — is a table row, not a name.
@@ -245,12 +254,21 @@ export function headingOf(
     const brokenOff = /,$/u.test(line.text.trim()) || FUNCTION_WORDS.has(lastWord);
     // Table header labels (bold) sit spread across columns; a display heading
     // may be letter-spaced wide, so only a bold line is read as spread labels.
-    const spread =
-        first.weight === "bold" &&
-        runs.some((r, i) => {
-            const next = runs[i + 1];
-            return next !== undefined && next.x - (r.x + r.width) > HEADING_MAX_GAP_FACTOR * size;
-        });
+    // A gap holding a space glyph is a word space however wide it measures (a
+    // text layer can under-report a word's width); cells carry no space between.
+    const spaceIn = (from: number, to: number): boolean =>
+        line.runs.some((s) => s.text.trim().length === 0 && s.x >= from && s.x < to);
+    // Any line gapped wider than letter-spacing ever sets is two pieces of
+    // text sharing a baseline (a title block beside another column's heading).
+    const gapFactor = first.weight === "bold" ? HEADING_MAX_GAP_FACTOR : DISPLAY_MAX_GAP_FACTOR;
+    const spread = runs.some((r, i) => {
+        const next = runs[i + 1];
+        return (
+            next !== undefined &&
+            next.x - (r.x + r.width) > gapFactor * size &&
+            !spaceIn(r.x + r.width, next.x)
+        );
+    });
     if (
         /[:.]$/u.test(line.text) ||
         !/\p{L}/u.test(line.text) ||
@@ -461,6 +479,11 @@ export function valueUnfinished(value: string): boolean {
     return /(?:[,;&–-]|\b(?:and|or))\s*$/iu.test(value);
 }
 
+/** A value ending on a full stop (or other sentence end) is complete, whatever the line's length. */
+export function endsSentence(value: string): boolean {
+    return /[.!?]["”’)]*\s*$/u.test(value);
+}
+
 function fieldOf(line: TextLine): [string, string] | null {
     const runs = visibleRuns(line);
     const first = runs[0];
@@ -486,8 +509,13 @@ function fieldOf(line: TextLine): [string, string] | null {
 export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
     const body = bodyStyle(ir);
     const heights = new Map(ir.pages.map((p) => [p.pageIndex, p.height] as const));
+    const widths = new Map(ir.pages.map((p) => [p.pageIndex, p.width] as const));
     const bands = marginBandsOf(ir);
-    const marginal = (l: TextLine): boolean => inMarginBand(l.y, heights.get(l.pageIndex) ?? 0, bands);
+    // Top and bottom bands hold running heads, feet and folios; a side margin
+    // holds thumb-index tabs and marginal notes.
+    const marginal = (l: TextLine): boolean =>
+        inMarginBand(l.y, heights.get(l.pageIndex) ?? 0, bands) ||
+        inSideMargin(l.runs[0]?.x ?? 0, l.right, widths.get(l.pageIndex) ?? 0);
     const inTable = (l: TextLine): boolean => visibleRuns(l).every((r) => tableRuns.has(r));
     const lines = withoutFigures(withoutRunningFurniture(buildLines(ir), marginal)).filter(
         (l) => !inTable(l),
@@ -511,6 +539,9 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
     );
     const wrapped = (l: TextLine): boolean =>
         l.right >= (columnRight.get(`${l.pageIndex}:${l.column}`) ?? 0) - WRAP_SLACK;
+    /** A field value runs on when its line wraps before the value ends a sentence, or it ends mid-list. */
+    const continues = (l: TextLine, value: string): boolean =>
+        (wrapped(l) && !endsSentence(value)) || valueUnfinished(value);
 
     const entries: Entry[] = [];
     const stack: Heading[] = [];
@@ -585,13 +616,13 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         const field = fieldOf(line);
         if (field !== null) {
             entry.fields.push(field);
-            lastFieldWrapped = wrapped(line) || valueUnfinished(field[1]);
+            lastFieldWrapped = continues(line, field[1]);
             continue;
         }
         const last = entry.fields[entry.fields.length - 1];
         if (lastFieldWrapped && last !== undefined) {
             last[1] = `${last[1]} ${line.text}`.trim();
-            lastFieldWrapped = wrapped(line) || valueUnfinished(last[1]);
+            lastFieldWrapped = continues(line, last[1]);
             continue;
         }
         lastFieldWrapped = false;

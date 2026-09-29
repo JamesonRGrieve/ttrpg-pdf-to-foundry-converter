@@ -129,6 +129,22 @@ describe("arbitrate", () => {
         expect(texts).toEqual(["Sample"]);
     });
 
+    it("gives a word joined from a larger initial the full extent and the size of its letters", () => {
+        const raw = doc([run("S", 100, 8, { fontSize: 16 }), run("a m p l e", 108, 40, { fontSize: 11 })]);
+        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])] }];
+        const [joined] = arbitrate(raw, ocr).textRuns;
+        expect([joined?.text, joined?.x, joined?.width, joined?.fontSize]).toEqual(["Sample", 100, 48, 11]);
+    });
+
+    it("sets a word of one-letter runs after a larger initial in its letters' size", () => {
+        const letters = ["S", "a", "m", "p", "l", "e"].map((ch, i) =>
+            run(ch, 100 + i * 8, 8, { fontSize: i === 0 ? 16 : 11 }),
+        );
+        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])] }];
+        const [joined] = arbitrate(doc(letters), ocr).textRuns;
+        expect([joined?.text, joined?.x, joined?.width, joined?.fontSize]).toEqual(["Sample", 100, 48, 11]);
+    });
+
     it("inserts a confident OCR word that sits on no text-layer line", () => {
         const raw = doc([run("heading", 100, 40)]);
         const ocr = [{ pageIndex: 0, words: [word("Caption", 95, [100, 400, 150, 410])] }];
