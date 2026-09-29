@@ -5,6 +5,7 @@ import {
     characteristicChanges,
     characteristicModifiers,
     equipmentItem,
+    originCellName,
     originStepNamedBy,
     readOriginPaths,
     readOriginTable,
@@ -56,6 +57,8 @@ describe("origin list parsing", () => {
     it("recognises a caption naming a creation step", () => {
         expect(originStepNamedBy("Random Home World", STEPS)?.key).toBe("homeWorld");
         expect(originStepNamedBy("Omens", STEPS)).toBeNull();
+        // The step must be the caption's head noun, not a modifier of another.
+        expect(originStepNamedBy("Home World Hazards", STEPS)).toBeNull();
     });
 
     it("writes each line's own actor types", () => {
@@ -192,5 +195,18 @@ describe("origin tables", () => {
             ["Silence is a lantern.", {}],
         ]);
         expect(origins.every((o) => o.fromTable === true && o.pageIndex === 7)).toBe(true);
+    });
+
+    it("names an origin by the quotation or the lead before a colon that opens its cell", () => {
+        expect(originCellName("“The reeds remember.” Increase Perception by 5.")).toEqual({
+            name: "“The reeds remember.”",
+            rest: "Increase Perception by 5.",
+        });
+        expect(originCellName("Marsh World: Marsh folk are patient and hard to startle.")).toEqual({
+            name: "Marsh World",
+            rest: "Marsh folk are patient and hard to startle.",
+        });
+        expect(originCellName("Silence is a lantern.")).toEqual({ name: "Silence is a lantern.", rest: "" });
+        expect(originCellName("and so it goes.")).toBeNull();
     });
 });

@@ -14,10 +14,13 @@ import type { OriginStepDef } from "./targets.ts";
  * All vocabulary here is the system's origin-path schema.
  */
 
-/** A step label as a pattern: its words, any spacing between them, an optional plural. */
-function labelPattern(label: string, plural: boolean): RegExp {
+/**
+ * A step label as a pattern: its words, any spacing between them, an optional
+ * plural; when `closing`, the label must end the text (its head noun).
+ */
+function labelPattern(label: string, plural: boolean, closing: boolean): RegExp {
     const words = label.split(/\s+/u).map((w) => w.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"));
-    return new RegExp(`\\b${words.join("\\s*")}${plural ? "s?" : ""}\\b`, "iu");
+    return new RegExp(`\\b${words.join("\\s*")}${plural ? "s?" : ""}${closing ? "\\W*$" : "\\b"}`, "iu");
 }
 
 /** The first of the target's steps one of whose labels `text` names. */
@@ -25,8 +28,9 @@ function stepNamedIn(
     text: string,
     steps: readonly OriginStepDef[],
     plural: boolean,
+    closing: boolean,
 ): OriginStepDef | undefined {
-    return steps.find((s) => s.labels.some((label) => labelPattern(label, plural).test(text)));
+    return steps.find((s) => s.labels.some((label) => labelPattern(label, plural, closing).test(text)));
 }
 
 type GrantField =
@@ -94,9 +98,13 @@ export interface OriginPathReading {
     fromTable?: boolean;
 }
 
-/** The target's creation step a table caption names ("Random Home World", "Divinations"). */
+/**
+ * The target's creation step a table caption names ("Random Home World",
+ * "Divinations"): the step's label is the caption's head noun, its last word.
+ * A caption naming something else of that step ("… Powers") lists no origins.
+ */
 export function originStepNamedBy(caption: string, steps: readonly OriginStepDef[]): OriginStepDef | null {
-    return stepNamedIn(caption, steps, true) ?? null;
+    return stepNamedIn(caption, steps, true, true) ?? null;
 }
 
 /** A roll-band cell: "01", "02-05", "100". */
@@ -122,6 +130,31 @@ export function characteristicChanges(effect: string): Record<string, number> {
     return out;
 }
 
+/** Longest name set before a colon in an origin table's cell ("Feral World: …"). */
+const MAX_LEAD_NAME_LENGTH = 40;
+
+/**
+ * An origin table cell's name and the text after it: a quotation that opens
+ * the cell is its name (the quote is what the origin is called), as is a short
+ * capitalised lead before a colon; otherwise the whole cell, when it starts
+ * like a name.
+ */
+export function originCellName(cell: string): { name: string; rest: string } | null {
+    const text = cell.trim();
+    const quoted = /^(?<quote>[“"](?<inner>[^”"]+)[”"])\s*(?<rest>.*)$/su.exec(text)?.groups;
+    if (quoted?.["quote"] !== undefined && /^\p{Lu}/u.test(quoted["inner"] ?? "")) {
+        return { name: quoted["quote"], rest: quoted["rest"] ?? "" };
+    }
+    const led = new RegExp(
+        `^(?<name>\\p{Lu}[^:]{0,${MAX_LEAD_NAME_LENGTH - 1}}):\\s*(?<rest>.+)$`,
+        "su",
+    ).exec(text)?.groups;
+    if (led?.["name"] !== undefined) {
+        return { name: led["name"].trim(), rest: led["rest"] ?? "" };
+    }
+    return /^\p{Lu}/u.test(text) ? { name: text, rest: "" } : null;
+}
+
 /** Origins listed by a table whose caption names their step: one per row. */
 export function readOriginTable(
     step: OriginStepDef,
@@ -131,12 +164,12 @@ export function readOriginTable(
     const out: OriginPathReading[] = [];
     for (const cells of rows) {
         const nameAt = cells.findIndex((c) => c.trim().length > 0 && !ROLL_BAND.test(c.trim()));
-        const name = cells[nameAt]?.trim() ?? "";
-        if (nameAt < 0 || !/^\p{Lu}/u.test(name)) {
+        const named = nameAt < 0 ? null : originCellName(cells[nameAt] ?? "");
+        if (named === null) {
             continue;
         }
-        const effect = cells
-            .slice(nameAt + 1)
+        const name = named.name;
+        const effect = [named.rest, ...cells.slice(nameAt + 1)]
             .map((c) => c.trim())
             .filter((c) => c.length > 0)
             .join(" ");
@@ -506,7 +539,9 @@ export function readOriginPaths(
         }
         const fielded = labels.filter((l) => labelField(l.heading.text) !== undefined);
         const step =
-            fielded.map((l) => stepNamedIn(l.heading.text, steps, false)).find((s) => s !== undefined) ??
+            fielded
+                .map((l) => stepNamedIn(l.heading.text, steps, false, false))
+                .find((s) => s !== undefined) ??
             stepOfSections(owner.sections, steps) ??
             // A rules block with an experience cost is the step bought with experience.
             (fielded.some((l) => labelField(l.heading.text) === "xpCost")

@@ -130,6 +130,54 @@ describe("titled tables", () => {
         ]);
     });
 
+    it("keeps a key centred under its label that starts left of the label", () => {
+        const ir = irOf([
+            run("Table 1-6: Omens", 60, 700, bold),
+            run("ROLL", 70, 680, bold),
+            run("OMEN", 120, 680, bold),
+            run("01", 74, 660),
+            run("The lamp gutters.", 120, 660),
+            run("02-07", 62, 640),
+            run("The wick smokes.", 120, 640),
+            run("08-10", 64, 620),
+            run("The oil catches.", 120, 620),
+            run("11", 74, 600),
+            run("The lamp shatters.", 120, 600),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.rows.map((r) => r.cells.find((c) => c.colIndex === 0)?.text)).toEqual([
+            "01",
+            "02-07",
+            "08-10",
+            "11",
+        ]);
+    });
+
+    it("completes a header label that wraps onto a second line", () => {
+        const ir = irOf([
+            run("Table 1-7: Lamp Origins", 60, 700, bold),
+            run("ROLL", 64, 686, { ...bold, width: 22 }),
+            run("RESULT", 120, 686, bold),
+            run("(D10)", 60, 673, { ...bold, width: 28 }),
+            run("1-4", 60, 658, bold),
+            run("Marsh Lamp:", 120, 658, bold),
+            run("A lamp of the reeds.", 190, 658),
+            run("5-7", 60, 640, bold),
+            run("Hill Lamp:", 120, 640, bold),
+            run("A lamp of the heights.", 190, 640),
+            run("8-10", 60, 622, bold),
+            run("Sea Lamp:", 120, 622, bold),
+            run("A lamp of the tides.", 190, 622),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["ROLL (D10)", "RESULT"]);
+        expect(table?.rows.map((r) => r.cells.find((c) => c.colIndex === 0)?.text)).toEqual([
+            "1-4",
+            "5-7",
+            "8-10",
+        ]);
+    });
+
     it("keeps a full-size marker that is a cell's own value", () => {
         const ir = irOf([
             run("Table 1-2: Launchers", 60, 700, bold),

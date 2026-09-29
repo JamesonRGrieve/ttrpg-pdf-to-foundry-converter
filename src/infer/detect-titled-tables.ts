@@ -616,6 +616,10 @@ export function stackedHeader(lines: readonly RawRow[]): { index: number; row: R
     const edges = cellEdges(lines.slice(index + 1));
     const upper = headerLabels(first);
     const next = lines[index + 1];
+    const wrapped = next === undefined ? null : wrappedLabels(upper, next);
+    if (wrapped !== null) {
+        return { index: index + 1, row: wrapped };
+    }
     if (next === undefined || !isHeaderRow(next, edges)) {
         return { index, row: upper };
     }
@@ -638,6 +642,39 @@ export function stackedHeader(lines: readonly RawRow[]): { index: number; row: R
         }
     }
     return { index: index + 1, row: { ...lower, runs } };
+}
+
+/** Most header sizes a wrapped label's second line sits below its first: ordinary leading. */
+const LABEL_WRAP_FACTOR = 1.5;
+
+/**
+ * A header whose labels wrap onto a second line ("ROLL" over "(D100)"): the
+ * line directly below, at ordinary leading, all bold, each run under a label
+ * and fewer than the header's, completes those labels. A section row is set
+ * further apart. Returns the completed header, or null.
+ */
+function wrappedLabels(header: RawRow, below: RawRow): RawRow | null {
+    const runs = below.runs.filter((r) => r.text.trim().length > 0);
+    const size = Math.max(...header.runs.map((r) => r.size));
+    const labels = header.runs.filter((r) => r.text.trim().length > 0);
+    const over = (r: IRTextRun): IRTextRun | undefined =>
+        labels.find((l) => r.x < l.x + l.width && l.x < r.x + r.width);
+    if (
+        runs.length === 0 ||
+        runs.length >= labels.length ||
+        header.y - below.y > LABEL_WRAP_FACTOR * size ||
+        !runs.every((r) => r.weight === "bold" && over(r) !== undefined)
+    ) {
+        return null;
+    }
+    const completed = header.runs.map((r) => ({ ...r }));
+    for (const r of runs) {
+        const label = completed.find((l) => l.x === over(r)?.x && l.text === over(r)?.text);
+        if (label !== undefined) {
+            label.text = `${label.text} ${r.text}`;
+        }
+    }
+    return { ...header, runs: completed };
 }
 
 function findHeader(lines: readonly RawRow[]): RawRow | null {
@@ -700,8 +737,10 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
     for (let start = 0; start < headers.length; start += period) {
         const bounds = colBoundaries.slice(start, start + period);
         const next = colBoundaries[start + period];
+        // The first copy has no neighbour to its left: a key centred under its
+        // label may start left of the label.
         const inCopy = (r: IRTextRun): boolean =>
-            r.x >= (bounds[0] ?? 0) - COLUMN_EDGE_TOLERANCE &&
+            (start === 0 || r.x >= (bounds[0] ?? 0) - COLUMN_EDGE_TOLERANCE) &&
             (next === undefined || r.x < next - COLUMN_EDGE_TOLERANCE);
         const copy = body
             .map((line) => ({ ...line, runs: splitAtColumns(line.runs, colBoundaries).filter(inCopy) }))

@@ -37,6 +37,7 @@ import {
     fitModifications,
     infer,
     introducingEntry,
+    keyedByBands,
     namingEntry,
     isBlank,
     kindEntry,
@@ -739,6 +740,30 @@ describe("margin bands", () => {
         expect(inSideMargin(10, 30, 600)).toBe(true);
         expect(inSideMargin(376, 525, 600)).toBe(false);
         expect(inSideMargin(540, 590, 600)).toBe(false);
+    });
+});
+
+describe("result tables", () => {
+    const tableOf = (names: string[]): DetectedTable => ({
+        pageIndex: 0,
+        headers: ["Result", "Cost"],
+        rows: names.map((name) => ({
+            cells: [
+                { colIndex: 0, text: name, isHeader: false },
+                { colIndex: 1, text: "10", isHeader: false },
+            ],
+            isHeaderRow: false,
+            isSectionHeader: false,
+            sectionName: null,
+        })),
+        tableTitle: "Lamp Bindings",
+    });
+
+    it("reads a table keyed by number bands as results, not items", () => {
+        expect(
+            keyedByBands(tableOf(["1-2 Degrees of Failure", "1-2 Degrees of Success", "5+ Degrees"]), 0),
+        ).toBe(true);
+        expect(keyedByBands(tableOf(["Glow Lamp", "Hush Lamp", "10-Wick Lamp"]), 0)).toBe(false);
     });
 });
 

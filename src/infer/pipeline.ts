@@ -363,6 +363,10 @@ function extractTables(
             continue;
         }
         const nameCol = nameColumn(table, roles);
+        if (keyedByBands(table, nameCol)) {
+            unclassified += 1;
+            continue;
+        }
         // A caption naming a tier ("… Tier 2 …") gives every row that tier.
         const captionTier = /\btier\s*(\d)\b/iu.exec(table.tableTitle ?? "")?.[1];
         for (const row of table.rows) {
@@ -665,6 +669,24 @@ function extractOriginPaths(entries: readonly Entry[], out: EntityCollector): vo
 }
 
 /** A table row's cell texts in column order ("" for an empty cell). */
+/** Share of a table's rows whose name cell opens with a number band for it to list results. */
+const BANDED_SHARE = 2 / 3;
+/** A cell opening with a number or band ("01–30", "1-2 Degrees …", "5+ …"): a result key. */
+const BAND_LEAD = /^\d+(?:\s*[-–]\s*\d+)?\+?(?!\d)(?:\s|$)/u;
+
+/**
+ * A table whose name column mostly opens with number bands keys results by a
+ * roll or a margin ("1-2 Degrees of Success"); its rows are outcomes, not
+ * catalogue items.
+ */
+export function keyedByBands(table: DetectedTable, nameCol: number): boolean {
+    const names = table.rows
+        .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
+        .map((r) => r.cells.find((c) => c.colIndex === nameCol)?.text.trim() ?? "")
+        .filter((t) => t.length > 0);
+    return names.length > 0 && names.filter((t) => BAND_LEAD.test(t)).length >= BANDED_SHARE * names.length;
+}
+
 /** Pack segment roll tables are emitted into. */
 const ROLL_TABLE_SEGMENT = "rolltables";
 
