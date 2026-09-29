@@ -14,16 +14,17 @@
             "target": "dh2"
         }
     },
-    "id": "pdf-compendium-0fd6fba8377f",
+    "id": "pdf-compendium-94c823eb4963",
     "packFolders": [
         {
-            "name": "PDF Compendium 0fd6fba8377f",
+            "name": "PDF Compendium 94c823eb4963",
             "packs": [
                 "dh2-wayfarers-field-manual-actors-bestiary",
                 "dh2-wayfarers-field-manual-items-armour",
                 "dh2-wayfarers-field-manual-items-mutations",
                 "dh2-wayfarers-field-manual-items-talents",
-                "dh2-wayfarers-field-manual-items-weapons"
+                "dh2-wayfarers-field-manual-items-weapons",
+                "dh2-wayfarers-field-manual-rolltables"
             ]
         }
     ],
@@ -82,6 +83,17 @@
             "path": "packs/dh2-wayfarers-field-manual-items-weapons",
             "system": "wh40k-rpg",
             "type": "Item"
+        },
+        {
+            "label": "Wayfarers Field Manual Rolltables",
+            "name": "dh2-wayfarers-field-manual-rolltables",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-rolltables",
+            "system": "wh40k-rpg",
+            "type": "RollTable"
         }
     ],
     "relationships": {
