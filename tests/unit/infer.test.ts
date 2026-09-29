@@ -98,6 +98,11 @@ describe("columns", () => {
         expect(headerRole("Rate of Fire")).toBe("rof");
         expect(headerRole("D AM")).toBe("damage");
         expect(headerRole("Locations Covered")).toBe("locations");
+        expect(headerRole("Location(s) Covered")).toBe("locations");
+        expect(headerRole("Armour Type")).toBe("name");
+        expect(headerRole("Talent Name")).toBe("name");
+        expect(headerRole("Names")).toBe("name");
+        expect(headerRole("Type")).toBe("type");
         expect(headerRole("Mystery")).toBeNull();
         expect(normalizeHeader("  Max  Ag ")).toBe("max ag");
     });
@@ -685,6 +690,8 @@ describe("entry typing", () => {
         expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Talents", "A"]))).toBe("talent");
         expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Traits"]))).toBe("trait");
         expect(typeNamedBy("Table 2-1: Mutations")).toBe("mutation");
+        expect(typeNamedBy("Weapons Upgrades")).toBe("weaponModification");
+        expect(typeNamedBy("Armour Upgrades")).toBe("armourModification");
     });
 
     it("builds a talent's tier, aptitudes and prerequisites", () => {

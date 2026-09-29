@@ -40,7 +40,7 @@ export type Role =
 
 /** Normalized header text (or a word within it) → role. Order matters: first match wins. */
 const HEADER_ROLES: readonly [RegExp, Role][] = [
-    [/^(name|weapon|item|armou?r|talent|trait|skill|power)s?$/u, "name"],
+    [/^(names?|(?:weapon|item|armou?r|talent|trait|skill|power)s?(?: (?:name|type))?)$/u, "name"],
     [/^(class|cls)$/u, "class"],
     [/^(range|rng)$/u, "range"],
     [/^(rof|rate of fire)$/u, "rof"],
@@ -53,7 +53,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(avl|avail|availability)$/u, "availability"],
     [/^(cost|price)$/u, "cost"],
     [/^(ap|armou?r points?)$/u, "armourPoints"],
-    [/^(locations?( covered)?|coverage)$/u, "locations"],
+    [/^(locations?( covered)?|location s covered|coverage)$/u, "locations"],
     [/^(max ag|max agility|maxag)$/u, "maxAgility"],
     [/^(aptitudes?|aptitude \d)$/u, "aptitudes"],
     [/^(prerequisites?|requirements?)$/u, "prerequisites"],

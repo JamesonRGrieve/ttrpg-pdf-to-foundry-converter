@@ -27,8 +27,8 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bcybernetics?\b/iu, "cybernetic"],
     [/\bforce fields?\b/iu, "forceField"],
     [/\bammunition\b|\bammo\b/iu, "ammunition"],
-    [/\bweapon (?:modifications?|upgrades?|customi[sz]ations?)\b/iu, "weaponModification"],
-    [/\barmou?r (?:modifications?|upgrades?)\b/iu, "armourModification"],
+    [/\bweapons? (?:modifications?|upgrades?|customi[sz]ations?)\b/iu, "weaponModification"],
+    [/\barmou?rs? (?:modifications?|upgrades?)\b/iu, "armourModification"],
     [/\btraits?\b/iu, "trait"],
 ];
 

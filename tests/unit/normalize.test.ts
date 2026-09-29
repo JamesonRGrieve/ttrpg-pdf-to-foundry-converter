@@ -112,6 +112,23 @@ describe("column regions", () => {
         expect(["col0 3", "col1 3", "col2 3", "spanning row 518"].map(columnOf)).toEqual([0, 1, 2, 3]);
     });
 
+    it("splits three columns whose middle holds a picture, not text", () => {
+        const rows = [530, 518, 506].map((y) => raw(2, LEFT, y, 470, `spanning row ${y}`));
+        const sides = thirds(2, 700, 10).filter((r) => !r.text.startsWith("col1"));
+        const ir = normalize(
+            doc(
+                [...twoColumnPages(), ...thirds(6, 700, 20), ...thirds(8, 700, 20), ...sides, ...rows],
+                [0, 2, 4, 6, 8],
+            ),
+        );
+        const columnOf = (text: string): number | undefined =>
+            ir.runs.find((r) => r.pageIndex === 2 && r.text === text)?.column;
+        expect(["col0 3", "col2 3"].map(columnOf)).toEqual([0, 2]);
+        // Reading order keeps each column whole.
+        const order = ir.runs.filter((r) => r.pageIndex === 2).map((r) => r.text);
+        expect(order.indexOf("col0 9")).toBeLessThan(order.indexOf("col2 0"));
+    });
+
     it("reads no column from a thumb-index tab in the side margin", () => {
         const prose = Array.from({ length: 10 }, (_, i) => raw(2, LEFT, 700 - 12 * i, 500, `wide ${i}`));
         const tab = raw(2, 570, 400, 20, "Tab");

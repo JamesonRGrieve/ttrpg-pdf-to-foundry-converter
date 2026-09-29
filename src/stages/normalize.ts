@@ -61,6 +61,8 @@ const MIN_LAYOUT_PAGES = 2;
 const LAYOUT_TOLERANCE = 4;
 /** Narrowest share of the page width a layout's text column spans. */
 const MIN_COLUMN_SHARE = 0.15;
+/** Fewest prose columns a region needs to be read as columns at all. */
+const MIN_PROSE_COLUMNS = 2;
 
 function canonFontName(raw: string): string {
     return stripSubsetPrefix(raw).toLowerCase();
@@ -289,14 +291,15 @@ function regionLayout(
     // Each column's measure runs from its edge to where the layout ends it,
     // short of the gutter channel beside it (the last to the text block's edge).
     const measures = [bodyLeft, ...gutters].map((left, i) => (rights[i] ?? bodyRight) - left);
+    // A column empty of text in a piece holds a picture; every other column
+    // must be prose, and at least two must be.
     const allColumns = (piece: typeof lines): boolean => {
         const pieceRuns = piece.flatMap((l) => l.runs);
-        return measures.every((measure, i) =>
-            proseColumn(
-                pieceRuns.filter((r) => columnIn(r) === i),
-                measure,
-            ),
-        );
+        const columns = measures.map((measure, i) => {
+            const inColumn = pieceRuns.filter((r) => columnIn(r) === i);
+            return inColumn.length === 0 ? null : proseColumn(inColumn, measure);
+        });
+        return !columns.includes(false) && columns.filter((c) => c === true).length >= MIN_PROSE_COLUMNS;
     };
     // An open segment splits from its first to its last all-column piece;
     // pieces set off beyond them (a table's caption and header above its

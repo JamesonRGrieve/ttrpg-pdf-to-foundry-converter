@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
+import { bodyStyle } from "../util/body-style.ts";
 import { columnAt } from "../util/columns.ts";
-import { inMarginBand, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
+import { inMarginBand, inSideMargin, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
 import { normalizeHeader } from "./columns.ts";
@@ -100,10 +101,17 @@ function inRunningText(ir: IR, run: IRTextRun): boolean {
     );
 }
 
+/**
+ * Captions are set apart from running text: in bold, or in a face other than
+ * the body text's. A table named inside prose is set in the body face.
+ */
 function findTableTitles(ir: IR): TitleHit[] {
+    const [bodyFont, , bodyWeight] = bodyStyle(ir).style.split("|");
+    const captionFace = (r: IRTextRun): boolean =>
+        r.weight === "bold" || r.font !== bodyFont || r.weight !== bodyWeight;
     const hits: TitleHit[] = [];
     for (const run of ir.runs) {
-        if (run.weight !== "bold" || !TABLE_TITLE_RE.test(run.text) || inRunningText(ir, run)) {
+        if (!captionFace(run) || !TABLE_TITLE_RE.test(run.text) || inRunningText(ir, run)) {
             continue;
         }
         const text = captionText(ir, run);
@@ -163,8 +171,8 @@ const SUPERSCRIPT_RATIO = 0.8;
 /**
  * Runs in the table's band. Whitespace-only runs (inter-cell padding) carry no
  * layout and would bridge columns; note-marker runs carry no value and, set as
- * superscripts, would bridge lines; page furniture in the margin bands is not
- * part of any table.
+ * superscripts, would bridge lines; page furniture in the margin bands and
+ * thumb-index tabs in the side margins are not part of any table.
  */
 function collectTableRuns(
     ir: IR,
@@ -173,13 +181,14 @@ function collectTableRuns(
     belowY: number,
     aboveY: number,
 ): IRTextRun[] {
-    const height = ir.pages.find((p) => p.pageIndex === pageIndex)?.height ?? 0;
+    const page = ir.pages.find((p) => p.pageIndex === pageIndex);
     const band = ir.runs.filter(
         (r) =>
             r.pageIndex === pageIndex &&
             r.y < belowY &&
             r.y > aboveY &&
-            !inMarginBand(r.y, height, bands) &&
+            !inMarginBand(r.y, page?.height ?? 0, bands) &&
+            !inSideMargin(r.x, r.x + r.width, page?.width ?? 0) &&
             r.text.trim().length > 0,
     );
     // A full-size marker can be a cell's own value ("see the note"); only a

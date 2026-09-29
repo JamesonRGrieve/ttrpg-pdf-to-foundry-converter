@@ -82,6 +82,30 @@ describe("titled tables", () => {
         expect(names).toEqual(["Rushlight", "Tinder Crossbow", "Glim"]);
     });
 
+    it("finds a caption set in a display face, not one in the body face, and leaves side-margin tabs out", () => {
+        const prose = Array.from({ length: 6 }, (_, i) =>
+            run("plain running words of the text", 60, 400 - 12 * i),
+        );
+        const ir = irOf([
+            ...prose,
+            run("Table 1-3: Lanterns", 60, 700, { font: "display" }),
+            run("NAME", 60, 680, bold),
+            run("CLASS", 200, 680, bold),
+            run("DAM", 300, 680, bold),
+            run("Rushlight", 60, 660),
+            run("Basic", 200, 660),
+            run("1d10 E", 300, 660),
+            run("TAB", 570, 660, { width: 20 }),
+            run("Glim", 60, 640),
+            run("Pistol", 200, 640),
+            run("1d5 E", 300, 640),
+            run("Table 1-4: Wicks", 60, 300),
+        ]);
+        const tables = detectTitledTables(ir);
+        expect(tables.map((t) => t.tableTitle)).toEqual(["Lanterns"]);
+        expect(tables[0]?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("1d10 E");
+    });
+
     it("keeps a full-size marker that is a cell's own value", () => {
         const ir = irOf([
             run("Table 1-2: Launchers", 60, 700, bold),

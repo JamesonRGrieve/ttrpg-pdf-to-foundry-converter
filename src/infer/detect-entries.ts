@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { groupByBaseline } from "../util/baselines.ts";
-import { byteCompare, numAsc } from "../util/ordered.ts";
+import { bodyStyle } from "../util/body-style.ts";
+import { numAsc } from "../util/ordered.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { wordBreakBetween } from "../util/text.ts";
@@ -78,8 +79,6 @@ export interface Entry {
     body: string;
 }
 
-const styleOf = (r: IRTextRun): string => `${r.font}|${r.size}|${r.weight}`;
-
 function joinRuns(runs: readonly IRTextRun[]): string {
     let text = "";
     let prevEnd = Number.NEGATIVE_INFINITY;
@@ -126,25 +125,6 @@ export function buildLines(ir: IR): TextLine[] {
     return out.sort(
         (a, b) => numAsc(a.pageIndex, b.pageIndex) || numAsc(a.column, b.column) || numAsc(b.y, a.y),
     );
-}
-
-/** The (font|size|weight) style carrying the most characters of normal-weight text. */
-export function bodyStyle(ir: IR): { style: string; size: number } {
-    const chars = new Map<string, number>();
-    for (const r of ir.runs) {
-        if (r.weight === "normal" && !r.italic) {
-            chars.set(styleOf(r), (chars.get(styleOf(r)) ?? 0) + r.text.length);
-        }
-    }
-    let best = "";
-    let bestChars = -1;
-    for (const [style, count] of [...chars.entries()].sort((a, b) => byteCompare(a[0], b[0]))) {
-        if (count > bestChars) {
-            best = style;
-            bestChars = count;
-        }
-    }
-    return { style: best, size: Number(best.split("|")[1] ?? "0") };
 }
 
 function visibleRuns(line: TextLine): IRTextRun[] {
