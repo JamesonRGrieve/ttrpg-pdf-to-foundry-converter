@@ -94,6 +94,22 @@ function continuesStructurally(
     return carriesOn && others.every(({ text, col }) => unfinishedAbove(col) || /^\p{Ll}/u.test(text));
 }
 
+/** A cell that visibly stops mid-phrase: on a comma, or inside an unclosed parenthesis. */
+function breaksOff(cell: string): boolean {
+    const text = cell.trim();
+    return /,$/u.test(text) || (text.match(/\(/gu)?.length ?? 0) > (text.match(/\)/gu)?.length ?? 0);
+}
+
+/**
+ * A row still waiting for its next line: it fills fewer cells than the
+ * table's fullest rows, and a cell it fills breaks off mid-phrase ("Low Grade
+ * (Hab Sleeper Capsule,", "Int 30,") — its values are set on the line that
+ * completes it.
+ */
+function awaitsRest(cells: readonly string[], fullest: number): boolean {
+    return filled(cells) < fullest && cells.some((cell) => cell.trim().length > 0 && breaksOff(cell));
+}
+
 /**
  * A line opens a new record when its key cell starts with a capital or digit —
  * unless the row above is visibly unfinished: its key text ends on a connecting
@@ -124,6 +140,7 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
     const twoClusters = narrow > 0 && wide / narrow >= TWO_CLUSTER_RATIO;
     const threshold = (narrow + wide) / 2;
     const typicalFill = mode(rows.map((r) => filled(shape.cells(r))));
+    const fullest = Math.max(...rows.map((r) => filled(shape.cells(r))));
     const out: T[] = [];
     rows.forEach((row, i) => {
         const prev = out[out.length - 1];
@@ -144,7 +161,14 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             (fragment || !opensRecord(line[0] ?? "", above[0] ?? ""));
         // A line set apart by the wider row pitch is not a wrapped piece.
         const setApart = twoClusters && gap >= threshold;
-        const continues = bySpacing || (!setApart && continuesStructurally(line, above, typicalFill));
+        // A line breaking off mid-phrase opens a row its next line completes;
+        // a line completing the row above joins it.
+        const opensAwaited = awaitsRest(line, fullest);
+        const continues =
+            !opensAwaited &&
+            (bySpacing ||
+                (!setApart &&
+                    (continuesStructurally(line, above, typicalFill) || awaitsRest(above, fullest))));
         if (continues) {
             prev.runs.push(...row.runs);
         } else {

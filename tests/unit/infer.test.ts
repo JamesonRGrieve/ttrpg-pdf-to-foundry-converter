@@ -236,6 +236,18 @@ describe("row merging", () => {
         expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 80, 70]);
     });
 
+    it("joins a short line that breaks off mid-phrase to the line completing it", () => {
+        const rows = [
+            textLine(100, ["Low Grade (Reed Mat,", "", ""]),
+            textLine(90, ["Straw Bed, Hay Loft)", "5", "Common"]),
+            textLine(80, ["High Grade (Feather Bed,", "", ""]),
+            textLine(70, ["Silk Canopy)", "40", "Rare"]),
+            textLine(60, ["Poor", "", "", "Int 30,"]),
+            textLine(50, ["(hedge healer)", "50", "Average", "Medicae skill"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 80, 60]);
+    });
+
     it("treats a capitalized key line as a new record unless the row above ends on a connecting word", () => {
         const rows = [
             line(100, 4, "Bastion of"),

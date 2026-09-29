@@ -498,10 +498,41 @@ export function detectTitledTables(ir: IR): TitledTable[] {
         const ownColumn = band.filter((r) => r.column === title.run.column);
         const header = findHeader(groupIntoRows(ownColumn)) ?? findHeader(groupIntoRows(band));
         if (header !== null) {
-            tables.push(...readSubTables(band.filter(inColumns(headerColumns(header, band))), title));
+            const inTable = band.filter(inColumns(headerColumns(header, band)));
+            const own = inTable.filter(withinHeaderSpan(header, inTable));
+            tables.push(...readSubTables(own, title, Math.max(...header.runs.map((r) => r.size))));
         }
     }
     return joinContinuations(tables);
+}
+
+/** Type sizes past its header's last label that a table's own text may start. */
+const HEADER_REACH_FACTOR = 2;
+/** Type sizes of gap within which a run carries on the text before it on its line. */
+const CARRY_ON_FACTOR = 1.5;
+
+/**
+ * A table spans no further across the page than its header: every cell sits
+ * under a label. Text starting well past the last label belongs to the table
+ * only as the run-on of a cell (following the text before it on its line at
+ * word spacing); otherwise it is set beside the table (a neighbouring
+ * column's prose sharing its baselines).
+ */
+function withinHeaderSpan(header: RawRow, band: readonly IRTextRun[]): (r: IRTextRun) => boolean {
+    // Every label on the header's baseline, across all the columns it spans.
+    const labels = band.filter(
+        (r) => r.text.trim().length > 0 && r.weight === "bold" && Math.abs(r.y - header.y) < Y_TOL,
+    );
+    const right = Math.max(...labels.map((r) => r.x + r.width));
+    const size = Math.max(...labels.map((r) => r.size));
+    return (r) => {
+        if (r.x <= right + HEADER_REACH_FACTOR * size) {
+            return true;
+        }
+        const before = band.filter((o) => o !== r && Math.abs(o.y - r.y) < LINE_Y_TOL && o.x < r.x);
+        const end = Math.max(...before.map((o) => o.x + o.width), Number.NEGATIVE_INFINITY);
+        return r.x - end <= CARRY_ON_FACTOR * r.size;
+    };
 }
 
 /** Most lines (a note, a section row) between a table's end and a sub-table's header. */
@@ -510,10 +541,11 @@ const MAX_SUBTABLE_LEAD = 3;
 /**
  * A captioned table may run on as sub-tables, each opened by its own section
  * row and header with its own columns (a note line may end the one before).
- * Each is read in turn while a header row opens within a few lines of the
- * last one's end.
+ * Each is read in turn while a header row, set like the table's own
+ * (`headerSize`, not display headings side by side), opens within a few lines
+ * of the last one's end.
  */
-function readSubTables(tableRuns: IRTextRun[], title: TitleHit): TitledTable[] {
+function readSubTables(tableRuns: IRTextRun[], title: TitleHit, headerSize: number): TitledTable[] {
     const out: TitledTable[] = [];
     let runs = tableRuns;
     for (;;) {
@@ -527,7 +559,12 @@ function readSubTables(tableRuns: IRTextRun[], title: TitleHit): TitledTable[] {
         const lines = groupIntoRows(rest);
         const opens = lines
             .slice(0, MAX_SUBTABLE_LEAD + 1)
-            .some((line, i) => isHeaderRow(line, cellEdges(lines.slice(i + 1))));
+            .some(
+                (line, i) =>
+                    isHeaderRow(line, cellEdges(lines.slice(i + 1))) &&
+                    Math.max(...headerLabels(line).runs.map((r) => r.size)) <=
+                        DISPLAY_SIZE_FACTOR * headerSize,
+            );
         if (!opens) {
             break;
         }
@@ -670,7 +707,7 @@ export function stackedHeader(lines: readonly RawRow[]): { index: number; row: R
     const edges = cellEdges(lines.slice(index + 1));
     const upper = headerLabels(first);
     const next = lines[index + 1];
-    const wrapped = next === undefined ? null : wrappedLabels(upper, next);
+    const wrapped = next === undefined ? null : wrappedLabels(upper, next, lines.slice(index + 2));
     if (wrapped !== null) {
         return { index: index + 1, row: wrapped };
     }
@@ -704,18 +741,29 @@ const LABEL_WRAP_FACTOR = 1.5;
 /**
  * A header whose labels wrap onto a second line ("ROLL" over "(D100)"): the
  * line directly below, at ordinary leading, all bold, each run under a label
- * and fewer than the header's, completes those labels. A section row is set
- * further apart. Returns the completed header, or null.
+ * and fewer than the header's, completes those labels. A section row may sit
+ * as close, but its like recurs further down the table (`rest`): a line of
+ * bold runs starting where it starts. Returns the completed header, or null.
  */
-function wrappedLabels(header: RawRow, below: RawRow): RawRow | null {
+function wrappedLabels(header: RawRow, below: RawRow, rest: readonly RawRow[]): RawRow | null {
     const runs = below.runs.filter((r) => r.text.trim().length > 0);
     const size = Math.max(...header.runs.map((r) => r.size));
     const labels = header.runs.filter((r) => r.text.trim().length > 0);
     const over = (r: IRTextRun): IRTextRun | undefined =>
         labels.find((l) => r.x < l.x + l.width && l.x < r.x + r.width);
+    const visible = (line: RawRow): IRTextRun[] => line.runs.filter((r) => r.text.trim().length > 0);
+    const recurs = rest.some((line) => {
+        const own = visible(line);
+        return (
+            own.length === runs.length &&
+            own.every((r) => r.weight === "bold") &&
+            Math.abs((own[0]?.x ?? 0) - (runs[0]?.x ?? 0)) <= COLUMN_EDGE_TOLERANCE
+        );
+    });
     if (
         runs.length === 0 ||
         runs.length >= labels.length ||
+        recurs ||
         header.y - below.y > LABEL_WRAP_FACTOR * size ||
         !runs.every((r) => r.weight === "bold" && over(r) !== undefined)
     ) {

@@ -172,13 +172,13 @@ describe("titled tables", () => {
             run("RESULT", 120, 686, bold),
             run("(D10)", 60, 673, { ...bold, width: 28 }),
             run("1-4", 60, 658, bold),
-            run("Marsh Lamp:", 120, 658, bold),
+            run("Marsh Lamp:", 120, 658, { ...bold, width: 66 }),
             run("A lamp of the reeds.", 190, 658),
             run("5-7", 60, 640, bold),
-            run("Hill Lamp:", 120, 640, bold),
+            run("Hill Lamp:", 120, 640, { ...bold, width: 66 }),
             run("A lamp of the heights.", 190, 640),
             run("8-10", 60, 622, bold),
-            run("Sea Lamp:", 120, 622, bold),
+            run("Sea Lamp:", 120, 622, { ...bold, width: 66 }),
             run("A lamp of the tides.", 190, 622),
         ]);
         const [table] = detectTitledTables(ir);
@@ -188,6 +188,26 @@ describe("titled tables", () => {
             "5-7",
             "8-10",
         ]);
+    });
+
+    it("keeps a section row under the header a section row, however close, when its like recurs", () => {
+        const ir = irOf([
+            run("Table 1-10: Lodgings", 60, 706, bold),
+            run("TYPE", 60, 686, { ...bold, width: 22 }),
+            run("COST", 200, 686, bold),
+            run("Inns", 60, 672, bold),
+            run("Low Grade", 60, 660),
+            run("5", 200, 660),
+            run("High Grade", 60, 650),
+            run("40", 200, 650),
+            run("Barges", 60, 636, bold),
+            run("Low Grade", 60, 624),
+            run("3", 200, 624),
+            run("High Grade", 60, 614),
+            run("30", 200, 614),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["TYPE", "COST"]);
     });
 
     it("reads on into a sub-table with its own header after a note line", () => {
@@ -242,6 +262,32 @@ describe("titled tables", () => {
             "Oil",
         ]);
         expect(tables.map((t) => t.tableTitle)).toEqual(["Lamps", "Lamps", "Lamps"]);
+    });
+
+    it("leaves out prose set beside the table on the same baselines", () => {
+        const ir = irOf([
+            run("Table 1-9: Lamp Kit", 60, 706, bold),
+            run("NAME", 60, 686, bold),
+            run("WT", 150, 686, bold),
+            run("COST", 200, 686, bold),
+            run("Wick", 60, 672),
+            run("-", 150, 672),
+            run("5", 200, 672),
+            run("A wick is trimmed at dawn.", 330, 672),
+            run("Oil Flask", 60, 658),
+            run("1kg", 150, 658),
+            run("20", 200, 658),
+            run("Oil keeps the lamp alight.", 330, 658),
+            run("Shade", 60, 644),
+            run("0.5kg", 150, 644),
+            run("15", 200, 644),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.rows.map((r) => r.cells.map((c) => c.text))).toEqual([
+            ["Wick", "-", "5"],
+            ["Oil Flask", "1kg", "20"],
+            ["Shade", "0.5kg", "15"],
+        ]);
     });
 
     it("keeps a full-size marker that is a cell's own value", () => {
