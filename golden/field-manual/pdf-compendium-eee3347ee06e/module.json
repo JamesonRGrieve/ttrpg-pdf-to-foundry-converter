@@ -1,0 +1,97 @@
+{
+    "compatibility": {
+        "minimum": "13",
+        "verified": "14"
+    },
+    "description": "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the wh40k-rpg system.",
+    "flags": {
+        "foundry-pdf-parser": {
+            "engineVersion": "0.2.0",
+            "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
+            "irVersion": 10,
+            "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300",
+            "renderer": "mupdf@1.28.1/300dpi/gray",
+            "target": "dh2"
+        }
+    },
+    "id": "pdf-compendium-eee3347ee06e",
+    "packFolders": [
+        {
+            "name": "PDF Compendium eee3347ee06e",
+            "packs": [
+                "dh2-wayfarers-field-manual-actors-bestiary",
+                "dh2-wayfarers-field-manual-items-armour",
+                "dh2-wayfarers-field-manual-items-mutations",
+                "dh2-wayfarers-field-manual-items-talents",
+                "dh2-wayfarers-field-manual-items-weapons"
+            ]
+        }
+    ],
+    "packs": [
+        {
+            "label": "Wayfarers Field Manual Actors Bestiary",
+            "name": "dh2-wayfarers-field-manual-actors-bestiary",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-actors-bestiary",
+            "system": "wh40k-rpg",
+            "type": "Actor"
+        },
+        {
+            "label": "Wayfarers Field Manual Items Armour",
+            "name": "dh2-wayfarers-field-manual-items-armour",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-items-armour",
+            "system": "wh40k-rpg",
+            "type": "Item"
+        },
+        {
+            "label": "Wayfarers Field Manual Items Mutations",
+            "name": "dh2-wayfarers-field-manual-items-mutations",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-items-mutations",
+            "system": "wh40k-rpg",
+            "type": "Item"
+        },
+        {
+            "label": "Wayfarers Field Manual Items Talents",
+            "name": "dh2-wayfarers-field-manual-items-talents",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-items-talents",
+            "system": "wh40k-rpg",
+            "type": "Item"
+        },
+        {
+            "label": "Wayfarers Field Manual Items Weapons",
+            "name": "dh2-wayfarers-field-manual-items-weapons",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-items-weapons",
+            "system": "wh40k-rpg",
+            "type": "Item"
+        }
+    ],
+    "relationships": {
+        "systems": [
+            {
+                "id": "wh40k-rpg",
+                "type": "system"
+            }
+        ]
+    },
+    "title": "PDF Compendium: wayfarers-field-manual",
+    "version": "0.2.0"
+}

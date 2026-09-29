@@ -3,7 +3,7 @@
 import { zipSync } from "fflate";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
-import { createLogger, MemoryOcrPageStore, RENDER_DPI, runEngine, targetFor } from "../src/index.ts";
+import { createLogger, MemoryOcrPageStore, RENDER_DPI, runModule, targetFor } from "../src/index.ts";
 import type { PackSummary, RunRequest, WorkerMessage } from "./protocol.ts";
 import { BrowserTesseractEngine } from "./tesseract-browser.ts";
 
@@ -24,7 +24,6 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
  * format's 1980–2099 range.
  */
 const ZIP_MTIME = new Date(1980, 0, 2, 12, 0, 0);
-const ASSET_REF_PREFIX = "systems/wh40k-rpg/packs/images/extracted";
 /** Leave a core for the page and the renderer. */
 const ocrWorkers = Math.max(1, Math.floor((navigator.hardwareConcurrency || 2) / 2));
 
@@ -42,44 +41,46 @@ async function run(request: RunRequest): Promise<void> {
     const vendorBase = new URL(`${import.meta.env.BASE_URL}vendor/tesseract/`, self.location.origin).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
     try {
-        const result = await runEngine(new Uint8Array(request.pdf), {
-            target,
-            ocr,
-            ocrStore: new MemoryOcrPageStore(),
-            maxInFlight: ocrWorkers * 2,
-            assetRefPrefix: ASSET_REF_PREFIX,
-            log,
-            onOcrPage: (done, total) => post({ type: "progress", done, total }),
-        });
-        if (result.encrypted) {
-            post({ type: "refused" });
+        const result = await runModule(
+            request.pdfs.map((pdf) => new Uint8Array(pdf)),
+            {
+                target,
+                ocr,
+                ocrStore: new MemoryOcrPageStore(),
+                maxInFlight: ocrWorkers * 2,
+                log,
+                onProgress: (progress) => post({ type: "progress", ...progress }),
+            },
+        );
+        if (result.module === null) {
+            post({ type: "refused", refused: result.refused });
             return;
         }
         const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
         const encoder = new TextEncoder();
-        const packs = new Map<string, number>();
-        for (const file of result.files) {
-            entries[`packs/${file.relPath}`] = [encoder.encode(file.contents), { mtime: ZIP_MTIME }];
-            if (file.relPath.includes("/_source/")) {
-                const pack = file.relPath.split("/").slice(0, 2).join("/");
-                packs.set(pack, (packs.get(pack) ?? 0) + 1);
+        const summary: PackSummary[] = [];
+        for (const file of result.module.files) {
+            const bytes = typeof file.contents === "string" ? encoder.encode(file.contents) : file.contents;
+            entries[file.relPath] = [bytes, { mtime: ZIP_MTIME }];
+            const pack = /\/packs\/(?<name>[^/]+)\.db$/u.exec(file.relPath)?.groups?.["name"];
+            if (pack !== undefined && typeof file.contents === "string") {
+                summary.push({
+                    pack,
+                    documents: file.contents.split("\n").filter((l) => l.length > 0).length,
+                });
             }
         }
-        for (const asset of result.assets) {
-            entries[`assets/${asset.relPath}`] = [asset.bytes, { mtime: ZIP_MTIME }];
-        }
         const zip = zipSync(entries, { level: 9 });
-        const summary: PackSummary[] = [...packs.entries()]
-            .map(([pack, documents]) => ({ pack, documents }))
-            .sort((a, b) => (a.pack < b.pack ? -1 : 1));
         post(
             {
                 type: "result",
                 zip: zip.buffer,
+                moduleId: result.module.id,
                 packs: summary,
                 documents: summary.reduce((n, p) => n + p.documents, 0),
-                assets: result.assets.length,
+                assets: result.module.files.filter((f) => f.relPath.includes("/assets/")).length,
                 warnings: result.warnings.length,
+                refused: result.refused,
             },
             [zip.buffer],
         );

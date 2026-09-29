@@ -179,6 +179,20 @@ System-schema field paths (`system.damage.formula`, `system.characteristics.ws`,
 `system.prerequisites.text`) are used in extractors and output mappers. These are
 from our own open-source Foundry system, not from any copyrighted publication.
 
+## Output: A Foundry Module
+
+A run takes one or more PDFs (the browser page: any number, with one progress
+bar across them) and writes **one Foundry VTT module** that exposes their
+packs as compendiums of the wh40k-rpg system: `module.json`, NeDB
+`packs/<pack>.db` files (Foundry builds LevelDB from them on first open) and
+`assets/`. Document types are the target line's own registered types.
+
+Modules must **coexist**: any number can be installed together, and none may
+compete with another or with the system. The module id is a hash of the
+module's own content (never of the input files), pack names are namespaced by
+the module, image paths point into the module, and a module touches no global
+state — no scripts, no settings, no overrides.
+
 ## Target Schema Selection
 
 The user picks the **target schema** the output is written in: one of the

@@ -58,6 +58,16 @@ describe("origin list parsing", () => {
         expect(originStepNamedBy("Omens", STEPS)).toBeNull();
     });
 
+    it("writes each line's own actor types", () => {
+        expect(TARGETS.rt.actorTypes).toEqual({
+            npc: "rt-npc",
+            terracraft: "rt-terracraft",
+            aircraft: "rt-aircraft",
+        });
+        expect(TARGETS.dh1.actorTypes.aircraft).toBe("aircraft");
+        expect(DEFAULT_TARGET.actorTypes.npc).toBe("dh2-npc");
+    });
+
     it("recognises only the chosen target's creation steps", () => {
         const voidSteps = TARGETS.rt.originSteps;
         expect(originStepNamedBy("Random Lure of the Void", voidSteps)?.key).toBe("lureOfTheVoid");

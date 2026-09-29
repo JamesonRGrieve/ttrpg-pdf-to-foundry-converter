@@ -19,9 +19,29 @@ export interface OriginStepDef extends OriginStep {
     boughtWithXp?: boolean;
 }
 
+/** The system's Actor type per kind of actor the engine writes, in one line. */
+export interface ActorTypes {
+    npc: string;
+    terracraft: string;
+    aircraft: string;
+}
+
 export interface TargetSchema {
     line: Line;
+    actorTypes: ActorTypes;
     originSteps: readonly OriginStepDef[];
+}
+
+/** Lines the system registers a line-specific aircraft type for; the rest use the shared one. */
+const LINE_AIRCRAFT: ReadonlySet<Line> = new Set(["dh2", "dw", "ow", "rt"]);
+
+/** A line's own actor types, as the system registers them (`<line>-npc`, …). */
+function actorTypes(line: Line): ActorTypes {
+    return {
+        npc: `${line}-npc`,
+        terracraft: `${line}-terracraft`,
+        aircraft: LINE_AIRCRAFT.has(line) ? `${line}-aircraft` : "aircraft",
+    };
 }
 
 const step = (
@@ -38,6 +58,7 @@ const HOME_WORLD = (index: number, segment = "origins-homeworlds"): OriginStepDe
 export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     dh2: {
         line: "dh2",
+        actorTypes: actorTypes("dh2"),
         originSteps: [
             HOME_WORLD(1),
             step("background", 2, ["background"], "origins-backgrounds"),
@@ -48,6 +69,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     dh1: {
         line: "dh1",
+        actorTypes: actorTypes("dh1"),
         originSteps: [
             HOME_WORLD(1),
             step("career", 2, ["career"], "origins-careers"),
@@ -58,6 +80,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     rt: {
         line: "rt",
+        actorTypes: actorTypes("rt"),
         originSteps: [
             HOME_WORLD(1),
             step("birthright", 2, ["birthright"], "origins-birthrights"),
@@ -71,6 +94,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     dw: {
         line: "dw",
+        actorTypes: actorTypes("dw"),
         originSteps: [
             step("chapter", 1, ["chapter"], "origins-chapters"),
             step("speciality", 2, ["speciality", "specialty"], "origins-specialities"),
@@ -78,6 +102,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     ow: {
         line: "ow",
+        actorTypes: actorTypes("ow"),
         originSteps: [
             HOME_WORLD(1),
             step("regimentType", 2, ["regiment type"], "origins-regiment-types"),
@@ -100,6 +125,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     bc: {
         line: "bc",
+        actorTypes: actorTypes("bc"),
         originSteps: [
             step("race", 1, ["race"], "origins-races"),
             step("archetype", 2, ["archetype"], "origins-archetypes"),
@@ -110,6 +136,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     },
     im: {
         line: "im",
+        actorTypes: actorTypes("im"),
         originSteps: [
             HOME_WORLD(1, "origins-worlds"),
             step("background", 2, ["faction", "background"], "origins-factions"),

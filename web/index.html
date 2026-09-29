@@ -11,16 +11,18 @@
         <main>
             <h1>PDF to Compendium</h1>
             <p class="lede">
-                Converts a PDF into Foundry VTT compendium packs. Everything runs in this browser tab: the
-                file is never uploaded anywhere.
+                Converts PDFs into a Foundry VTT module of compendium packs for the wh40k-rpg system.
+                Everything runs in this browser tab: the files are never uploaded anywhere. Unzip the module
+                into Foundry's <code>Data/modules</code> folder; several can be installed side by side.
             </p>
 
             <section aria-labelledby="choose-heading">
-                <h2 id="choose-heading">1. Choose a PDF</h2>
+                <h2 id="choose-heading">1. Choose PDFs</h2>
                 <label id="drop-zone" class="drop-zone" for="pdf-input">
-                    <span>Drop a PDF here, or activate to browse</span>
-                    <input id="pdf-input" type="file" accept="application/pdf,.pdf" />
+                    <span>Drop PDFs here, or activate to browse</span>
+                    <input id="pdf-input" type="file" accept="application/pdf,.pdf" multiple />
                 </label>
+                <ul id="chosen" aria-label="Chosen PDFs"></ul>
                 <label for="target">Output schema (game line)</label>
                 <select id="target"></select>
                 <button id="convert" type="button" disabled>Convert</button>
@@ -29,7 +31,7 @@
             <section aria-labelledby="progress-heading">
                 <h2 id="progress-heading">2. Progress</h2>
                 <p id="status" role="status" aria-live="polite">No file chosen.</p>
-                <progress id="ocr-progress" max="1" value="0" aria-label="OCR progress"></progress>
+                <progress id="progress" max="1" value="0" aria-label="Conversion progress"></progress>
                 <details>
                     <summary>Engine log</summary>
                     <pre id="log" aria-label="Engine log"></pre>
@@ -50,7 +52,7 @@
                     </thead>
                     <tbody></tbody>
                 </table>
-                <a id="download" class="button" hidden download="packs.zip">Download packs (.zip)</a>
+                <a id="download" class="button" hidden download="module.zip">Download module (.zip)</a>
             </section>
         </main>
         <script type="module" src="./main.ts"></script>

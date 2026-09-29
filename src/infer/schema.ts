@@ -202,6 +202,8 @@ export function buildItem(input: ItemInput): JsonObject {
 
 export interface NpcInput {
     name: string;
+    /** The system's Actor type (the target line's own, e.g. `<line>-npc`). */
+    actorType: string;
     line: Line;
     book: string;
     page: string;
@@ -209,11 +211,11 @@ export interface NpcInput {
     system: JsonObject;
 }
 
-/** Build an NPC Actor document body (the bare `npc` type; line carried in `gameSystem`). */
+/** Build an NPC Actor document body (the target line's NPC type; line also carried in `gameSystem`). */
 export function buildNpc(input: NpcInput): JsonObject {
     return {
         name: input.name,
-        type: "npc",
+        type: input.actorType,
         system: {
             ...input.system,
             gameSystem: input.line,
@@ -235,19 +237,17 @@ export const CRAFT_SEGMENT: Readonly<Record<"terracraft" | "aircraft", string>> 
 };
 
 export interface VehicleInput extends NpcInput {
-    /** The craft class: the actor's bare type. */
-    kind: "terracraft" | "aircraft";
     /** Named rules printed beneath the profile, as HTML. */
     specialRules: string;
     /** The profile's weapons text, as HTML. */
     weapons: string;
 }
 
-/** Build a craft Actor document body (the bare `terracraft`/`aircraft` type; line carried in `gameSystem`). */
+/** Build a craft Actor document body (the target line's craft type; line also carried in `gameSystem`). */
 export function buildVehicle(input: VehicleInput): JsonObject {
     return {
         name: input.name,
-        type: input.kind,
+        type: input.actorType,
         system: {
             vehicleClass: "ground",
             ...input.system,

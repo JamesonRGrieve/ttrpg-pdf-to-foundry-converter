@@ -7,7 +7,11 @@
 export { createLogger, type Logger, type LogLevel, type LogSink } from "./logger.ts";
 export {
     runEngine,
+    runModule,
     readCacheKey,
+    type ModuleOptions,
+    type ModuleProgress,
+    type ModuleResult,
     type EngineOptions,
     type EngineResult,
     type RunResult,
@@ -30,7 +34,8 @@ export {
     type TesseractBlocks,
 } from "./ocr/tesseract-config.ts";
 export type { OcrEngine, OcrWord, OcrPage, RenderedPage } from "./ocr/types.ts";
-export { emit, serializeDocument } from "./stages/emit.ts";
+export { emit, type EmittedPack } from "./stages/emit.ts";
+export { buildModule, type BuiltModule, type ModuleFile, SYSTEM_ID } from "./stages/module.ts";
 export { ENGINE_VERSION, IR_VERSION } from "./version.ts";
 export { PINS } from "./pins.ts";
 export type { IR, RawDoc, ImageAssets } from "./types/ir.ts";

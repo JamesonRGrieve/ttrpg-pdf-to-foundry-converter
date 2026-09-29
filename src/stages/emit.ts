@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { Entity, EntityGraph, JsonObject, JsonValue } from "../types/entity.ts";
+import type { Entity, EntityGraph, FoundryDocumentType, JsonObject, JsonValue } from "../types/entity.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare, numAsc, sortKeysDeep } from "../util/ordered.ts";
-import { slugify } from "../util/slug.ts";
 
 /**
- * Stage 7 — Emit (spec §9). Produces the output corpus as per-document files in
- * the format the existing pack tooling round-trips cleanly: JSON under
- * `<group>/<pack>/_source/<slug>_<id>.json`, 4-space indent, keys byte-sorted
- * at every level, LF endings, terminal newline.
+ * Stage 7 — Emit (spec §9). Turns the entity graph into Foundry documents,
+ * grouped by pack; packaging (`module.ts`) writes them out.
  *
  * DETERMINISM CONTRACT:
  *  - `_id` = base62(sha256(pack + "\0" + canonical))[0..16] over content only,
@@ -29,15 +26,17 @@ export interface EmitConfig {
     assetRefPrefix: string;
 }
 
-export interface EmittedFile {
-    /** Path relative to the packs root: `<group>/<pack>/_source/<file>.json`. */
-    relPath: string;
-    contents: string;
+/** A pack's emitted documents, in emission order. */
+export interface EmittedPack {
+    group: string;
+    pack: string;
+    documentType: FoundryDocumentType;
+    documents: JsonObject[];
 }
 
 export interface EmitResult {
-    files: EmittedFile[];
-    provenanceByPack: Map<string, { group: string; pack: string; count: number }>;
+    /** Per pack (`<group>/<pack>`), its documents. */
+    packs: Map<string, EmittedPack>;
     warnings: string[];
 }
 
@@ -60,11 +59,6 @@ function setPath(target: JsonObject, path: string, value: JsonValue): void {
 
 function assetPath(prefix: string, assetId: string, ext: string): string {
     return `${prefix}/${assetId}.${ext}`;
-}
-
-/** Stable JSON: byte-sorted keys, 4-space indent, terminal newline, LF, no BOM. */
-export function serializeDocument(doc: unknown): string {
-    return `${JSON.stringify(sortKeysDeep(doc), null, 4)}\n`;
 }
 
 interface BuiltDoc {
@@ -98,9 +92,8 @@ function buildTierAContent(entity: Entity, assetExt: Map<string, string>, cfg: E
 }
 
 export function emit(graph: EntityGraph, assetExt: Map<string, string>, cfg: EmitConfig): EmitResult {
-    const files: EmittedFile[] = [];
     const warnings = [...graph.warnings];
-    const provenanceByPack = new Map<string, { group: string; pack: string; count: number }>();
+    const packs = new Map<string, EmittedPack>();
     const usedIdsByPack = new Map<string, Set<string>>();
 
     // Stable total ordering: by pack, then ordinal (deterministic IR order), then blockId.
@@ -136,17 +129,15 @@ export function emit(graph: EntityGraph, assetExt: Map<string, string>, cfg: Emi
         doc["sort"] = entity.ordinal * SORT_STRIDE;
         doc["_stats"] = { createdTime: 0, modifiedTime: 0 };
 
-        const fileName = `${slugify(built.name)}_${id}.json`;
-        files.push({
-            relPath: `${entity.group}/${entity.pack}/_source/${fileName}`,
-            contents: serializeDocument(doc),
-        });
-
-        const prov = provenanceByPack.get(packKey) ?? { group: entity.group, pack: entity.pack, count: 0 };
-        prov.count += 1;
-        provenanceByPack.set(packKey, prov);
+        const pack = packs.get(packKey) ?? {
+            group: entity.group,
+            pack: entity.pack,
+            documentType: entity.documentType,
+            documents: [],
+        };
+        pack.documents.push(doc);
+        packs.set(packKey, pack);
     }
 
-    files.sort((a, b) => byteCompare(a.relPath, b.relPath));
-    return { files, provenanceByPack, warnings };
+    return { packs, warnings };
 }

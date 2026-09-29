@@ -22,17 +22,10 @@ export const EXIT = {
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];
 
 export interface EngineConfig {
-    /** Output pack corpus root: `<packsDir>/<line>/<pack>/_source/*.json`. */
-    packsDir: string;
-    /** Extracted embedded images. */
-    assetsDir: string;
+    /** Where the module is written: `<modulesDir>/<module id>/…` (a Foundry `Data/modules` directory works). */
+    modulesDir: string;
     /** Regenerable intermediates (IR, OCR). */
     cacheDir: string;
-    /**
-     * Deployment path prefix written into document image references. Does NOT
-     * feed the `_id` hash (image refs are content-addressed there).
-     */
-    assetRefPrefix: string;
     /** OCR recognizer threads. */
     ocrWorkers: number;
     logLevel: LogLevel;
@@ -44,10 +37,8 @@ const DEFAULT_ROOT = join(tmpdir(), "foundry-pdf-parser");
 
 export function makeConfig(overrides: ConfigOverrides = {}): EngineConfig {
     return {
-        packsDir: resolve(overrides.packsDir ?? join(DEFAULT_ROOT, "packs")),
-        assetsDir: resolve(overrides.assetsDir ?? join(DEFAULT_ROOT, "assets")),
+        modulesDir: resolve(overrides.modulesDir ?? join(DEFAULT_ROOT, "modules")),
         cacheDir: resolve(overrides.cacheDir ?? join(DEFAULT_ROOT, "cache")),
-        assetRefPrefix: overrides.assetRefPrefix ?? "systems/wh40k-rpg/packs/images/extracted",
         ocrWorkers: overrides.ocrWorkers ?? Math.max(1, Math.floor(availableParallelism() / 2)),
         logLevel: overrides.logLevel ?? "info",
     };

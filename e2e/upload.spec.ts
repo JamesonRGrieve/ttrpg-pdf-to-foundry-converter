@@ -41,7 +41,8 @@ function watchOffOrigin(page: Page, origin: string): string[] {
     return offOrigin;
 }
 
-test("converts the fixture in-browser, byte-identical to the CLI golden", async ({ page, baseURL }) => {
+/** Upload the PDFs, convert, and check the downloaded module against a golden case. */
+async function convertsLikeCli(page: Page, baseURL: string | undefined, pdfs: string[], goldenCase: string) {
     if (baseURL === undefined) {
         throw new Error("baseURL is set in playwright.config.ts");
     }
@@ -50,19 +51,21 @@ test("converts the fixture in-browser, byte-identical to the CLI golden", async 
     const target = page.getByLabel("Output schema (game line)");
     await expect(target).toHaveValue("dh2");
     await expect(target.locator("option")).toHaveCount(7);
-    await page
-        .getByLabel(/drop a pdf here/i)
-        .setInputFiles(resolve(repoRoot, "fixtures/rendered/field-manual.pdf"));
+    await page.getByLabel(/drop pdfs here/i).setInputFiles(pdfs.map((pdf) => resolve(repoRoot, pdf)));
+    const chosen = page.getByRole("list", { name: "Chosen PDFs" }).getByRole("listitem");
+    await expect(chosen).toHaveCount(pdfs.length);
     await page.getByRole("button", { name: "Convert" }).click();
 
-    const link = page.getByRole("link", { name: /download packs/i });
+    const link = page.getByRole("link", { name: /download module/i });
     await expect(link).toBeVisible({ timeout: 280_000 });
     await expect(page.getByRole("status")).toContainText("Done:");
+    const progress = page.getByRole("progressbar", { name: "Conversion progress" });
+    await expect(progress).toHaveAttribute("value", String(pdfs.length));
 
     const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
     const zip = unzipSync(new Uint8Array(readFileSync(await download.path())));
     const produced = new Map(Object.entries(zip));
-    const golden = goldenTree("field-manual");
+    const golden = goldenTree(goldenCase);
 
     expect([...produced.keys()].sort()).toEqual([...golden.keys()].sort());
     for (const [path, bytes] of golden) {
@@ -73,14 +76,27 @@ test("converts the fixture in-browser, byte-identical to the CLI golden", async 
         ).toBe(true);
     }
     expect(offOrigin, "requests left the page's origin").toEqual([]);
+}
+
+test("converts a PDF in-browser into a module identical to the CLI golden", async ({ page, baseURL }) => {
+    await convertsLikeCli(page, baseURL, ["fixtures/rendered/field-manual.pdf"], "field-manual");
+});
+
+test("converts several PDFs in one run into one module", async ({ page, baseURL }) => {
+    await convertsLikeCli(
+        page,
+        baseURL,
+        ["fixtures/rendered/images.pdf", "fixtures/rendered/field-manual.pdf"],
+        "combined",
+    );
 });
 
 test("refuses an encrypted PDF", async ({ page }) => {
     await page.goto("/");
     await page
-        .getByLabel(/drop a pdf here/i)
+        .getByLabel(/drop pdfs here/i)
         .setInputFiles(resolve(repoRoot, "fixtures/rendered/encrypted.pdf"));
     await page.getByRole("button", { name: "Convert" }).click();
     await expect(page.getByRole("status")).toContainText("Refused", { timeout: 60_000 });
-    await expect(page.getByRole("link", { name: /download packs/i })).toBeHidden();
+    await expect(page.getByRole("link", { name: /download module/i })).toBeHidden();
 });

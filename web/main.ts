@@ -3,9 +3,10 @@ import { DEFAULT_LINE, LINES } from "../src/infer/schema.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
 
 /**
- * The upload page: hand a PDF to the engine worker, show progress and the
- * engine log, and offer the resulting packs as a zip. All work happens in this
- * tab — the file is read locally and never sent anywhere.
+ * The upload page: hand one or more PDFs to the engine worker, show overall
+ * progress and the engine log, and offer the resulting Foundry module as a
+ * zip. All work happens in this tab — the files are read locally and never
+ * sent anywhere.
  */
 
 function element<T extends HTMLElement>(id: string, type: new () => T): T {
@@ -18,9 +19,10 @@ function element<T extends HTMLElement>(id: string, type: new () => T): T {
 
 const input = element("pdf-input", HTMLInputElement);
 const dropZone = element("drop-zone", HTMLLabelElement);
+const chosenList = element("chosen", HTMLUListElement);
 const convert = element("convert", HTMLButtonElement);
 const status = element("status", HTMLParagraphElement);
-const progress = element("ocr-progress", HTMLProgressElement);
+const progress = element("progress", HTMLProgressElement);
 const log = element("log", HTMLPreElement);
 const packs = element("packs", HTMLTableElement);
 const download = element("download", HTMLAnchorElement);
@@ -34,14 +36,26 @@ for (const line of LINES) {
     target.append(option);
 }
 
-let chosen: File | null = null;
+let chosen: File[] = [];
 let worker: Worker | null = null;
 let zipUrl: string | null = null;
 
-function choose(file: File | undefined): void {
-    chosen = file ?? null;
-    convert.disabled = chosen === null;
-    status.textContent = chosen === null ? "No file chosen." : `Ready: ${chosen.name}`;
+const isPdf = (file: File): boolean => file.type === "application/pdf" || /\.pdf$/iu.test(file.name);
+
+function choose(files: readonly File[]): void {
+    chosen = files.filter(isPdf);
+    chosenList.replaceChildren(
+        ...chosen.map((file) => {
+            const item = document.createElement("li");
+            item.textContent = file.name;
+            return item;
+        }),
+    );
+    convert.disabled = chosen.length === 0;
+    status.textContent =
+        chosen.length === 0
+            ? "No file chosen."
+            : `Ready: ${chosen.length} PDF${chosen.length === 1 ? "" : "s"}.`;
 }
 
 function resetResult(): void {
@@ -53,6 +67,7 @@ function resetResult(): void {
         zipUrl = null;
     }
     log.textContent = "";
+    progress.max = 1;
     progress.value = 0;
 }
 
@@ -60,7 +75,10 @@ function appendLog(line: string): void {
     log.append(document.createTextNode(`${line}\n`));
 }
 
-function showResult(message: Extract<WorkerMessage, { type: "result" }>, name: string): void {
+const refusedNames = (files: readonly File[], refused: readonly number[]): string =>
+    refused.map((i) => files[i]?.name ?? `#${i + 1}`).join(", ");
+
+function showResult(message: Extract<WorkerMessage, { type: "result" }>, files: readonly File[]): void {
     const body = packs.tBodies[0];
     if (body !== undefined) {
         for (const pack of message.packs) {
@@ -76,31 +94,35 @@ function showResult(message: Extract<WorkerMessage, { type: "result" }>, name: s
     packs.hidden = message.packs.length === 0;
     zipUrl = URL.createObjectURL(new Blob([message.zip], { type: "application/zip" }));
     download.href = zipUrl;
-    download.download = `${name.replace(/\.pdf$/iu, "")}-packs.zip`;
+    download.download = `${message.moduleId}.zip`;
     download.hidden = false;
-    status.textContent = `Done: ${message.documents} documents in ${message.packs.length} packs, ${message.assets} images, ${message.warnings} warnings.`;
+    progress.value = progress.max;
+    const refused =
+        message.refused.length === 0 ? "" : ` Refused (encrypted): ${refusedNames(files, message.refused)}.`;
+    status.textContent = `Done: module ${message.moduleId} — ${message.documents} documents in ${message.packs.length} packs, ${message.assets} images, ${message.warnings} warnings.${refused}`;
     download.focus();
 }
 
 function finish(): void {
     worker?.terminate();
     worker = null;
-    convert.disabled = chosen === null;
+    convert.disabled = chosen.length === 0;
     input.disabled = false;
     target.disabled = false;
 }
 
 async function start(): Promise<void> {
-    if (chosen === null) {
+    if (chosen.length === 0) {
         return;
     }
-    const file = chosen;
+    const files = [...chosen];
     resetResult();
     convert.disabled = true;
     input.disabled = true;
     target.disabled = true;
-    status.textContent = `Reading ${file.name}…`;
-    const pdf = await file.arrayBuffer();
+    status.textContent = `Reading ${files.length} PDF${files.length === 1 ? "" : "s"}…`;
+    const pdfs = await Promise.all(files.map((file) => file.arrayBuffer()));
+    progress.max = files.length;
 
     const engine = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
     worker = engine;
@@ -109,24 +131,25 @@ async function start(): Promise<void> {
         switch (message.type) {
             case "ready": {
                 status.textContent = "Converting…";
-                const request: RunRequest = { type: "run", pdf, target: target.value };
-                engine.postMessage(request, [pdf]);
+                const request: RunRequest = { type: "run", pdfs, target: target.value };
+                engine.postMessage(request, pdfs);
                 break;
             }
             case "log":
                 appendLog(message.line);
                 break;
             case "progress":
-                progress.max = message.total;
-                progress.value = message.done;
-                status.textContent = `Recognizing pages: ${message.done} of ${message.total}`;
+                // Overall progress: whole documents done plus the current one's share.
+                progress.max = message.documents;
+                progress.value = message.document + (message.pages > 0 ? message.page / message.pages : 0);
+                status.textContent = `${files[message.document]?.name ?? "PDF"} (${message.document + 1} of ${message.documents}): page ${message.page} of ${message.pages}`;
                 break;
             case "result":
-                showResult(message, file.name);
+                showResult(message, files);
                 finish();
                 break;
             case "refused":
-                status.textContent = "Refused: this PDF is encrypted. Supply a decrypted file.";
+                status.textContent = `Refused: every PDF is encrypted (${refusedNames(files, message.refused)}). Supply decrypted files.`;
                 finish();
                 break;
             case "error":
@@ -142,7 +165,7 @@ async function start(): Promise<void> {
     status.textContent = "Starting the engine…";
 }
 
-input.addEventListener("change", () => choose(input.files?.[0]));
+input.addEventListener("change", () => choose([...(input.files ?? [])]));
 convert.addEventListener("click", () => {
     start().catch((err: unknown) => {
         status.textContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -157,8 +180,5 @@ dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging
 dropZone.addEventListener("drop", (event) => {
     event.preventDefault();
     dropZone.classList.remove("dragging");
-    const file = event.dataTransfer?.files[0];
-    if (file !== undefined && (file.type === "application/pdf" || /\.pdf$/iu.test(file.name))) {
-        choose(file);
-    }
+    choose([...(event.dataTransfer?.files ?? [])]);
 });

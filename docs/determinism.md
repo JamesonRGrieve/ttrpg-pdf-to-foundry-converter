@@ -3,11 +3,12 @@
 The engine is a deterministic interpreter. Its core guarantee is:
 
 ```
-f(complete_pdf, engine_version, pinned dependencies) -> output corpus
+f(complete_pdfs, target_schema, engine_version, pinned dependencies) -> module
 ```
 
-Given the same complete PDF, the same engine version and the same pinned
-dependencies, the `_source/*.json` pack corpus and the extracted image assets are
+Given the same complete PDFs (in any order), the same target schema, the same
+engine version and the same pinned dependencies, the output module — its
+`module.json`, its NeDB `packs/*.db` files and its extracted image assets — is
 **byte-identical**: across platforms, between the Node CLI and the in-browser
 page, and whether the run started cold or warm from cache. This document
 describes how that guarantee is built and where it stops.
@@ -175,12 +176,12 @@ fixed entry timestamp, so the archive's bytes depend only on its contents.
 
 Every determinism guarantee, golden test, and CI gate in this repo
 (`gate:determinism`, `gate:timestamps`, `gate:titles`) operates on
-the **`_source/*.json` pack corpus** — the human-readable, per-document JSON the
-engine emits.
+the **module the engine writes**: `module.json`, the NeDB `packs/*.db` files
+(one key-sorted JSON document per line, ordered by `_id`) and the assets.
 
-If that corpus is later compiled downstream into a binary Foundry **LevelDB**
-pack, **that artifact is not byte-reproducible.** LevelDB storage-engine layout
-and compaction are not stable across compiler versions or runs, so two
-compilations of identical `_source` JSON can differ byte-for-byte. This is
-expected and out of scope: the reproducibility contract is the `_source` corpus,
-not the compiled pack. Do not file a determinism bug against the LevelDB output.
+Foundry builds a binary **LevelDB** pack from each `.db` file the first time
+the pack opens. **That artifact is not byte-reproducible**: LevelDB layout and
+compaction are not stable across versions or runs. This is expected and out of
+scope: the reproducibility contract is the module as written, not the database
+Foundry derives from it. Do not file a determinism bug against the LevelDB
+output.

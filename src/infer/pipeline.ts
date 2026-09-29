@@ -476,7 +476,7 @@ function addVehicle(out: EntityCollector, entry: Entry): boolean {
         "Actor",
         CRAFT_SEGMENT[kind],
         buildVehicle({
-            kind,
+            actorType: out.target.actorTypes[kind],
             name,
             line: out.line,
             book: out.book,
@@ -629,6 +629,7 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
             ACTOR_SEGMENT,
             buildNpc({
                 name,
+                actorType: out.target.actorTypes.npc,
                 line: out.line,
                 book: out.book,
                 // Cited where its statblock is printed; its introduction may

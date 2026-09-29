@@ -8,7 +8,8 @@ import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../infer/targets.t
 import { createLogger, type Logger, type LogLevel } from "../logger.ts";
 import { RENDER_DPI } from "../ocr/render.ts";
 import type { OcrEngine } from "../ocr/types.ts";
-import { runEngine, type EngineResult } from "../run.ts";
+import { runModule } from "../run.ts";
+import type { BuiltModule } from "../stages/module.ts";
 import { EXIT, makeConfig, type ConfigOverrides, type EngineConfig, type ExitCode } from "./config.ts";
 import { FileIrCache } from "./ir-cache.ts";
 import { FileOcrPageStore } from "./ocr-store.ts";
@@ -23,15 +24,14 @@ import { NodeTesseractEngine } from "./tesseract-node.ts";
 const USAGE = `foundry-pdf-parser <command> [options]
 
 Commands:
-  infer <pdf>              Convert one PDF into compendium packs.
-  batch <dir> [dir...]     Convert every PDF under the directories (recursive).
+  infer <pdf> [pdf...]     Convert the PDFs into one Foundry module of compendium packs.
+  batch <dir> [dir...]     Convert every PDF under the directories (recursive) into one module.
 
 Options:
   --target <line>          Output schema: ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
-  --out-dir <dir>          Pack output root (default: <tmp>/foundry-pdf-parser/packs).
-  --assets-dir <dir>       Extracted image root (default: <tmp>/foundry-pdf-parser/assets).
+  --out-dir <dir>          Where the module is written, e.g. Foundry's Data/modules
+                           (default: <tmp>/foundry-pdf-parser/modules).
   --cache-dir <dir>        IR/OCR cache (default: <tmp>/foundry-pdf-parser/cache).
-  --asset-ref-prefix <s>   Image path prefix written into documents.
   --ocr-workers <n>        OCR threads (default: half the CPU count).
   --dry-run                Run everything but write nothing.
   --log-level <level>      debug | info | warn | error (default: info).
@@ -57,19 +57,11 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
     };
     const outDir = str("out-dir");
     if (outDir !== undefined) {
-        overrides.packsDir = outDir;
-    }
-    const assetsDir = str("assets-dir");
-    if (assetsDir !== undefined) {
-        overrides.assetsDir = assetsDir;
+        overrides.modulesDir = outDir;
     }
     const cacheDir = str("cache-dir");
     if (cacheDir !== undefined) {
         overrides.cacheDir = cacheDir;
-    }
-    const prefix = str("asset-ref-prefix");
-    if (prefix !== undefined) {
-        overrides.assetRefPrefix = prefix;
     }
     const workers = str("ocr-workers");
     if (workers !== undefined) {
@@ -94,44 +86,44 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
     return { config: makeConfig(overrides), target, dryRun: values["dry-run"] === true };
 }
 
-function write(result: EngineResult, config: EngineConfig, log: Logger): void {
-    for (const file of result.files) {
-        const full = join(config.packsDir, file.relPath);
+function write(module: BuiltModule, config: EngineConfig, log: Logger): void {
+    for (const file of module.files) {
+        const full = join(config.modulesDir, file.relPath);
         mkdirSync(dirname(full), { recursive: true });
-        writeFileSync(full, file.contents, "utf8");
+        writeFileSync(full, file.contents);
     }
-    for (const asset of result.assets) {
-        const full = join(config.assetsDir, asset.relPath);
-        mkdirSync(dirname(full), { recursive: true });
-        writeFileSync(full, asset.bytes);
-    }
-    log.info(
-        `wrote ${result.files.length} files to ${config.packsDir}, ${result.assets.length} assets to ${config.assetsDir}`,
-    );
+    log.info(`wrote module ${module.id} (${module.files.length} files) to ${config.modulesDir}`);
 }
 
-async function convert(pdfPath: string, engine: OcrEngine, opts: CliOptions, log: Logger): Promise<ExitCode> {
-    const result = await runEngine(new Uint8Array(readFileSync(pdfPath)), {
-        target: opts.target,
-        ocr: engine,
-        ocrStore: new FileOcrPageStore(opts.config.cacheDir),
-        irCache: new FileIrCache(opts.config.cacheDir),
-        maxInFlight: opts.config.ocrWorkers * 2,
-        assetRefPrefix: opts.config.assetRefPrefix,
-        log,
-    });
-    if (result.encrypted) {
-        log.error(`${basename(pdfPath)}: refused — encrypted PDF; supply a decrypted file`);
-        return EXIT.ENCRYPTED;
+/** Convert the PDFs into one module; exit 3 when any was refused as encrypted. */
+async function convert(
+    pdfPaths: readonly string[],
+    engine: OcrEngine,
+    opts: CliOptions,
+    log: Logger,
+): Promise<ExitCode> {
+    const result = await runModule(
+        pdfPaths.map((p) => new Uint8Array(readFileSync(p))),
+        {
+            target: opts.target,
+            ocr: engine,
+            ocrStore: new FileOcrPageStore(opts.config.cacheDir),
+            irCache: new FileIrCache(opts.config.cacheDir),
+            maxInFlight: opts.config.ocrWorkers * 2,
+            log,
+        },
+    );
+    for (const index of result.refused) {
+        log.error(`${basename(pdfPaths[index] ?? "")}: refused — encrypted PDF; supply a decrypted file`);
     }
     for (const warning of result.warnings) {
         log.debug(warning);
     }
-    log.info(`${basename(pdfPath)}: ${result.warnings.length} warnings (--log-level debug to list)`);
-    if (!opts.dryRun) {
-        write(result, opts.config, log);
+    log.info(`${result.warnings.length} warnings (--log-level debug to list)`);
+    if (result.module !== null && !opts.dryRun) {
+        write(result.module, opts.config, log);
     }
-    return EXIT.SUCCESS;
+    return result.refused.length > 0 ? EXIT.ENCRYPTED : EXIT.SUCCESS;
 }
 
 function findPdfs(dirs: readonly string[]): string[] {
@@ -164,9 +156,7 @@ async function main(): Promise<ExitCode> {
         options: {
             target: { type: "string" },
             "out-dir": { type: "string" },
-            "assets-dir": { type: "string" },
             "cache-dir": { type: "string" },
-            "asset-ref-prefix": { type: "string" },
             "ocr-workers": { type: "string" },
             "dry-run": { type: "boolean" },
             "log-level": { type: "string" },
@@ -180,9 +170,8 @@ async function main(): Promise<ExitCode> {
     const log = createLogger(opts.config.logLevel);
 
     let pdfs: string[];
-    const [single] = positionals;
-    if (command === "infer" && positionals.length === 1 && single !== undefined) {
-        pdfs = [resolve(single)];
+    if (command === "infer" && positionals.length > 0) {
+        pdfs = positionals.map((p) => resolve(p));
     } else if (command === "batch" && positionals.length > 0) {
         pdfs = findPdfs(positionals);
         log.info(`batch: ${pdfs.length} PDFs`);
@@ -192,18 +181,11 @@ async function main(): Promise<ExitCode> {
     }
 
     const engine = await NodeTesseractEngine.create(opts.config.ocrWorkers, RENDER_DPI);
-    let code: ExitCode = EXIT.SUCCESS;
     try {
-        for (const pdf of pdfs) {
-            const result = await convert(pdf, engine, opts, log);
-            if (result !== EXIT.SUCCESS) {
-                code = result;
-            }
-        }
+        return await convert(pdfs, engine, opts, log);
     } finally {
         await engine.close();
     }
-    return code;
 }
 
 main().then(

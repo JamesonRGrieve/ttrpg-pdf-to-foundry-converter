@@ -69,15 +69,15 @@ describe("encrypted refusal", () => {
 describe("image recovery (Tier A)", () => {
     it("dedups a reused image to a single content-addressed asset", async () => {
         const output = await runCase(
-            { name: "images", pdf: "fixtures/rendered/images.pdf" },
+            { name: "images", pdfs: ["fixtures/rendered/images.pdf"] },
             repoRoot,
             "img-test",
         );
-        const assetKeys = [...output.keys()].filter((k) => k.startsWith("assets/"));
+        const assetKeys = [...output.keys()].filter((k) => k.includes("/assets/"));
         // 5 XObjects (RGB reused across 2 pages, JPEG, RGBA, CMYK) → 4 unique assets.
         expect(assetKeys).toHaveLength(4);
         for (const key of assetKeys) {
-            expect(key).toMatch(/^assets\/[A-Za-z0-9]{16}\.(png|jpg|jpx)$/);
+            expect(key).toMatch(/^pdf-compendium-[0-9a-f]{12}\/assets\/[A-Za-z0-9]{16}\.(png|jpg|jpx)$/);
         }
     });
 });
