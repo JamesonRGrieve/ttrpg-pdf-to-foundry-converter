@@ -497,13 +497,43 @@ export function detectTitledTables(ir: IR): TitledTable[] {
         // own column first.
         const ownColumn = band.filter((r) => r.column === title.run.column);
         const header = findHeader(groupIntoRows(ownColumn)) ?? findHeader(groupIntoRows(band));
-        const table =
-            header === null ? null : readTable(band.filter(inColumns(headerColumns(header, band))), title);
-        if (table !== null) {
-            tables.push(table);
+        if (header !== null) {
+            tables.push(...readSubTables(band.filter(inColumns(headerColumns(header, band))), title));
         }
     }
     return joinContinuations(tables);
+}
+
+/** Most lines (a note, a section row) between a table's end and a sub-table's header. */
+const MAX_SUBTABLE_LEAD = 3;
+
+/**
+ * A captioned table may run on as sub-tables, each opened by its own section
+ * row and header with its own columns (a note line may end the one before).
+ * Each is read in turn while a header row opens within a few lines of the
+ * last one's end.
+ */
+function readSubTables(tableRuns: IRTextRun[], title: TitleHit): TitledTable[] {
+    const out: TitledTable[] = [];
+    let runs = tableRuns;
+    for (;;) {
+        const table = readTable(runs, title);
+        if (table === null) {
+            break;
+        }
+        out.push(table);
+        const end = Math.min(...table.runs.map((r) => r.y));
+        const rest = runs.filter((r) => r.y < end - Y_TOL);
+        const lines = groupIntoRows(rest);
+        const opens = lines
+            .slice(0, MAX_SUBTABLE_LEAD + 1)
+            .some((line, i) => isHeaderRow(line, cellEdges(lines.slice(i + 1))));
+        if (!opens) {
+            break;
+        }
+        runs = rest;
+    }
+    return out;
 }
 
 /** A caption marking a table carried over from an earlier page: "… (Continued)". */
@@ -750,7 +780,16 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
 
     const headerCells = assignToColumns(headerRow.runs, colBoundaries);
     const headers = headerCells.map((c) => c.text.replace(/\s+/g, " ").trim());
-    const body = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges));
+    const read = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges));
+    // A header naming another set of columns opens the next sub-table; a
+    // repeat of this table's own header carries on.
+    const otherHeader = read.findIndex(
+        (line, i) =>
+            isHeaderRow(line, cellEdges(read.slice(i + 1))) &&
+            mergeAdjacentText(headerLabels(line).runs, cellEdges(read.slice(i + 1))).length !==
+                headers.length,
+    );
+    const body = otherHeader < 0 ? read : read.slice(0, otherHeader);
     alignBoundariesToData(colBoundaries, body);
 
     // A table printed as side-by-side copies of one column set (its header

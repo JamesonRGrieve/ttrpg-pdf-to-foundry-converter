@@ -190,6 +190,60 @@ describe("titled tables", () => {
         ]);
     });
 
+    it("reads on into a sub-table with its own header after a note line", () => {
+        const ir = irOf([
+            run("Table 1-8: Lamps", 60, 706, bold),
+            run("NAME", 60, 686, bold),
+            run("CLASS", 200, 686, bold),
+            run("DAM", 300, 686, bold),
+            run("Rushlight", 60, 672),
+            run("Basic", 200, 672),
+            run("1d10 E", 300, 672),
+            run("Glim", 60, 662),
+            run("Pistol", 200, 662),
+            run("1d5 E", 300, 662),
+            run("* Damage depends on the oil the lamp is filled with at the time.", 60, 652),
+            run("Wicks", 60, 634, bold),
+            run("NAME", 60, 624, bold),
+            run("RANGE", 250, 624, bold),
+            run("Tallow", 60, 610),
+            run("5m", 250, 610),
+            run("Beeswax", 60, 600),
+            run("8m", 250, 600),
+            run("Rush", 60, 590),
+            run("3m", 250, 590),
+            run("Oil", 60, 580),
+            run("10m", 250, 580),
+            // A section row and a header of other columns, straight on.
+            run("Shades", 60, 566, bold),
+            run("NAME", 60, 556, bold),
+            run("COLOUR", 150, 556, bold),
+            run("WT", 250, 556, bold),
+            run("Smoked", 60, 546),
+            run("Grey", 150, 546),
+            run("1kg", 250, 546),
+            run("Frosted", 60, 536),
+            run("White", 150, 536),
+            run("1kg", 250, 536),
+            run("Stained", 60, 526),
+            run("Red", 150, 526),
+            run("2kg", 250, 526),
+        ]);
+        const tables = detectTitledTables(ir);
+        expect(tables.map((t) => t.headers)).toEqual([
+            ["NAME", "CLASS", "DAM"],
+            ["NAME", "RANGE"],
+            ["NAME", "COLOUR", "WT"],
+        ]);
+        expect(tables[1]?.rows.filter((r) => !r.isSectionHeader).map((r) => r.cells[0]?.text)).toEqual([
+            "Tallow",
+            "Beeswax",
+            "Rush",
+            "Oil",
+        ]);
+        expect(tables.map((t) => t.tableTitle)).toEqual(["Lamps", "Lamps", "Lamps"]);
+    });
+
     it("keeps a full-size marker that is a cell's own value", () => {
         const ir = irOf([
             run("Table 1-2: Launchers", 60, 700, bold),
