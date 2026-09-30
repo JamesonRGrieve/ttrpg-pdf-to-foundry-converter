@@ -3,6 +3,7 @@ import type { RawDoc, RawTextRun } from "../types/ir.ts";
 import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
 import { stripSubsetPrefix } from "../util/text.ts";
+import { OCR_FONT_NAME, scanPageRuns, scanScale } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 
 /**
@@ -29,6 +30,9 @@ import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
  *  5. OCR words on no text-layer line (text painted as outlines or embedded in
  *     an image) are inserted as new runs when confident.
  *
+ * A page with no text layer at all (a scan) is read from OCR alone, line by
+ * line with recovered sizes and weights (see `scanPageRuns`).
+ *
  * Every rule is structural — geometry, character classes, edit distance,
  * confidence — with no knowledge of what the document says. All iteration
  * orders are geometric, so identical inputs give identical output.
@@ -38,7 +42,6 @@ import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 export const REPLACE_CONFIDENCE = 60;
 /** Minimum OCR confidence to insert a word where the text layer has nothing. */
 export const INSERT_CONFIDENCE = 85;
-export const OCR_FONT_NAME = "ocr-recovered";
 
 /** Glyph box of a run relative to its baseline, as fractions of the font size. */
 const DESCENT_FRACTION = 0.22;
@@ -655,11 +658,26 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
         list.push(run);
         runsByPage.set(run.pageIndex, list);
     }
+    const pages = [...raw.pages].sort((a, b) => numAsc(a.pageIndex, b.pageIndex));
+    // A page with no text layer at all is a scan: OCR is its only reading.
+    const scanned = new Map<number, OcrWord[]>();
+    for (const page of pages) {
+        const words = ocrByPage.get(page.pageIndex)?.words ?? [];
+        if (!runsByPage.has(page.pageIndex) && words.length > 0) {
+            scanned.set(page.pageIndex, words);
+        }
+    }
+    const scale = scanScale([...scanned.values()]);
     const textRuns: RawTextRun[] = [];
-    for (const page of [...raw.pages].sort((a, b) => numAsc(a.pageIndex, b.pageIndex))) {
+    for (const page of pages) {
         const runs = runsByPage.get(page.pageIndex) ?? [];
         const ocrPage = ocrByPage.get(page.pageIndex);
-        textRuns.push(...(ocrPage === undefined ? runs : arbitratePage(runs, ocrPage, page.pageIndex)));
+        const scan = scanned.get(page.pageIndex);
+        if (scan !== undefined) {
+            textRuns.push(...scanPageRuns(scan, page.pageIndex, scale, INSERTED_RENDER_ORDER_BASE));
+        } else {
+            textRuns.push(...(ocrPage === undefined ? runs : arbitratePage(runs, ocrPage, page.pageIndex)));
+        }
     }
     const smallCaps = smallCapsFonts(raw.textRuns);
     return {

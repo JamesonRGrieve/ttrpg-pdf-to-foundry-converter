@@ -14,6 +14,10 @@ const word = (text: string, confidence = 95, box: OcrWord["box"] = [0, 0, 1, 1])
     text,
     confidence,
     box,
+    line: 0,
+    baseline: box[1],
+    lineHeight: box[3] - box[1],
+    stroke: 1,
 });
 
 function run(text: string, x: number, width: number, extra: Partial<RawTextRun> = {}): RawTextRun {
@@ -198,5 +202,27 @@ describe("arbitrate", () => {
     it("leaves pages without OCR unchanged", () => {
         const raw = doc([run("untouched", 100, 40)]);
         expect(arbitrate(raw, []).textRuns).toEqual(raw.textRuns);
+    });
+
+    it("reads a page with no text layer from its OCR lines alone", () => {
+        const raw = doc([]);
+        const line = (text: string, x: number, lineIndex: number, y: number): OcrWord => ({
+            ...word(text, 70, [x, y - 2, x + 30, y + 8]),
+            line: lineIndex,
+            baseline: y,
+            lineHeight: 10,
+            stroke: 1,
+        });
+        const ocr = [
+            {
+                pageIndex: 0,
+                words: [line("first", 100, 0, 700), line("line", 135, 0, 700), line("second", 100, 1, 688)],
+            },
+        ];
+        const out = arbitrate(raw, ocr).textRuns;
+        expect(out.map((r) => [r.text, r.y, r.fontSize])).toEqual([
+            ["first line", 700, 10],
+            ["second", 688, 10],
+        ]);
     });
 });

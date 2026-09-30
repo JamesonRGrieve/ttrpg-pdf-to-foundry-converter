@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { GrayImage } from "./ink.ts";
 
 /**
  * The OCR layer's contracts. OCR exists because PDF text layers carry errors
@@ -16,6 +17,14 @@ export interface OcrWord {
     /** Engine confidence, 0–100. */
     confidence: number;
     box: PdfBox;
+    /** Page-unique ordinal of the recognized line holding the word. */
+    line: number;
+    /** That line's baseline (PDF y) under the word's centre. */
+    baseline: number;
+    /** That line's row height as recognition measured it (PDF units). */
+    lineHeight: number;
+    /** Stroke width of the word's ink (PDF units); see `strokeWidth`. */
+    stroke: number;
 }
 
 export interface OcrPage {
@@ -28,6 +37,8 @@ export interface RenderedPage {
     pageIndex: number;
     /** Encoded PNG of the page (8-bit grayscale). */
     png: Uint8Array;
+    /** The same pixels, decoded, for ink measurements. */
+    image: GrayImage;
     widthPx: number;
     heightPx: number;
     /** Pixels per PDF point. */

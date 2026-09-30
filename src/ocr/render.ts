@@ -35,11 +35,16 @@ export class PageRenderer {
                 true,
             );
             try {
+                // Copied out first: the view is into WASM memory, which encoding may grow and move.
+                const pixels = new Uint8Array(pixmap.getPixels());
+                const widthPx = pixmap.getWidth();
+                const heightPx = pixmap.getHeight();
                 return {
                     pageIndex,
                     png: pixmap.asPNG(),
-                    widthPx: pixmap.getWidth(),
-                    heightPx: pixmap.getHeight(),
+                    image: { pixels, width: widthPx, height: heightPx, stride: pixmap.getStride() },
+                    widthPx,
+                    heightPx,
                     scale,
                     viewBox,
                 };
