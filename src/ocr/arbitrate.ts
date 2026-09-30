@@ -3,7 +3,7 @@ import type { RawDoc, RawTextRun } from "../types/ir.ts";
 import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
 import { stripSubsetPrefix } from "../util/text.ts";
-import { OCR_FONT_NAME, scanPageRuns, scanScale } from "./scan-lines.ts";
+import { OCR_FONT_NAME, scanPageRuns, scanScale, setSideways } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 
 /**
@@ -244,6 +244,16 @@ function buildLines(runs: readonly RawTextRun[]): Line[] {
         }
         return { runs: members, box: [x0, y0, x1, y1] as const, size: l.size, tokens };
     });
+}
+
+/** Of `candidates` (run indexes), the run horizontally nearest a word's centre (0 inside it; ties to the first). */
+function nearestRun(word: OcrWord, candidates: readonly number[], runs: readonly RawTextRun[]): number {
+    const centre = (word.box[0] + word.box[2]) / 2;
+    const distance = (i: number): number => {
+        const run = at(runs, i);
+        return Math.max(0, run.x - centre, centre - (run.x + run.width));
+    };
+    return candidates.reduce((best, i) => (distance(i) < distance(best) ? i : best), at(candidates, 0));
 }
 
 /** Assign every OCR word to the line it overlaps most vertically; the rest are line-less. */
@@ -498,12 +508,23 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         const lineText = line.tokens.map((t) => t.text).join("");
         const corrupt = [...lineText].filter((ch) => CORRUPTION.test(ch)).length;
         if (lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) {
-            const confident = lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE);
-            if (confident.length > 0) {
-                rewrite(
-                    line.tokens.flatMap((t) => t.segments),
-                    confident.map((w) => w.text).join(" "),
-                );
+            // Run by run: a line can span a narrow gutter, and each column's
+            // runs take only the words printed over them.
+            const segments = line.tokens.flatMap((t) => t.segments);
+            const lineRuns = [...new Set(segments.map((s) => s.run))].sort(numAsc);
+            const wordsByRun = new Map<number, OcrWord[]>();
+            for (const word of lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE)) {
+                const run = nearestRun(word, lineRuns, runs);
+                wordsByRun.set(run, [...(wordsByRun.get(run) ?? []), word]);
+            }
+            for (const run of lineRuns) {
+                const own = wordsByRun.get(run);
+                if (own !== undefined) {
+                    rewrite(
+                        segments.filter((s) => s.run === run),
+                        own.map((w) => w.text).join(" "),
+                    );
+                }
             }
             return;
         }
@@ -591,7 +612,7 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
 
     let inserted = 0;
     for (const word of lineless) {
-        if (word.confidence < INSERT_CONFIDENCE || !HAS_ALNUM.test(word.text)) {
+        if (word.confidence < INSERT_CONFIDENCE || !HAS_ALNUM.test(word.text) || setSideways(word)) {
             continue;
         }
         const [x0, y0, x1, y1] = word.box;

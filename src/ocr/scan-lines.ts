@@ -60,12 +60,24 @@ function letters(text: string): number {
     return text.match(LETTER_OR_DIGIT)?.length ?? 0;
 }
 
-/** The words of a scanned page worth keeping: confident enough for what they are. */
+/**
+ * A word of several letters whose box is taller than wide is set on its side
+ * (a thumb tab running up a page edge): page furniture, as a text layer's
+ * sideways runs are, never a line of the page's text.
+ */
+export function setSideways(word: OcrWord): boolean {
+    const [x0, y0, x1, y1] = word.box;
+    return word.text.length > 1 && y1 - y0 > x1 - x0;
+}
+
+/** The words of a scanned page worth keeping: confident enough for what they are, and set across. */
 export function keptWords(words: readonly OcrWord[]): OcrWord[] {
-    return words.filter((w) =>
-        HAS_ALNUM.test(w.text)
-            ? w.confidence >= SCAN_WORD_CONFIDENCE
-            : w.confidence >= SCAN_SYMBOL_CONFIDENCE,
+    return words.filter(
+        (w) =>
+            !setSideways(w) &&
+            (HAS_ALNUM.test(w.text)
+                ? w.confidence >= SCAN_WORD_CONFIDENCE
+                : w.confidence >= SCAN_SYMBOL_CONFIDENCE),
     );
 }
 

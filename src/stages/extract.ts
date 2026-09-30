@@ -278,6 +278,17 @@ function pageXObjectRefs(doc: PDFDocument, resources: unknown): Map<string, stri
     return map;
 }
 
+/**
+ * Whether text set with this matrix [a, b, …] reads across the page. Text
+ * turned on its side (a thumb tab or spine running up a page edge) is page
+ * furniture: its reported width lies along its own baseline, so read as a
+ * horizontal run it would span the page and pass for a heading.
+ */
+export function readsAcross(matrix: readonly number[]): boolean {
+    const [a = 0, b = 0] = matrix;
+    return Math.abs(b) <= Math.abs(a);
+}
+
 export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
     const empty = (encrypted: boolean): RawDoc => ({
         encrypted,
@@ -361,11 +372,12 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
             const content = await page.getTextContent({ includeMarkedContent: false });
             let order = 0;
             for (const item of content.items) {
-                if (item.str.length === 0) {
+                const matrix = item.transform.map(Number);
+                if (item.str.length === 0 || !readsAcross(matrix)) {
                     continue;
                 }
                 // Text matrix [a, b, c, d, e, f]: size from the (c, d) column, origin (e, f).
-                const [, , c = 0, d = 0, e = 0, f = 0] = item.transform.map(Number);
+                const [, , c = 0, d = 0, e = 0, f = 0] = matrix;
                 const size = Math.hypot(c, d);
                 const font = resolveFont(page, item.fontName, content.styles);
                 textRuns.push({

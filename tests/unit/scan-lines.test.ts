@@ -8,6 +8,7 @@ import {
     OCR_FONT_NAME,
     scanPageRuns,
     scanScale,
+    setSideways,
     sizeModes,
     snapSize,
 } from "../../src/ocr/scan-lines.ts";
@@ -177,6 +178,11 @@ describe("scanPageRuns", () => {
             word("~", 40, { confidence: 60 }),
         ];
         expect(keptWords(words).map((w) => w.text)).toEqual(["first", "second"]);
+        // A word set on its side up a page edge is page furniture.
+        const tab = word("APPENDICES", 560, { box: [560, 100, 595, 258] });
+        expect(setSideways(tab)).toBe(true);
+        expect(setSideways(word("I", 560, { box: [560, 100, 563, 110] }))).toBe(false);
+        expect(keptWords([tab]).map((w) => w.text)).toEqual([]);
         expect(scanPageRuns(words, 0, scale, 0).map((r) => [r.text, r.y])).toEqual([
             ["first", 102],
             ["second", 90],

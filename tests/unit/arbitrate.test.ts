@@ -199,6 +199,28 @@ describe("arbitrate", () => {
         expect(texts).toContain("The");
     });
 
+    it("rewrites a wholly corrupt line run by run, each taking the words printed over it", () => {
+        // Two columns a narrow gutter apart share a baseline; both are custom-encoded.
+        const raw = doc([
+            run("\u0001\u0002\u0003\u0004\u0005", 100, 60),
+            run("\u0006\u0007\u0010\u0011", 170, 60),
+        ]);
+        const ocr = [
+            {
+                pageIndex: 0,
+                words: [
+                    word("Old", 95, [100, 698, 120, 708]),
+                    word("Lamp", 95, [124, 698, 158, 708]),
+                    word("Wick", 95, [172, 698, 200, 708]),
+                ],
+            },
+        ];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => [r.text, r.x])).toEqual([
+            ["Old Lamp", 100],
+            ["Wick", 170],
+        ]);
+    });
+
     it("leaves pages without OCR unchanged", () => {
         const raw = doc([run("untouched", 100, 40)]);
         expect(arbitrate(raw, []).textRuns).toEqual(raw.textRuns);
