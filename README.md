@@ -40,9 +40,10 @@ pnpm install
 # browser: builds and serves the upload page
 pnpm web:dev
 
-# command line: every PDF given becomes part of one module
-pnpm cli infer <pdf> [<pdf>…] [--target <line>] [--out-dir <dir>] [--cache-dir <dir>] [--ocr-workers <n>]
-pnpm cli batch <dir> [<dir>…] [--target <line>]
+# command line: every PDF given becomes part of one module; each --target sets
+# the line of the PDFs after it (an entity printed in several lines is homologated)
+pnpm cli infer [--target <line>] <pdf> [[--target <line>] <pdf>…] [--out-dir <dir>] [--cache-dir <dir>] [--ocr-workers <n>]
+pnpm cli batch [--target <line>] <dir> [[--target <line>] <dir>…]
 ```
 
 The output is a **Foundry VTT module** that exposes the packs as compendiums of
