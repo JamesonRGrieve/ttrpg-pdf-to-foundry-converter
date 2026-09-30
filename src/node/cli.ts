@@ -35,7 +35,7 @@ Options:
                            ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
   --out-dir <dir>          Where the module is written, e.g. Foundry's Data/modules
                            (default: <tmp>/foundry-pdf-parser/modules).
-  --cache-dir <dir>        IR/OCR cache (default: <tmp>/foundry-pdf-parser/cache).
+  --cache-dir <dir>        IR/OCR cache (default: .tmp/cache in the working directory).
   --ocr-workers <n>        OCR threads (default: half the CPU count).
   --dry-run                Run everything but write nothing.
   --log-level <level>      debug | info | warn | error (default: info).

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 /** Directories never scanned by CI gates (generated / vendored / regenerable). */
-const IGNORED = new Set(["node_modules", ".git", "dist", ".cache", "coverage", ".vitest"]);
+const IGNORED = new Set(["node_modules", ".git", "dist", ".cache", ".tmp", "coverage", ".vitest"]);
 
 /** Recursively list repo-relative file paths, skipping ignored/binary trees. */
 export function listFiles(root, dir = root) {

@@ -57,7 +57,8 @@ ocr page key  = sha256( sha256(pdf) | renderer id | ocr engine id )[:32]
 read-doc key  = sha256( sha256(pdf) | "eng:" ENGINE_VERSION | "ir:" IR_VERSION | "ocr:" renderer id | ocr engine id )[:32]
 ```
 
-The CLI keeps them under `--cache-dir` (default `<os tmp>/foundry-pdf-parser/cache`):
+The CLI keeps them under `--cache-dir` (default `.tmp/cache` in the working
+directory, gitignored — kept on disk, since a temp directory may be held in memory):
 recognized words per page under `ocr/<key>/`, and the arbitrated IR plus image
 assets under `<key>/`. The browser keeps OCR in memory for the run. The PDF
 content hash is used locally only: never emitted, never written to a tracked

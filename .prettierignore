@@ -4,6 +4,7 @@ web/public/vendor
 test-results
 playwright-report
 .cache
+.tmp
 node_modules
 coverage
 pnpm-lock.yaml

@@ -65,6 +65,7 @@ module.exports = {
         "test-results",
         "playwright-report",
         ".cache",
+        ".tmp",
         "node_modules",
         "fixtures/rendered",
         "golden",

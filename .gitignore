@@ -7,6 +7,8 @@ node_modules/
 # Regenerable intermediates — keyed by (pdf content hash + engine_version + ir_version).
 # C2: the PDF content hash is used locally only; it is never written to a tracked path.
 .cache/
+# The engine's default IR/OCR cache (kept on disk, not in a RAM-backed /tmp).
+.tmp/
 
 # Test / coverage artifacts
 coverage/
