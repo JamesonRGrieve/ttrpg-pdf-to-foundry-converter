@@ -13,8 +13,12 @@ import type { DetectedNumericGrid } from "./types.ts";
  * the same shape as a characteristic grid, so one NPC builder serves both.
  */
 
-/** The schema's characteristic abbreviations, as printed above a statblock row. */
-const CHARACTERISTIC_LABELS: ReadonlySet<string> = new Set(SCHEMA_CHAR_ORDER);
+/**
+ * The schema's characteristic abbreviations, as printed above a statblock row:
+ * the nine of every line, and `inf` (the schema's influence/infamy
+ * characteristic), which some lines' rows print as a tenth.
+ */
+const CHARACTERISTIC_LABELS: ReadonlySet<string> = new Set([...SCHEMA_CHAR_ORDER, "inf"]);
 /** Fewest characteristic labels a row carries. */
 const MIN_ROW_LABELS = 7;
 /** How many label sizes below the labels the values line may sit, and the caption above. */
@@ -106,23 +110,38 @@ export function cellValues(labels: readonly Placed[], values: readonly Placed[])
     return cells.map((c) => (/^\d/u.test(c) ? Number(c) : 0));
 }
 
+/** A trailing bracketed note on a caption ("(Elite)"), perhaps set against the word before it. */
+const TRAILING_NOTE = /\s*(\([^()]*\))\s*$/u;
+
+/** The word most of `words` are, with its count. */
+function mostCommon(words: readonly string[]): [string, number] {
+    const counts = new Map<string, number>();
+    for (const w of words) {
+        counts.set(w, (counts.get(w) ?? 0) + 1);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? ["", 0];
+}
+
 /**
  * Names from captions: when most captions end in the same word (a label every
  * statblock carries, discovered from the document), that word is dropped
- * wherever it stands in a caption.
+ * wherever it stands in a caption. A trailing bracketed note that varies
+ * between captions (a tier: "(Elite)", "(Troop)") is not that word, and
+ * stays; the shared word is looked for before it.
  */
 export function captionNames(captions: readonly string[], share = CAPTION_WORD_SHARE): string[] {
-    const last = captions.map((c) => c.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "");
-    const counts = new Map<string, number>();
-    for (const w of last) {
-        counts.set(w, (counts.get(w) ?? 0) + 1);
+    const spaced = captions.map((c) => c.trim().replace(TRAILING_NOTE, " $1"));
+    const lastWord = (c: string): string => c.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "";
+    const enough = captions.length >= MIN_CAPTIONS;
+    const common = (count: number): boolean => enough && count >= share * captions.length;
+    let [shared, count] = mostCommon(spaced.map(lastWord));
+    if (!common(count)) {
+        [shared, count] = mostCommon(spaced.map((c) => lastWord(c.replace(TRAILING_NOTE, ""))));
     }
-    const [shared, count] = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? ["", 0];
-    const strip = captions.length >= MIN_CAPTIONS && count >= share * captions.length;
-    return captions.map((c) => {
-        const words = c.trim().split(/\s+/u);
+    return captions.map((c, i) => {
+        const words = (spaced[i] ?? c).split(/\s+/u);
         const kept = words.filter((w) => w.toLowerCase() !== shared);
-        return strip && kept.length > 0 ? kept.join(" ") : c.trim();
+        return common(count) && kept.length > 0 ? kept.join(" ") : c.trim();
     });
 }
 

@@ -77,6 +77,17 @@ describe("statblock rows", () => {
         expect(captionNames(names, 0.8)).toEqual(names);
     });
 
+    it("looks for the shared word before a tier note that varies, and drops a note all share", () => {
+        const tiered = ["Lamp Warden Profile (Elite)", "Wick Hound Profile(Troop)", "Glim Profile (Master)"];
+        expect(captionNames(tiered)).toEqual(["Lamp Warden (Elite)", "Wick Hound (Troop)", "Glim (Master)"]);
+        const minions = ["Wick Hound (Minion)", "Lamp Moth (Minion)", "Glim (Minion)"];
+        expect(captionNames(minions)).toEqual(["Wick Hound", "Lamp Moth", "Glim"]);
+    });
+
+    it("reads a row of ten labels, the tenth the schema's influence", () => {
+        expect(isLabelRow(`${LABELS} Inf`)).toBe(true);
+    });
+
     it("reads each value under its label, closing up letter-spaced values", () => {
         const labels = ["WS", "BS", "S"].map((text, i) => ({ x: 10 + 25 * i, width: 12, text }));
         const at = (x: number, text: string) => ({ x, width: 12, text });
