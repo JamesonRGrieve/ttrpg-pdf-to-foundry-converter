@@ -6,7 +6,7 @@ import { columnAt } from "../util/columns.ts";
 import { inMarginBand, inSideMargin, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
-import { headerRole, normalizeHeader } from "./columns.ts";
+import { headerRole, isAdvanceList, normalizeHeader } from "./columns.ts";
 import { restoreWordSpaces } from "./names.ts";
 import { mergeContinuationRows } from "./row-merge.ts";
 import type { DetectedTable, TableCell, TableRow, TitledTable } from "./types.ts";
@@ -36,7 +36,8 @@ const MIN_COLUMNS = 2;
 interface TitleHit {
     pageIndex: number;
     y: number;
-    title: string;
+    /** The caption's title; null for a table anchored on its header row alone. */
+    title: string | null;
     run: IRTextRun;
 }
 
@@ -149,7 +150,16 @@ const HEADED_KEY_SHARE = 0.8;
 export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
     const keyRun = (row: RawRow): IRTextRun | undefined =>
         row.runs.find((r) => r.text.trim().length > 0 && columnOfRun(r.x, colBoundaries) === 0);
-    const anchors = lines.filter((row) => keyRun(row) !== undefined);
+    // A bold line among records that are not is a section row ("Chain
+    // Weapons"), set centred over the columns: it stands as its own row
+    // rather than joining the nearest key.
+    const allBold = (row: RawRow): boolean => {
+        const visible = row.runs.filter((r) => r.text.trim().length > 0);
+        return visible.length > 0 && visible.every((r) => r.weight === "bold");
+    };
+    const boldRecords = lines.filter(allBold).length * 2 > lines.length;
+    const isSection = (row: RawRow): boolean => !boldRecords && allBold(row) && keyRun(row) === undefined;
+    const anchors = lines.filter((row) => keyRun(row) !== undefined || isSection(row));
     if (anchors.length === 0 || anchors.length === lines.length) {
         return [...lines];
     }
@@ -169,7 +179,7 @@ export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: reado
     };
     if (
         lines[0] === anchors[0] &&
-        anchors.every(opensText) &&
+        anchors.every((a) => isSection(a) || opensText(a)) &&
         finished.length >= HEADED_KEY_SHARE * later.length
     ) {
         const rows: RawRow[] = [];
@@ -194,8 +204,9 @@ export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: reado
         if (anchors.includes(line)) {
             continue;
         }
-        // Nearest key; a tie goes to the one above.
-        const nearest = grouped.reduce((best, g) => {
+        // Nearest key (never a section row); a tie goes to the one above.
+        const keyed = grouped.filter((g) => !isSection(g.anchor));
+        const nearest = (keyed.length > 0 ? keyed : grouped).reduce((best, g) => {
             const d = Math.abs(g.keyY - line.y);
             const bestD = Math.abs(best.keyY - line.y);
             return d < bestD || (d === bestD && g.keyY > best.keyY) ? g : best;
@@ -303,9 +314,13 @@ function mergeAdjacentText(
             prev.x + prev.text.trimEnd().length * prev.size * MAX_GLYPH_ADVANCE,
         );
         const gap = r.x - inkEnd;
+        // A lone letter is a small-capital initial set as its own run ("d" of
+        // "d" · "aM"): the label goes on in the next run, whatever edge that
+        // run happens to start on.
+        const initial = /^\p{L}$/u.test(cur.text.trim());
         const joins =
             gap < HEADER_JOIN_FACTOR * Math.max(r.size, prev.size) &&
-            !edges.some((x) => Math.abs(r.x - x) <= COLUMN_EDGE_TOLERANCE);
+            (initial || !edges.some((x) => Math.abs(r.x - x) <= COLUMN_EDGE_TOLERANCE));
         prev = r;
         if (joins) {
             cur.text = joinText(cur.text, r.text, gap);
@@ -529,32 +544,108 @@ function assignToColumns(runs: IRTextRun[], colBoundaries: number[]): TableCell[
     return cells.filter((c) => c.text.length > 0);
 }
 
-export function detectTitledTables(ir: IR): TitledTable[] {
-    const titles = findTableTitles(ir);
-    const bands = marginBandsOf(ir);
-    const tables: TitledTable[] = [];
+/** Fewest schema field labels that make a bold line a table header with no caption. */
+const MIN_ANCHOR_ROLES = 3;
+/** Points below a caption's baseline a table's runs start (clearing the caption line). */
+const CAPTION_CLEARANCE = 5;
+/** An anchored table's title sits just above its header row, so the band keeps that row. */
+const ANCHOR_LIFT = CAPTION_CLEARANCE + 1;
 
+/**
+ * Header rows of tables printed with no caption: a line whose bold labels
+ * name at least MIN_ANCHOR_ROLES of the schema's fields ("Name", "Dam",
+ * "Avail"), not already part of a captioned table (`covered`).
+ */
+function headerAnchors(ir: IR, covered: ReadonlySet<IRTextRun>): TitleHit[] {
+    const hits: TitleHit[] = [];
+    const pages = new Map<number, IRTextRun[]>();
+    for (const r of ir.runs) {
+        pages.set(r.pageIndex, [...(pages.get(r.pageIndex) ?? []), r]);
+    }
+    for (const [pageIndex, runs] of pages) {
+        for (const row of groupIntoRows(runs)) {
+            const bold = headerLabels(row).runs;
+            const first = bold.find((r) => r.text.trim().length > 0);
+            if (first === undefined || bold.some((r) => covered.has(r))) {
+                continue;
+            }
+            const labels = mergeAdjacentText(bold, []);
+            const roles = labels.filter((l) => headerRole(l.text) !== null).length;
+            if (labels.length >= MIN_COLUMNS && roles >= MIN_ANCHOR_ROLES) {
+                hits.push({ pageIndex, y: row.y + ANCHOR_LIFT, title: null, run: first });
+            }
+        }
+    }
+    return hits;
+}
+
+/**
+ * Read the table each title opens: it runs down to the nearest title below it
+ * in the same text column, else to the page's text floor.
+ */
+function readAtTitles(ir: IR, titles: readonly TitleHit[], bands: MarginBands): TitledTable[] {
+    const tables: TitledTable[] = [];
     for (const title of titles) {
-        // The table runs down to the nearest caption below it in the same
-        // text column, else to the page's text floor.
         const below = titles.filter(
             (tt) => tt.pageIndex === title.pageIndex && tt.y < title.y && tt.run.column === title.run.column,
         );
         const bottomBound = below.length > 0 ? Math.max(...below.map((tt) => tt.y)) + 10 : 30;
-        const band = collectTableRuns(ir, bands, title.pageIndex, title.y - 5, bottomBound);
+        const band = collectTableRuns(ir, bands, title.pageIndex, title.y - CAPTION_CLEARANCE, bottomBound);
         // The table spans exactly the text columns its header row occupies: a
         // neighbouring column's prose shares the band, while a wide table may
         // straddle several columns. The header is looked for in the caption's
-        // own column first.
+        // own column first. A table anchored on its header row starts at that
+        // row, whatever columns its labels fall in.
         const ownColumn = band.filter((r) => r.column === title.run.column);
-        const header = findHeader(groupIntoRows(ownColumn)) ?? findHeader(groupIntoRows(band));
+        const header =
+            title.title === null
+                ? findHeader(groupIntoRows(band))
+                : (findHeader(groupIntoRows(ownColumn)) ?? findHeader(groupIntoRows(band)));
         if (header !== null) {
             const inTable = band.filter(inColumns(headerColumns(header, band)));
             const own = inTable.filter(withinHeaderSpan(header, inTable));
             tables.push(...readSubTables(own, title, Math.max(...header.runs.map((r) => r.size))));
         }
     }
-    return joinContinuations(tables);
+    return tables;
+}
+
+/**
+ * Fewest records a table with no caption lists: a line of field labels over a
+ * single line of values is a statblock's panel, not a catalogue. A record has
+ * a key and fills at least half the table's columns.
+ */
+const MIN_ANCHOR_RECORDS = 3;
+
+function isRecord(row: TableRow, columns: number): boolean {
+    const filled = row.cells.filter((c) => c.text.trim().length > 0);
+    const key = filled.find((c) => c.colIndex === 0)?.text ?? "";
+    // A `Label:` key is a statblock's field line, not a record's name.
+    return key.length > 0 && !/^[^:]{1,20}:/u.test(key) && filled.length * 2 >= columns;
+}
+
+/**
+ * Whether a table with no caption holds a catalogue: its headers name fields
+ * (not a list of advances to purchase, read with its career), its rows are
+ * records.
+ */
+function isAnchoredCatalogue(table: TitledTable): boolean {
+    const roles = table.headers.map(headerRole).filter((r) => r !== null);
+    const records = table.rows.filter((r) => isRecord(r, table.headers.length));
+    return (
+        new Set(roles).size >= MIN_ANCHOR_ROLES &&
+        !isAdvanceList(roles) &&
+        records.length >= MIN_ANCHOR_RECORDS
+    );
+}
+
+export function detectTitledTables(ir: IR): TitledTable[] {
+    const bands = marginBandsOf(ir);
+    const captioned = readAtTitles(ir, findTableTitles(ir), bands);
+    // Tables printed with no caption are anchored on their header rows.
+    const covered = new Set(captioned.flatMap((t) => t.runs));
+    const anchored = readAtTitles(ir, headerAnchors(ir, covered), bands).filter(isAnchoredCatalogue);
+    return joinContinuations([...captioned, ...anchored]);
 }
 
 /** Type sizes past its header's last label that a table's own text may start. */
@@ -909,12 +1000,16 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
     const read = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges));
     // A header naming another set of columns opens the next sub-table; a
     // repeat of this table's own header carries on.
-    const otherHeader = read.findIndex(
-        (line, i) =>
+    const otherHeader = read.findIndex((line, i) => {
+        const labels = mergeAdjacentText(headerLabels(line).runs, cellEdges(read.slice(i + 1)));
+        // A section row ("Chain Weapons") names at most one field; a header names several.
+        const fields = new Set(labels.map((l) => headerRole(l.text)).filter((r) => r !== null));
+        return (
             isHeaderRow(line, cellEdges(read.slice(i + 1))) &&
-            mergeAdjacentText(headerLabels(line).runs, cellEdges(read.slice(i + 1))).length !==
-                headers.length,
-    );
+            labels.length !== headers.length &&
+            fields.size >= MIN_COLUMNS
+        );
+    });
     const body = otherHeader < 0 ? read : read.slice(0, otherHeader);
     alignBoundariesToData(colBoundaries, body);
 
@@ -989,7 +1084,10 @@ function readRows(body: readonly RawRow[], colBoundaries: number[]): TableRow[] 
         const cells = assignToColumns(row.runs, colBoundaries);
         const allBold = row.runs.every((r) => r.weight === "bold");
         const fewCells = cells.filter((c) => c.text.length > 0).length <= 2;
-        if (allBold && fewCells) {
+        // A label centred across the columns may touch several of them; with
+        // no key it still names a section, not a record.
+        const keyless = !cells.some((c) => c.colIndex === 0 && c.text.length > 0);
+        if (allBold && (fewCells || keyless)) {
             const sectionText = row.runs
                 .map((r) => r.text)
                 .join(" ")

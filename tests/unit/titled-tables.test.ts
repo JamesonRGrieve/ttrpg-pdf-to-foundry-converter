@@ -365,3 +365,46 @@ describe("header runs holding two labels", () => {
         expect(splitHeaderRuns([prose], [300, 325])).toEqual([prose]);
     });
 });
+
+describe("tables with no caption", () => {
+    /** A record line: a name and three values under the header's columns. */
+    const record = (y: number, name: string): IRTextRun[] => [
+        run(name, 60, y),
+        run("3+StrB", 200, y),
+        run("600", 300, y),
+        run("Rare", 400, y),
+    ];
+
+    it("reads a table from a header of schema field labels, with centred section rows", () => {
+        const ir = irOf([
+            // "Name" set as a small-capital initial and the rest of the word.
+            run("N", 60, 700, { ...bold, width: 7 }),
+            run("ame", 67, 700, { ...bold, width: 16 }),
+            run("Dam", 200, 700, bold),
+            run("Cost", 300, 700, bold),
+            run("Avail", 400, 700, bold),
+            // A section label centred across the columns, set apart below the header.
+            run("Lamp", 190, 675, bold),
+            run("Hooks", 290, 675, bold),
+            ...record(660, "Wick Hook"),
+            ...record(645, "Ember Hook"),
+            ...record(630, "Glim Hook"),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.tableTitle).toBeNull();
+        expect(table?.headers).toEqual(["Name", "Dam", "Cost", "Avail"]);
+        const read = table?.rows.map((r) => (r.isSectionHeader ? `[${r.sectionName}]` : r.cells[0]?.text));
+        expect(read).toEqual(["[Lamp Hooks]", "Wick Hook", "Ember Hook", "Glim Hook"]);
+    });
+
+    it("finds no table under a bold line that names too few fields", () => {
+        const ir = irOf([
+            run("Lamp", 60, 700, bold),
+            run("Oil", 200, 700, bold),
+            run("Dam", 300, 700, bold),
+            ...record(670, "Wick Hook"),
+            ...record(655, "Ember Hook"),
+        ]);
+        expect(detectTitledTables(ir)).toEqual([]);
+    });
+});
