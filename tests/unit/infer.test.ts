@@ -221,6 +221,8 @@ describe("names", () => {
     it("takes a schema tier out of a statblock heading", () => {
         expect(splitTier("REEDSTALKER (Elite)")).toEqual({ name: "Reedstalker", tier: "elite" });
         expect(splitTier("Lamp (Brass)")).toEqual({ name: "Lamp (Brass)", tier: null });
+        // A plural tier names the same tier.
+        expect(splitTier("WICK HOUND (TROOPS)")).toEqual({ name: "Wick Hound", tier: "troop" });
     });
 
     it("strips a numbered label the document grades its headings by", () => {

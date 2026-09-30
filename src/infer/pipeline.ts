@@ -27,6 +27,7 @@ import {
     headingLabels,
     readsAsProse,
     rejoinSplitWords,
+    splitTier,
     startsLikeName,
     stripHeadingLabel,
     wordsOf,
@@ -958,7 +959,13 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
                 ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
                 : null;
         const intro = exact ?? naming;
-        const name = naming === null ? caption : cleanName(naming.heading.text);
+        // A naming heading may carry the tier the statblock itself does not print.
+        const fromHeading = naming === null ? null : splitTier(naming.heading.text);
+        const name = fromHeading?.name ?? caption;
+        const system =
+            fromHeading !== null && fromHeading.tier !== null && npc.system["tier"] === undefined
+                ? { ...npc.system, tier: fromHeading.tier }
+                : npc.system;
         out.add(
             "Actor",
             ACTOR_SEGMENT,
@@ -971,7 +978,7 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
                 // begin a page earlier.
                 page: out.page(grid.pageIndex),
                 description: intro === null ? "" : toHtml(intro.body),
-                system: npc.system,
+                system,
             }),
             grid.pageIndex,
             "grid:npc",

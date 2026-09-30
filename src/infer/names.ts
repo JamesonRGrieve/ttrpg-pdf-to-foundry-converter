@@ -221,13 +221,15 @@ const NPC_TIERS = ["troop", "elite", "master", "horde"] as const;
 export type NpcTier = (typeof NPC_TIERS)[number];
 
 /**
- * Split a statblock heading into name and tier: a parenthetical naming a tier
- * ("Name (Elite)") is the tier field, not part of the name.
+ * Split a statblock heading into name and tier: a parenthetical naming a tier,
+ * singular or plural ("Name (Elite)", "Name (Troops)"), is the tier field, not
+ * part of the name.
  */
 export function splitTier(heading: string): { name: string; tier: NpcTier | null } {
     let tier: NpcTier | null = null;
     const name = heading.replace(/\s*\(([^)]*)\)\s*/gu, (whole, inner: string) => {
-        const hit = NPC_TIERS.find((t) => t === inner.trim().toLowerCase());
+        const word = inner.trim().toLowerCase();
+        const hit = NPC_TIERS.find((t) => t === word || `${t}s` === word);
         if (hit === undefined) {
             return whole;
         }
