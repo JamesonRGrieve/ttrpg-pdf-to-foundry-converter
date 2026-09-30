@@ -30,6 +30,9 @@ import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
  *  5. OCR words on no text-layer line (text painted as outlines or embedded in
  *     an image) are inserted as new runs when confident.
  *
+ * A line OCR reads none of, where OCR confidently reads as much text, is a font
+ * encoding letters as other ordinary letters; OCR's reading replaces it.
+ *
  * A page with no text layer at all (a scan) is read from OCR alone, line by
  * line with recovered sizes and weights (see `scanPageRuns`).
  *
@@ -74,6 +77,10 @@ const SMALL_CAPS_MIN_SHARE = 0.05;
  * too, fusing the line into one token), so its OCR reading replaces it whole.
  */
 const CORRUPT_LINE_SHARE = 0.1;
+/** Fewest letters a line needs before OCR can disown it wholly (short labels OCR may simply miss). */
+const MIN_DISOWNED_LETTERS = 6;
+/** A disowned line's OCR reading must spell at least this share of its letters. */
+const DISOWNED_OCR_SHARE = 0.5;
 
 // Code points that indicate a broken or custom font encoding: control
 // characters, private-use glyphs, the replacement character, or anything
@@ -93,6 +100,11 @@ function isSmallCapsEvidence(token: string): boolean {
     return STARTS_LOWERCASE.test(token) && ANOMALOUS_CASE.test(token);
 }
 const HAS_ALNUM = /[\p{L}\p{N}]/u;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
+
+function letterCount(text: string): number {
+    return text.match(LETTER_OR_DIGIT)?.length ?? 0;
+}
 
 interface Segment {
     run: number;
@@ -503,35 +515,56 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         donors.set(host, given);
     };
 
+    /**
+     * Replace a line's text with its confident OCR words, run by run: a line
+     * can span a narrow gutter, and each column's runs take only the words
+     * printed over them.
+     */
+    const rewriteByRuns = (line: Line, confident: readonly OcrWord[]): void => {
+        const segments = line.tokens.flatMap((t) => t.segments);
+        const lineRuns = [...new Set(segments.map((s) => s.run))].sort(numAsc);
+        const wordsByRun = new Map<number, OcrWord[]>();
+        for (const word of confident) {
+            const run = nearestRun(word, lineRuns, runs);
+            wordsByRun.set(run, [...(wordsByRun.get(run) ?? []), word]);
+        }
+        for (const run of lineRuns) {
+            const own = wordsByRun.get(run);
+            if (own !== undefined) {
+                rewrite(
+                    segments.filter((s) => s.run === run),
+                    own.map((w) => w.text).join(" "),
+                );
+            }
+        }
+    };
+
     lines.forEach((line, li) => {
         const lineWords = at(perLine, li);
+        const confident = lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE);
         const lineText = line.tokens.map((t) => t.text).join("");
         const corrupt = [...lineText].filter((ch) => CORRUPTION.test(ch)).length;
         if (lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) {
-            // Run by run: a line can span a narrow gutter, and each column's
-            // runs take only the words printed over them.
-            const segments = line.tokens.flatMap((t) => t.segments);
-            const lineRuns = [...new Set(segments.map((s) => s.run))].sort(numAsc);
-            const wordsByRun = new Map<number, OcrWord[]>();
-            for (const word of lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE)) {
-                const run = nearestRun(word, lineRuns, runs);
-                wordsByRun.set(run, [...(wordsByRun.get(run) ?? []), word]);
-            }
-            for (const run of lineRuns) {
-                const own = wordsByRun.get(run);
-                if (own !== undefined) {
-                    rewrite(
-                        segments.filter((s) => s.run === run),
-                        own.map((w) => w.text).join(" "),
-                    );
-                }
-            }
+            rewriteByRuns(line, confident);
             return;
         }
         const groups = align(
             line.tokens.map((t) => t.text),
             lineWords.map((w) => w.text),
         );
+        // A line none of whose words OCR reads at all, where OCR confidently
+        // reads as much text, is a font whose encoding maps to wrong letters
+        // that are still ordinary ones ("0V:hAamh" for "RANGED"): OCR's
+        // reading replaces it.
+        const lineLetters = letterCount(lineText);
+        if (
+            groups.length === 0 &&
+            lineLetters >= MIN_DISOWNED_LETTERS &&
+            letterCount(confident.map((w) => w.text).join("")) >= DISOWNED_OCR_SHARE * lineLetters
+        ) {
+            rewriteByRuns(line, confident);
+            return;
+        }
         for (const group of groups) {
             const tokens = group.tokens.map((t) => at(line.tokens, t));
             const segments = tokens.flatMap((t) => t.segments);

@@ -221,6 +221,26 @@ describe("arbitrate", () => {
         ]);
     });
 
+    it("replaces a line OCR reads none of, where OCR reads as much text confidently", () => {
+        // A display font encoding letters as other ordinary letters.
+        const raw = doc([run("9Lgpq0V:hAamh", 100, 90)]);
+        const ocr = [
+            {
+                pageIndex: 0,
+                words: [
+                    word("TABLE", 96, [100, 698, 130, 708]),
+                    word("5-4:", 96, [134, 698, 152, 708]),
+                    word("LAMPS", 95, [156, 698, 190, 708]),
+                ],
+            },
+        ];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["TABLE 5-4: LAMPS"]);
+        // A line OCR reads part of keeps its text layer.
+        const kept = doc([run("Lantern oil burns", 100, 90)]);
+        const partial = [{ pageIndex: 0, words: [word("Lantern", 96, [100, 698, 140, 708])] }];
+        expect(arbitrate(kept, partial).textRuns.map((r) => r.text)).toEqual(["Lantern oil burns"]);
+    });
+
     it("leaves pages without OCR unchanged", () => {
         const raw = doc([run("untouched", 100, 40)]);
         expect(arbitrate(raw, []).textRuns).toEqual(raw.textRuns);
