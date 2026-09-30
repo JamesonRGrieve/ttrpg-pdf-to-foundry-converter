@@ -3,7 +3,14 @@
 import { zipSync } from "fflate";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
-import { createLogger, MemoryOcrPageStore, RENDER_DPI, runModule, targetFor } from "../src/index.ts";
+import {
+    createLogger,
+    MemoryOcrPageStore,
+    type ModuleDocument,
+    RENDER_DPI,
+    runModule,
+    targetFor,
+} from "../src/index.ts";
 import type { PackSummary, RunRequest, WorkerMessage } from "./protocol.ts";
 import { BrowserTesseractEngine } from "./tesseract-browser.ts";
 
@@ -33,25 +40,25 @@ function post(message: WorkerMessage, transfer: Transferable[] = []): void {
 
 async function run(request: RunRequest): Promise<void> {
     const log = createLogger("info", "", (_level, line) => post({ type: "log", line }));
-    const target = targetFor(request.target);
-    if (target === null) {
-        post({ type: "error", message: `unknown target schema ${JSON.stringify(request.target)}` });
-        return;
+    const documents: ModuleDocument[] = [];
+    for (const { pdf, target: id } of request.documents) {
+        const target = targetFor(id);
+        if (target === null) {
+            post({ type: "error", message: `unknown target schema ${JSON.stringify(id)}` });
+            return;
+        }
+        documents.push({ pdf: new Uint8Array(pdf), target });
     }
     const vendorBase = new URL(`${import.meta.env.BASE_URL}vendor/tesseract/`, self.location.origin).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
     try {
-        const result = await runModule(
-            request.pdfs.map((pdf) => new Uint8Array(pdf)),
-            {
-                target,
-                ocr,
-                ocrStore: new MemoryOcrPageStore(),
-                maxInFlight: ocrWorkers * 2,
-                log,
-                onProgress: (progress) => post({ type: "progress", ...progress }),
-            },
-        );
+        const result = await runModule(documents, {
+            ocr,
+            ocrStore: new MemoryOcrPageStore(),
+            maxInFlight: ocrWorkers * 2,
+            log,
+            onProgress: (progress) => post({ type: "progress", ...progress }),
+        });
         if (result.module === null) {
             post({ type: "refused", refused: result.refused });
             return;

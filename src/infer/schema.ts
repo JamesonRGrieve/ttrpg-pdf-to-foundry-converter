@@ -19,6 +19,13 @@ export type Line = (typeof LINES)[number];
 /** The system's canonical default line. */
 export const DEFAULT_LINE: Line = "dh2";
 
+/**
+ * The game lines oldest first, by first publication. A document printed in
+ * several lines lives canonically in the newest one's pack (pack-authoring
+ * "Canonical location = newest official line").
+ */
+export const LINE_PUBLICATION_ORDER: readonly Line[] = ["dh1", "rt", "dw", "bc", "ow", "dh2", "im"];
+
 /** Item types the system models (the Foundry `type` field). */
 export type ItemType =
     | "weapon"

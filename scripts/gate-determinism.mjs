@@ -12,6 +12,20 @@ import { read } from "./lib/files.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = JSON.parse(read(repoRoot, "fixtures/manifest.json")).cases;
 
+/**
+ * The case's PDFs, each preceded by its target when the case gives targets
+ * (`--target` applies to the PDFs after it, so a case giving any gives all).
+ */
+function targetedPdfs(entry) {
+    if (entry.targets === undefined) {
+        return entry.pdfs;
+    }
+    if (entry.targets.length !== entry.pdfs.length) {
+        throw new Error(`${entry.name}: targets must give every PDF's line`);
+    }
+    return entry.pdfs.flatMap((pdf, i) => ["--target", entry.targets[i], pdf]);
+}
+
 function runCli(outDir, cacheDir, entry) {
     execFileSync(
         "npx",
@@ -19,7 +33,7 @@ function runCli(outDir, cacheDir, entry) {
             "tsx",
             "src/node/cli.ts",
             "infer",
-            ...entry.pdfs,
+            ...targetedPdfs(entry),
             "--out-dir",
             outDir,
             "--cache-dir",

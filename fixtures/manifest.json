@@ -1,5 +1,5 @@
 {
-    "$comment": "Synthetic fixture PDFs (sources in fixtures/src, invented content only). Each case converts its PDFs together into one module; the golden module lives in golden/<name>/. Drives scripts/update-golden.ts, the golden vitest, the determinism gates and the browser e2e test.",
+    "$comment": "Synthetic fixture PDFs (sources in fixtures/src, invented content only). Each case converts its PDFs together into one module, each PDF in the target line at its position in `targets` (default dh2); the golden module lives in golden/<name>/. Drives scripts/update-golden.ts, the golden vitest, the determinism gates and the browser e2e test.",
     "cases": [
         {
             "name": "field-manual",
@@ -12,6 +12,11 @@
         {
             "name": "combined",
             "pdfs": ["fixtures/rendered/field-manual.pdf", "fixtures/rendered/images.pdf"]
+        },
+        {
+            "name": "cross-line",
+            "pdfs": ["fixtures/rendered/field-manual.pdf", "fixtures/rendered/field-manual.pdf"],
+            "targets": ["dh2", "rt"]
         }
     ]
 }

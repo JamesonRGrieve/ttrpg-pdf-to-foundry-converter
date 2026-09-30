@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DEFAULT_TARGET } from "../../src/infer/targets.ts";
+import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../../src/infer/targets.ts";
 import { createLogger } from "../../src/logger.ts";
 import { FileIrCache } from "../../src/node/ir-cache.ts";
 import { FileOcrPageStore } from "../../src/node/ocr-store.ts";
@@ -21,6 +21,18 @@ export interface FixtureCase {
     name: string;
     /** The PDFs converted together into one module. */
     pdfs: string[];
+    /** Each PDF's target line, by position; absent or short → the default line. */
+    targets?: string[];
+}
+
+/** The target schema a case chooses for its `index`-th PDF. */
+export function caseTarget(entry: FixtureCase, index: number): TargetSchema {
+    const id = entry.targets?.[index];
+    const target = id === undefined ? DEFAULT_TARGET : targetFor(id);
+    if (target === null) {
+        throw new Error(`${entry.name}: unknown target ${JSON.stringify(id)}`);
+    }
+    return target;
 }
 
 /** OCR threads for fixture runs: fixtures are a few pages. */
@@ -44,9 +56,11 @@ export async function runCase(
     const engine = await NodeTesseractEngine.create(FIXTURE_OCR_WORKERS, RENDER_DPI);
     try {
         const result = await runModule(
-            entry.pdfs.map((pdf) => new Uint8Array(readFileSync(resolve(repoRoot, pdf)))),
+            entry.pdfs.map((pdf, i) => ({
+                pdf: new Uint8Array(readFileSync(resolve(repoRoot, pdf))),
+                target: caseTarget(entry, i),
+            })),
             {
-                target: DEFAULT_TARGET,
                 ocr: engine,
                 ocrStore: new FileOcrPageStore(cacheDir),
                 irCache: new FileIrCache(cacheDir),

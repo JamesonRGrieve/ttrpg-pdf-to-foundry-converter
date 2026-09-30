@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { unzipSync } from "fflate";
 
@@ -41,19 +41,36 @@ function watchOffOrigin(page: Page, origin: string): string[] {
     return offOrigin;
 }
 
-/** Upload the PDFs, convert, and check the downloaded module against a golden case. */
-async function convertsLikeCli(page: Page, baseURL: string | undefined, pdfs: string[], goldenCase: string) {
+/**
+ * Upload the PDFs, choose each one's game line (`targets`, by position;
+ * default otherwise), convert, and check the downloaded module against a
+ * golden case.
+ */
+async function convertsLikeCli(
+    page: Page,
+    baseURL: string | undefined,
+    pdfs: string[],
+    goldenCase: string,
+    targets: string[] = [],
+) {
     if (baseURL === undefined) {
         throw new Error("baseURL is set in playwright.config.ts");
     }
     const offOrigin = watchOffOrigin(page, new URL(baseURL).origin);
     await page.goto("/");
-    const target = page.getByLabel("Output schema (game line)");
-    await expect(target).toHaveValue("dh2");
-    await expect(target.locator("option")).toHaveCount(7);
     await page.getByLabel(/drop pdfs here/i).setInputFiles(pdfs.map((pdf) => resolve(repoRoot, pdf)));
     const chosen = page.getByRole("list", { name: "Chosen PDFs" }).getByRole("listitem");
     await expect(chosen).toHaveCount(pdfs.length);
+    // Each PDF has its own game-line picker, on the default line.
+    for (const [i, pdf] of pdfs.entries()) {
+        const line = chosen.nth(i).getByLabel(`Game line for ${basename(pdf)}`);
+        await expect(line).toHaveValue("dh2");
+        await expect(line.locator("option")).toHaveCount(7);
+        const target = targets[i];
+        if (target !== undefined) {
+            await line.selectOption(target);
+        }
+    }
     await page.getByRole("button", { name: "Convert" }).click();
 
     const link = page.getByRole("link", { name: /download module/i });
@@ -88,6 +105,16 @@ test("converts several PDFs in one run into one module", async ({ page, baseURL 
         baseURL,
         ["fixtures/rendered/images.pdf", "fixtures/rendered/field-manual.pdf"],
         "combined",
+    );
+});
+
+test("homologates an entity printed in two lines, each PDF in its chosen line", async ({ page, baseURL }) => {
+    await convertsLikeCli(
+        page,
+        baseURL,
+        ["fixtures/rendered/field-manual.pdf", "fixtures/rendered/field-manual.pdf"],
+        "cross-line",
+        ["dh2", "rt"],
     );
 });
 

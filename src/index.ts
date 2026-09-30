@@ -9,6 +9,7 @@ export {
     runEngine,
     runModule,
     readCacheKey,
+    type ModuleDocument,
     type ModuleOptions,
     type ModuleProgress,
     type ModuleResult,

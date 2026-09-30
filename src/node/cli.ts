@@ -13,12 +13,15 @@ import type { BuiltModule } from "../stages/module.ts";
 import { EXIT, makeConfig, type ConfigOverrides, type EngineConfig, type ExitCode } from "./config.ts";
 import { FileIrCache } from "./ir-cache.ts";
 import { FileOcrPageStore } from "./ocr-store.ts";
+import { targetedInputs, type TargetedInput } from "./target-args.ts";
 import { NodeTesseractEngine } from "./tesseract-node.ts";
 
 /**
  * CLI. The only content input is a complete PDF; the engine infers its
- * structure, and writes it in the target schema the user chooses (`--target`).
- * An encrypted input is refused with exit 3 and nothing is written.
+ * structure, and writes each PDF in the target schema the user chooses for it
+ * (`--target`). An entity printed in several lines' PDFs becomes one
+ * homologated document. An encrypted input is refused with exit 3 and
+ * nothing is written.
  */
 
 const USAGE = `foundry-pdf-parser <command> [options]
@@ -28,7 +31,8 @@ Commands:
   batch <dir> [dir...]     Convert every PDF under the directories (recursive) into one module.
 
 Options:
-  --target <line>          Output schema: ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
+  --target <line>          Output schema of the inputs after it, until the next --target:
+                           ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
   --out-dir <dir>          Where the module is written, e.g. Foundry's Data/modules
                            (default: <tmp>/foundry-pdf-parser/modules).
   --cache-dir <dir>        IR/OCR cache (default: <tmp>/foundry-pdf-parser/cache).
@@ -45,11 +49,16 @@ function isLogLevel(value: string): value is LogLevel {
 
 interface CliOptions {
     config: EngineConfig;
-    target: TargetSchema;
     dryRun: boolean;
 }
 
-function parseOptions(values: Record<string, string | boolean | undefined>): CliOptions | string {
+/** An input PDF and the output schema the user chose for it. */
+interface TargetedPdf {
+    path: string;
+    target: TargetSchema;
+}
+
+function parseOptions(values: Record<string, string | string[] | boolean | undefined>): CliOptions | string {
     const overrides: ConfigOverrides = {};
     const str = (key: string): string | undefined => {
         const v = values[key];
@@ -78,12 +87,25 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
         }
         overrides.logLevel = level;
     }
-    const targetId = str("target");
-    const target = targetId === undefined ? DEFAULT_TARGET : targetFor(targetId);
-    if (target === null) {
-        return `--target must be one of ${LINES.join(", ")}, got ${JSON.stringify(targetId)}`;
+    return { config: makeConfig(overrides), dryRun: values["dry-run"] === true };
+}
+
+interface ResolvedInput {
+    input: string;
+    target: TargetSchema;
+}
+
+/** Resolve each input's target id to its schema, or report the first unknown id. */
+function resolveTargets(inputs: readonly TargetedInput[]): ResolvedInput[] | string {
+    const out: ResolvedInput[] = [];
+    for (const { input, targetId } of inputs) {
+        const target = targetId === undefined ? DEFAULT_TARGET : targetFor(targetId);
+        if (target === null) {
+            return `--target must be one of ${LINES.join(", ")}, got ${JSON.stringify(targetId)}`;
+        }
+        out.push({ input, target });
     }
-    return { config: makeConfig(overrides), target, dryRun: values["dry-run"] === true };
+    return out;
 }
 
 function write(module: BuiltModule, config: EngineConfig, log: Logger): void {
@@ -97,15 +119,14 @@ function write(module: BuiltModule, config: EngineConfig, log: Logger): void {
 
 /** Convert the PDFs into one module; exit 3 when any was refused as encrypted. */
 async function convert(
-    pdfPaths: readonly string[],
+    pdfs: readonly TargetedPdf[],
     engine: OcrEngine,
     opts: CliOptions,
     log: Logger,
 ): Promise<ExitCode> {
     const result = await runModule(
-        pdfPaths.map((p) => new Uint8Array(readFileSync(p))),
+        pdfs.map(({ path, target }) => ({ pdf: new Uint8Array(readFileSync(path)), target })),
         {
-            target: opts.target,
             ocr: engine,
             ocrStore: new FileOcrPageStore(opts.config.cacheDir),
             irCache: new FileIrCache(opts.config.cacheDir),
@@ -114,7 +135,7 @@ async function convert(
         },
     );
     for (const index of result.refused) {
-        log.error(`${basename(pdfPaths[index] ?? "")}: refused — encrypted PDF; supply a decrypted file`);
+        log.error(`${basename(pdfs[index]?.path ?? "")}: refused — encrypted PDF; supply a decrypted file`);
     }
     for (const warning of result.warnings) {
         log.debug(warning);
@@ -150,11 +171,12 @@ async function main(): Promise<ExitCode> {
         process.stdout.write(USAGE);
         return command === undefined ? EXIT.ERROR : EXIT.SUCCESS;
     }
-    const { values, positionals } = parseArgs({
+    const { values, tokens } = parseArgs({
         args: rest,
         allowPositionals: true,
+        tokens: true,
         options: {
-            target: { type: "string" },
+            target: { type: "string", multiple: true },
             "out-dir": { type: "string" },
             "cache-dir": { type: "string" },
             "ocr-workers": { type: "string" },
@@ -168,12 +190,18 @@ async function main(): Promise<ExitCode> {
         return EXIT.ERROR;
     }
     const log = createLogger(opts.config.logLevel);
+    const inputs = resolveTargets(targetedInputs(tokens));
+    if (typeof inputs === "string") {
+        process.stderr.write(`${inputs}\n\n${USAGE}`);
+        return EXIT.ERROR;
+    }
 
-    let pdfs: string[];
-    if (command === "infer" && positionals.length > 0) {
-        pdfs = positionals.map((p) => resolve(p));
-    } else if (command === "batch" && positionals.length > 0) {
-        pdfs = findPdfs(positionals);
+    let pdfs: TargetedPdf[];
+    if (command === "infer" && inputs.length > 0) {
+        pdfs = inputs.map(({ input, target }) => ({ path: resolve(input), target }));
+    } else if (command === "batch" && inputs.length > 0) {
+        // Every PDF under a directory takes that directory's target.
+        pdfs = inputs.flatMap(({ input, target }) => findPdfs([input]).map((path) => ({ path, target })));
         log.info(`batch: ${pdfs.length} PDFs`);
     } else {
         process.stderr.write(USAGE);

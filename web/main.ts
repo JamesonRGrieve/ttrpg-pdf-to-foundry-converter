@@ -26,28 +26,48 @@ const progress = element("progress", HTMLProgressElement);
 const log = element("log", HTMLPreElement);
 const packs = element("packs", HTMLTableElement);
 const download = element("download", HTMLAnchorElement);
-const target = element("target", HTMLSelectElement);
 
-for (const line of LINES) {
-    const option = document.createElement("option");
-    option.value = line;
-    option.textContent = line;
-    option.selected = line === DEFAULT_LINE;
-    target.append(option);
+/** A chosen PDF and the control holding the game line the user picked for it. */
+interface ChosenPdf {
+    file: File;
+    line: HTMLSelectElement;
 }
 
-let chosen: File[] = [];
+let chosen: ChosenPdf[] = [];
 let worker: Worker | null = null;
 let zipUrl: string | null = null;
 
 const isPdf = (file: File): boolean => file.type === "application/pdf" || /\.pdf$/iu.test(file.name);
 
+/** A game-line picker for one PDF, defaulting to the system's default line. */
+function linePicker(file: File, index: number): HTMLSelectElement {
+    const select = document.createElement("select");
+    select.id = `line-${index}`;
+    select.setAttribute("aria-label", `Game line for ${file.name}`);
+    for (const line of LINES) {
+        const option = document.createElement("option");
+        option.value = line;
+        option.textContent = line;
+        option.selected = line === DEFAULT_LINE;
+        select.append(option);
+    }
+    return select;
+}
+
+function setPickersDisabled(disabled: boolean): void {
+    for (const { line } of chosen) {
+        line.disabled = disabled;
+    }
+}
+
 function choose(files: readonly File[]): void {
-    chosen = files.filter(isPdf);
+    chosen = files.filter(isPdf).map((file, i) => ({ file, line: linePicker(file, i) }));
     chosenList.replaceChildren(
-        ...chosen.map((file) => {
+        ...chosen.map(({ file, line }) => {
             const item = document.createElement("li");
-            item.textContent = file.name;
+            const name = document.createElement("span");
+            name.textContent = file.name;
+            item.append(name, " ", line);
             return item;
         }),
     );
@@ -108,20 +128,23 @@ function finish(): void {
     worker = null;
     convert.disabled = chosen.length === 0;
     input.disabled = false;
-    target.disabled = false;
+    setPickersDisabled(false);
 }
 
 async function start(): Promise<void> {
     if (chosen.length === 0) {
         return;
     }
-    const files = [...chosen];
+    const picked = [...chosen];
+    const files = picked.map(({ file }) => file);
     resetResult();
     convert.disabled = true;
     input.disabled = true;
-    target.disabled = true;
+    setPickersDisabled(true);
     status.textContent = `Reading ${files.length} PDF${files.length === 1 ? "" : "s"}…`;
-    const pdfs = await Promise.all(files.map((file) => file.arrayBuffer()));
+    const documents = await Promise.all(
+        picked.map(async ({ file, line }) => ({ pdf: await file.arrayBuffer(), target: line.value })),
+    );
     progress.max = files.length;
 
     const engine = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
@@ -131,8 +154,9 @@ async function start(): Promise<void> {
         switch (message.type) {
             case "ready": {
                 status.textContent = "Converting…";
-                const request: RunRequest = { type: "run", pdfs, target: target.value };
-                engine.postMessage(request, pdfs);
+                const request: RunRequest = { type: "run", documents };
+                const transfer = documents.map((d) => d.pdf);
+                engine.postMessage(request, transfer);
                 break;
             }
             case "log":

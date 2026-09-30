@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { infer } from "./infer/pipeline.ts";
+import { LINES, type Line } from "./infer/schema.ts";
 import type { TargetSchema } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
@@ -8,6 +9,7 @@ import { RENDERER_ID } from "./ocr/render.ts";
 import type { OcrEngine } from "./ocr/types.ts";
 import { emit, type EmittedPack } from "./stages/emit.ts";
 import { EXTRACTOR_ID, extract } from "./stages/extract.ts";
+import { homologate } from "./stages/homologate.ts";
 import { recoverImages } from "./stages/images.ts";
 import { type BuiltModule, buildModule, MODULE_ASSET_PLACEHOLDER } from "./stages/module.ts";
 import { normalize } from "./stages/normalize.ts";
@@ -135,9 +137,15 @@ export interface ModuleProgress {
     pages: number;
 }
 
-export type ModuleOptions = Omit<EngineOptions, "assetRefPrefix" | "onOcrPage"> & {
+export type ModuleOptions = Omit<EngineOptions, "assetRefPrefix" | "onOcrPage" | "target"> & {
     onProgress?: (progress: ModuleProgress) => void;
 };
+
+/** One PDF and the output schema the user chose for it. */
+export interface ModuleDocument {
+    pdf: Uint8Array;
+    target: TargetSchema;
+}
 
 export interface ModuleResult {
     /** The module, or null when every document was refused. */
@@ -158,39 +166,47 @@ function packLabel(pack: string, line: string): string {
 }
 
 /**
- * Convert several PDFs into one Foundry module in the target schema. The
- * module's bytes depend only on the documents' content, not the order given.
+ * Convert several PDFs, each in the target schema the user chose for it, into
+ * one Foundry module. An entity printed in several lines' PDFs becomes one
+ * homologated document. The module's bytes depend only on the documents'
+ * content and targets, not the order given.
  */
-export async function runModule(pdfs: readonly Uint8Array[], opts: ModuleOptions): Promise<ModuleResult> {
-    const results: EngineResult[] = [];
+export async function runModule(
+    documents: readonly ModuleDocument[],
+    opts: ModuleOptions,
+): Promise<ModuleResult> {
+    const results: (EngineResult & { line: Line })[] = [];
     const refused: number[] = [];
-    for (const [index, pdf] of pdfs.entries()) {
+    for (const [index, { pdf, target }] of documents.entries()) {
         const { onProgress, ...engineOpts } = opts;
         const result = await runEngine(pdf, {
             ...engineOpts,
+            target,
             assetRefPrefix: MODULE_ASSET_PLACEHOLDER,
             ...(onProgress === undefined
                 ? {}
                 : {
                       onOcrPage: (page: number, pages: number) =>
-                          onProgress({ document: index, documents: pdfs.length, page, pages }),
+                          onProgress({ document: index, documents: documents.length, page, pages }),
                   }),
         });
         if (result.encrypted) {
             refused.push(index);
         } else {
-            results.push(result);
+            results.push({ ...result, line: target.line });
         }
     }
     const warnings = results.flatMap((r) => r.warnings);
     if (results.length === 0) {
         return { module: null, refused, warnings };
     }
+    const homologated = homologate(results.map((r) => ({ line: r.line, packs: r.packs })));
+    const lines = new Set(results.map((r) => r.line));
     const module = buildModule({
-        packs: results.flatMap((r) =>
-            r.packs.map((p) => ({
+        packs: homologated.flatMap(({ line, packs }) =>
+            packs.map((p) => ({
                 name: p.pack,
-                label: packLabel(p.pack, opts.target.line),
+                label: packLabel(p.pack, line),
                 documentType: p.documentType,
                 documents: p.documents,
             })),
@@ -203,7 +219,8 @@ export async function runModule(pdfs: readonly Uint8Array[], opts: ModuleOptions
             extractor: EXTRACTOR_ID,
             renderer: RENDERER_ID,
             ocr: opts.ocr.id,
-            target: opts.target.line,
+            // One line reads as before; several list in the system's line order.
+            target: LINES.filter((l) => lines.has(l)).join(","),
         },
     });
     return { module, refused, warnings };

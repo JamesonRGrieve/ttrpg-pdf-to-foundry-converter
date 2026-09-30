@@ -2,12 +2,16 @@
 
 /** Messages between the page and the engine worker. */
 
+/** One PDF and the output schema (line id) the user chose for it. */
+export interface RunDocument {
+    pdf: ArrayBuffer;
+    target: string;
+}
+
 export interface RunRequest {
     type: "run";
-    /** The PDFs to convert into one module. */
-    pdfs: ArrayBuffer[];
-    /** The chosen output schema's line id. */
-    target: string;
+    /** The PDFs to convert into one module, each with its chosen line. */
+    documents: RunDocument[];
 }
 
 export interface PackSummary {
