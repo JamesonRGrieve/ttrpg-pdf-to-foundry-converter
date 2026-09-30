@@ -302,6 +302,35 @@ describe("row merging", () => {
             "Wick Cannon Broadside",
             "Lamp Battery",
         ]);
+        // …also straight under a section row set in another face.
+        const section = line(212, 1, "Lamps", "bold");
+        const underSection = [
+            section,
+            textLine(200, ["Wick", "", ""]),
+            textLine(194, ["Cannon", "All", "3"]),
+        ];
+        expect(mergeContinuationRows(underSection, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Lamps",
+            "Wick Cannon",
+        ]);
+    });
+
+    it("joins a line carrying the rest of a list cell that broke off, but not a numbered record", () => {
+        const rows = [
+            textLine(200, ["Wick Gun", "Accurate,", "3"]),
+            textLine(194, ["(Long)", "Tearing", ""]),
+            textLine(182, ["Lamp Gun", "Reliable", "4"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Wick Gun (Long)",
+            "Lamp Gun",
+        ]);
+        const bands = [
+            textLine(200, ["7", "The lamp gutters,", ""]),
+            textLine(194, ["8", "The wick snaps.", ""]),
+            textLine(188, ["9", "Darkness falls.", ""]),
+        ];
+        expect(mergeContinuationRows(bands, shape)).toHaveLength(3);
     });
 
     it("joins a line that wraps several unfinished cells, one of them mid-sentence", () => {
@@ -938,6 +967,16 @@ describe("table continuations", () => {
         // The same row with nothing tabular after it ends the table.
         const ending = [record(500), record(494), record(488), section(468), section(462)];
         expect(tableBody(ending, edges)).toHaveLength(3);
+        // A footnote among the records is skipped when records resume below it,
+        // and ends the table when none do.
+        const noteText = "Profile is for the lamp's own wick, not its reserve.";
+        const note = (y: number) => ({
+            y,
+            runs: [at("†", 0, y), { ...at(noteText, 8, y), width: 380, italic: true }],
+        });
+        const annotated = [record(500), record(494), note(488), section(482), record(476)];
+        expect(tableBody(annotated, edges)).toHaveLength(4);
+        expect(tableBody([record(500), record(494), note(488), prose(482)], edges)).toHaveLength(2);
         // Prose citing the table by its caption is no record.
         const citing = [record(500), record(494), { y: 488, runs: [at("Table 3-1: Lamps", 0, 488)] }];
         expect(tableBody(citing, edges)).toHaveLength(2);

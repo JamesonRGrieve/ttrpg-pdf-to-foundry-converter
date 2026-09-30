@@ -89,6 +89,13 @@ function continuesStructurally(
         return (line[0] ?? "").trim().length > 0 && typicalFill > 1;
     }
     const unfinishedAbove = (col: number): boolean => UNFINISHED.test(above[col] ?? "");
+    // Every cell it fills goes on from a cell above that broke off mid-list:
+    // the line carries the rest of that list, whatever its case — unless its
+    // key is a number (a roll band opens its own record).
+    const key = (line[0] ?? "").trim();
+    if (!/^\p{N}/u.test(key) && others.every(({ col }) => breaksOff(above[col] ?? ""))) {
+        return true;
+    }
     // A lower-case word, not a value such as "x1/2".
     const carriesOn = others.some(({ text, col }) => /^\p{Ll}{2,}/u.test(text) && unfinishedAbove(col));
     return carriesOn && others.every(({ text, col }) => unfinishedAbove(col) || /^\p{Ll}/u.test(text));
@@ -156,16 +163,14 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             leads.delete(prev);
             return;
         }
-        if (prev === undefined || gap === undefined || !sameFaces(prev, row)) {
-            out.push({ ...row, runs: [...row.runs] });
-            return;
-        }
         const line = shape.cells(row);
-        // A name on its own line, nearer the record below than the one above,
-        // is that record's first line: its values sit beside its last line.
+        // A name on its own line, nearer the record below than the line above
+        // (a record or a section row), is that record's first line: its
+        // values sit beside its last line.
         const next = rows[i + 1];
         const gapBelow = gaps[i];
         if (
+            gap !== undefined &&
             filled(line) === 1 &&
             (line[0] ?? "").trim().length > 0 &&
             next !== undefined &&
@@ -177,6 +182,10 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             const lead = { ...row, runs: [...row.runs] };
             leads.add(lead);
             out.push(lead);
+            return;
+        }
+        if (prev === undefined || gap === undefined || !sameFaces(prev, row)) {
+            out.push({ ...row, runs: [...row.runs] });
             return;
         }
         const above = shape.cells(prev);

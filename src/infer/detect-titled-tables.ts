@@ -609,6 +609,18 @@ function opensWithLabel(line: RawRow): boolean {
     return first?.weight === "bold" && /:\s*$/u.test(first.text);
 }
 
+/** A note marker leading a line: "†", "††", "*". */
+const LEADING_NOTE_MARKER = /^[†‡*§¶]+/u;
+
+/** A footnote line: led by a note marker, or set wholly in italics. */
+function isNoteLine(line: RawRow): boolean {
+    const visible = [...line.runs].sort((a, b) => a.x - b.x).filter((r) => r.text.trim().length > 0);
+    const first = visible[0];
+    return (
+        first !== undefined && (LEADING_NOTE_MARKER.test(first.text.trim()) || visible.every((r) => r.italic))
+    );
+}
+
 /** Cut the lines below a header where the table visibly ends. */
 export function tableBody(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
     const gaps = lines.slice(1).map((l, i) => (lines[i]?.y ?? l.y) - l.y);
@@ -672,6 +684,12 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
         // below it belong to what the heading opens (the next table).
         const narrow = colBoundaries.length < 2 * MIN_COLUMNS;
         const heading = displayed && ((narrow && wide(gapBefore)) || !resumes(record, isProse));
+        // A footnote set among the records (led by a note marker, or wholly
+        // in italics) is no record, but the table goes on past it when
+        // records resume below it.
+        if (proseRun && isNoteLine(line) && resumes(record, never)) {
+            continue;
+        }
         if (proseRun || proseKey || setApart || heading) {
             break;
         }
