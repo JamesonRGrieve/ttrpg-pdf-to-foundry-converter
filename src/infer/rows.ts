@@ -6,11 +6,13 @@ import {
     parseAvailability,
     parseCoverage,
     parseDamage,
+    parseHullTypes,
     parseInteger,
     parseQualities,
     parseRange,
     parseRateOfFire,
     parseReload,
+    parseShipPower,
     parseWeaponClass,
     parseWeight,
     BODY_LOCATIONS,
@@ -156,6 +158,28 @@ function forceField(cells: RowCells): RowMapping {
         out.variantized["overloadMax"] = band.max;
     }
     commonPhysical(out, cells);
+    return out;
+}
+
+/** A ship component: the hulls it fits, the power it draws or makes, its space and ship points. */
+function shipComponent(cells: RowCells): RowMapping {
+    const out = mapping();
+    const hulls = read(out, cells, "hullTypes", parseHullTypes);
+    if (hulls !== null) {
+        out.system["hullType"] = hulls;
+    }
+    const power = read(out, cells, "power", parseShipPower);
+    if (power !== null) {
+        out.system["power"] = power;
+    }
+    const space = read(out, cells, "space", parseInteger);
+    if (space !== null) {
+        out.system["space"] = space;
+    }
+    const points = read(out, cells, "shipPoints", parseInteger);
+    if (points !== null) {
+        out.system["shipPoints"] = points;
+    }
     return out;
 }
 
@@ -335,5 +359,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "malignancy":
         case "mentalDisorder":
             return effectItem(cells, "effect", PHYSICAL_EFFECT.has(type));
+        case "shipComponent":
+            return shipComponent(cells);
     }
 }

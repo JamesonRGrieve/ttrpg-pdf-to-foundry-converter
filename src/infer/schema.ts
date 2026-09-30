@@ -37,7 +37,8 @@ export type ItemType =
     | "condition"
     | "mutation"
     | "malignancy"
-    | "mentalDisorder";
+    | "mentalDisorder"
+    | "shipComponent";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -58,9 +59,23 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     mutation: "items-mutations",
     malignancy: "items-malignancies",
     mentalDisorder: "items-mental-disorders",
+    shipComponent: "items-ship-components",
 };
 
 export const ACTOR_SEGMENT = "actors-bestiary";
+
+/** The system's ship hull types (the ship component `hullType` choices). */
+export const HULL_TYPES = [
+    "transport",
+    "raider",
+    "frigate",
+    "light-cruiser",
+    "cruiser",
+    "battlecruiser",
+    "grand-cruiser",
+] as const;
+/** The `hullType` choice for a component fitting every hull. */
+export const ALL_HULLS = "all";
 
 /** A character-creation step of the target line (see `targets.ts`). */
 export interface OriginStep {

@@ -6,6 +6,7 @@ import {
     isAttributeScale,
     mergedHeaderRoles,
     normalizeHeader,
+    shipPowerRoles,
 } from "../../src/infer/columns.ts";
 import {
     detectEntries,
@@ -18,7 +19,13 @@ import {
 } from "../../src/infer/detect-entries.ts";
 import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
-import { entryItem, entryType, headingKindTag, typeNamedBy } from "../../src/infer/entry-types.ts";
+import {
+    entryItem,
+    entryType,
+    headingKindTag,
+    joinSkillCharacteristics,
+    typeNamedBy,
+} from "../../src/infer/entry-types.ts";
 import {
     cleanName,
     endsMidSentence,
@@ -128,6 +135,17 @@ describe("columns", () => {
         expect(isAdvanceList(["name", "weight", "cost", "availability"])).toBe(false);
         expect(isAttributeScale(["roll"])).toBe(false);
         expect(isAttributeScale(null)).toBe(false);
+    });
+
+    it("reads a Power column as power only in a table of ship components", () => {
+        const headers = ["Lamp Components", "Power", "Space", "SP"];
+        const roles = headers.map((h) => {
+            const role = headerRole(h);
+            return role === null ? null : [role];
+        });
+        expect(roles[1]).toEqual(["name"]);
+        expect(shipPowerRoles(roles, headers)).toEqual([null, ["power"], ["space"], ["shipPoints"]]);
+        expect(shipPowerRoles([["name"], null], ["Power", "Threshold"])).toEqual([["name"], null]);
     });
 });
 
@@ -768,6 +786,22 @@ describe("entry typing", () => {
         expect(entryItem(entry("WARM HAND (TALENT)", [], lore), "talent").name).toBe("Warm Hand");
         expect(entryType(entry("Ember Storm (Unique Psy Power)", [], lore))).toBe("psychicPower");
         expect(entryType(entry("NEW TALENT: WICK USE (LAMPWRIGHT)", [], lore))).toBe("talent");
+        // A skill tagged with its type, its characteristic printed as the next heading.
+        const [skill, ...rest] = joinSkillCharacteristics([
+            entry("WICKCRAFT (ADVANCED, MOVEMENT)", [], lore, ""),
+            entry("Agility", [["Skill Use", "Full Action"]], lore, "Trimming wicks in the dark."),
+            entry("OTHER", [], lore),
+        ]);
+        expect(rest.map((e) => e.heading.text)).toEqual(["OTHER"]);
+        expect(skill !== undefined && entryType(skill)).toBe("skill");
+        const item = skill === undefined ? null : entryItem(skill, "skill");
+        expect(item?.name).toBe("Wickcraft");
+        expect(item?.system).toMatchObject({
+            characteristic: "agility",
+            skillType: "advanced",
+            isBasic: false,
+        });
+        expect(item?.variantized["uses"]).toBe("Trimming wicks in the dark.");
         expect(entryItem(entry("TALENT: WARM HAND", [], lore), "talent").name).toBe("Warm Hand");
         // What a talent covers is no tag.
         expect(headingKindTag("Resistance (Psychic Powers)")).toBeNull();

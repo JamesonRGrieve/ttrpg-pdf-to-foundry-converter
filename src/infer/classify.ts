@@ -46,6 +46,11 @@ export function classifyTable(table: DetectedTable): Classification {
         return { contentType: "unknown", confidence: 0 };
     }
 
+    // A ship component's space and ship points appear in no other table kind.
+    if (headers.includes("space") && headers.some((h) => h === "sp" || h === "ship points")) {
+        return { contentType: "ship-component", confidence: 0.9 };
+    }
+
     const weaponScore = headerOverlap(headers, WEAPON_HEADERS);
     // Rate of fire, weapon class, reload and clip appear in no other table kind.
     if (

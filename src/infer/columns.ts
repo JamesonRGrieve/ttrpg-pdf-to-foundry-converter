@@ -36,7 +36,11 @@ export type Role =
     | "sustained"
     | "subtype"
     | "roll"
-    | "advance";
+    | "advance"
+    | "space"
+    | "shipPoints"
+    | "hullTypes"
+    | "power";
 
 /** Normalized header text (or a word within it) → role. Order matters: first match wins. */
 const HEADER_ROLES: readonly [RegExp, Role][] = [
@@ -69,7 +73,25 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(subtype|sub type|keywords?)$/u, "subtype"],
     [/^(d\d+|roll|result)$/u, "roll"],
     [/^advances?$/u, "advance"],
+    [/^space$/u, "space"],
+    [/^(sp|ship points)$/u, "shipPoints"],
+    [/^(appropriate )?hull types?$/u, "hullTypes"],
 ];
+
+/**
+ * In a table of ship components — one with space and ship-point columns — a
+ * "Power" column is the power a component draws or makes, not a name.
+ */
+export function shipPowerRoles(
+    roles: readonly (readonly Role[] | null)[],
+    headers: readonly string[],
+): (Role[] | null)[] {
+    const flat = roles.flatMap((r) => r ?? []);
+    const shipTable = flat.includes("space") && flat.includes("shipPoints");
+    return roles.map((r, i) =>
+        shipTable && normalizeHeader(headers[i] ?? "") === "power" ? ["power"] : r === null ? null : [...r],
+    );
+}
 
 export function normalizeHeader(header: string): string {
     return (

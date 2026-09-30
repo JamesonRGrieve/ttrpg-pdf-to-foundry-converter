@@ -18,6 +18,14 @@ describe("table classification", () => {
         expect(classifyTable(table(["Name", "Weight", "Availability"])).contentType).toBe("gear");
     });
 
+    it("recognises ship components by their space and ship points", () => {
+        expect(
+            classifyTable(table(["Lamp Components", "Appropriate Hull Types", "Power", "Space", "SP"]))
+                .contentType,
+        ).toBe("ship-component");
+        expect(classifyTable(table(["Name", "Space"])).contentType).not.toBe("ship-component");
+    });
+
     it("matches acquisition signals as whole header words, not inside other words", () => {
         expect(classifyTable(table(["Time Required", "Bonus", "Penalty"])).contentType).toBe("unknown");
         expect(classifyTable(table(["Item", "Req"])).contentType).toBe("gear");

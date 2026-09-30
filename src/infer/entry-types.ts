@@ -58,6 +58,54 @@ export function withoutKindTag(heading: string): string {
     return heading.replace(KIND_TAG, "").trim().replace(KIND_PREFIX, "");
 }
 
+/**
+ * A skill heading tagged with its schema skill type and any descriptors:
+ * "ACROBATICS (ADVANCED, MOVEMENT)", "CAROUSE (BASIC)".
+ */
+const SKILL_TYPE_TAG = /\s*\(\s*(basic|advanced)\b[^()]*\)\s*$/iu;
+
+/** The schema skill type a heading tags itself with, if any. */
+export function skillTypeTag(heading: string): "basic" | "advanced" | null {
+    const word = SKILL_TYPE_TAG.exec(heading)?.[1]?.toLowerCase();
+    return word === "basic" || word === "advanced" ? word : null;
+}
+
+/** Label of the field a skill's characteristic is carried in when printed as its own heading. */
+const CHARACTERISTIC_FIELD = "Characteristic";
+
+/**
+ * Skills whose characteristic is printed as a heading of its own directly
+ * under the skill's ("ACROBATICS (ADVANCED, MOVEMENT)" then "Agility"): the
+ * characteristic heading carries the skill's prose and fields, so the two
+ * read as one entry, the characteristic kept as a field.
+ */
+export function joinSkillCharacteristics(entries: readonly Entry[]): Entry[] {
+    const out: Entry[] = [];
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const next = entries[i + 1];
+        if (entry === undefined) {
+            continue;
+        }
+        const characteristic = next?.heading.text.trim().toLowerCase() ?? "";
+        if (
+            next !== undefined &&
+            skillTypeTag(entry.heading.text) !== null &&
+            CHARACTERISTICS[characteristic] !== undefined
+        ) {
+            out.push({
+                ...entry,
+                fields: [[CHARACTERISTIC_FIELD, next.heading.text.trim()], ...entry.fields, ...next.fields],
+                body: [entry.body, next.body].filter((b) => b.length > 0).join("\n\n"),
+            });
+            i += 1;
+            continue;
+        }
+        out.push(entry);
+    }
+    return out;
+}
+
 /** Characteristic names and abbreviations as printed → the schema's characteristic keys. */
 export const CHARACTERISTICS: Readonly<Record<string, string>> = {
     "weapon skill": "weaponSkill",
@@ -186,6 +234,9 @@ export function entryType(entry: Entry): ItemType | null {
     if (tagged !== null) {
         return tagged;
     }
+    if (skillTypeTag(entry.heading.text) !== null) {
+        return "skill";
+    }
     if (has(fields, "focus power", "sustained", "sustain", "psychic power")) {
         return "psychicPower";
     }
@@ -257,7 +308,12 @@ const splitList = (s: string): string[] =>
 /** Build the item body for a typed entry. */
 export function entryItem(entry: Entry, type: ItemType): EntryItem {
     const fields = fieldMap(entry);
-    const { name, characteristic } = splitCharacteristic(withoutKindTag(entry.heading.text));
+    const skillType = skillTypeTag(entry.heading.text);
+    const { name, characteristic: headed } = splitCharacteristic(
+        withoutKindTag(entry.heading.text).replace(SKILL_TYPE_TAG, ""),
+    );
+    const printedCharacteristic = fields.get(fieldKey(CHARACTERISTIC_FIELD))?.toLowerCase() ?? "";
+    const characteristic = headed ?? CHARACTERISTICS[printedCharacteristic] ?? null;
     const html = toHtml(entry.body);
     const system: JsonObject = {};
     const variantized: Record<string, JsonValue> = {};
@@ -302,6 +358,10 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "skill": {
             if (characteristic !== null) {
                 system["characteristic"] = characteristic;
+            }
+            if (skillType !== null) {
+                system["skillType"] = skillType;
+                system["isBasic"] = skillType === "basic";
             }
             system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? "");
             variantized["uses"] = entry.body;

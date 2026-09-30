@@ -67,6 +67,7 @@ export type ContentType =
     | "malignancy"
     | "mental-disorder"
     | "rolltable"
+    | "ship-component"
     | "unknown";
 
 export interface Classification {

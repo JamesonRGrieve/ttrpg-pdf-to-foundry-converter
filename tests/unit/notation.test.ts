@@ -5,11 +5,13 @@ import {
     parseAvailability,
     parseCoverage,
     parseDamage,
+    parseHullTypes,
     parseInteger,
     parseQualities,
     parseRange,
     parseRateOfFire,
     parseReload,
+    parseShipPower,
     parseWeaponClass,
     parseWeight,
 } from "../../src/infer/notation.ts";
@@ -138,5 +140,22 @@ describe("parseWeaponClass", () => {
         expect(parseWeaponClass("Basic")).toBe("basic");
         expect(parseWeaponClass("Pistol/Melee")).toBe("pistol");
         expect(parseWeaponClass("Something")).toBeNull();
+    });
+});
+
+describe("ship component cells", () => {
+    it("reads power drawn, or made when signed", () => {
+        expect(parseShipPower("4")).toEqual({ used: 4, generated: 0 });
+        expect(parseShipPower("+40")).toEqual({ used: 0, generated: 40 });
+        expect(parseShipPower("—")).toEqual({ used: 0, generated: 0 });
+        expect(parseShipPower("a lot")).toBeNull();
+    });
+
+    it("reads hull types onto the schema's choices", () => {
+        expect(parseHullTypes("All Ships")).toEqual(["all"]);
+        expect(parseHullTypes("Raiders, Frigates")).toEqual(["raider", "frigate"]);
+        expect(parseHullTypes("Light Cruisers, Cruisers")).toEqual(["light-cruiser", "cruiser"]);
+        expect(parseHullTypes("Transports and Cruisers")).toEqual(["transport", "cruiser"]);
+        expect(parseHullTypes("Lamp Boats")).toBeNull();
     });
 });

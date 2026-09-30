@@ -13,13 +13,14 @@ import {
     mergedHeaderRoles,
     normalizeHeader,
     type Role,
+    shipPowerRoles,
 } from "./columns.ts";
 import { detectEntries, type Entry } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
 import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
-import { entryItem, entryType, typeNamedBy } from "./entry-types.ts";
+import { entryItem, entryType, joinSkillCharacteristics, typeNamedBy } from "./entry-types.ts";
 import {
     cleanName,
     endsMidSentence,
@@ -96,6 +97,7 @@ const TABLE_ITEM_TYPE: Partial<Record<ContentType, ItemType>> = {
     trait: "trait",
     skill: "skill",
     "psychic-power": "psychicPower",
+    "ship-component": "shipComponent",
     "critical-injury": "criticalInjury",
     condition: "condition",
     mutation: "mutation",
@@ -174,10 +176,13 @@ class EntityCollector {
 
 /** Resolve a table's headers to roles; merged headers ("Clip Rld") yield several. */
 function columnRoles(table: DetectedTable): (Role[] | null)[] {
-    return table.headers.map((h) => {
-        const role = headerRole(h);
-        return role === null ? mergedHeaderRoles(h) : [role];
-    });
+    return shipPowerRoles(
+        table.headers.map((h) => {
+            const role = headerRole(h);
+            return role === null ? mergedHeaderRoles(h) : [role];
+        }),
+        table.headers,
+    );
 }
 
 /** One data row → cells keyed by role, splitting merged columns on whitespace. */
@@ -1022,7 +1027,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const descriptions = new Map<string, string>();
     const { tables, unclassified, tableRuns } = extractTables(ir, out, log);
     const detected = detectEntries(ir, tableRuns);
-    const entries = extractEntries(detected, out, descriptions);
+    const entries = extractEntries(joinSkillCharacteristics(detected), out, descriptions);
     const grids = extractActors(ir, detected, out);
     extractOriginPaths(detected, out);
     fitModifications(out.entities, line, book);

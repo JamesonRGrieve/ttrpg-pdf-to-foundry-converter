@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NOTE_MARKERS } from "../util/text.ts";
+import { ALL_HULLS, HULL_TYPES } from "./schema.ts";
 
 /**
  * Parsers for the generic d100 stat notation printed in stat tables — dice
@@ -140,6 +141,41 @@ export function parseInteger(raw: string): number | null {
         return 0;
     }
     return /^[+-]?\d+$/u.test(text) ? Number(text) : null;
+}
+
+/**
+ * A ship component's power cell: a plain number is power it draws, a signed
+ * one ("+40") power it makes.
+ */
+export function parseShipPower(raw: string): { used: number; generated: number } | null {
+    const text = clean(raw);
+    if (isEmptyCell(text)) {
+        return { used: 0, generated: 0 };
+    }
+    const m = /^(\+)?(\d+)$/u.exec(text);
+    if (m === null) {
+        return null;
+    }
+    const value = Number(m[2]);
+    return m[1] === "+" ? { used: 0, generated: value } : { used: value, generated: 0 };
+}
+
+const HULL_TYPE_SET: ReadonlySet<string> = new Set(HULL_TYPES);
+
+/**
+ * Hull types as printed ("Raiders, Frigates", "Light Cruisers, Cruisers",
+ * "All Ships") → the schema's hull type choices; null when a named type is not one.
+ */
+export function parseHullTypes(raw: string): string[] | null {
+    const text = clean(raw).toLowerCase();
+    if (/^all\b/u.test(text)) {
+        return [ALL_HULLS];
+    }
+    const types = text
+        .split(/,|\band\b/u)
+        .map((t) => t.trim().replace(/s$/u, "").replace(/\s+/gu, "-"))
+        .filter((t) => t.length > 0);
+    return types.length > 0 && types.every((t) => HULL_TYPE_SET.has(t)) ? types : null;
 }
 
 /**
