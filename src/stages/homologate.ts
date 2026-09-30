@@ -30,10 +30,11 @@ export interface LineDocuments {
 /**
  * Per kind, the `system` fields that must agree before two lines' documents
  * are one entity. An empty list: the kind itself identifies it (a talent is a
- * talent in every line).
+ * talent in every line; a skill too, though lines may test it against
+ * different characteristics, which then stay per line).
  */
 const IDENTITY_FIELDS: Readonly<Record<string, readonly string[]>> = {
-    skill: ["characteristic"],
+    skill: [],
     weapon: ["class"],
     psychicPower: ["subtype"],
     talent: [],

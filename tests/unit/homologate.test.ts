@@ -72,11 +72,27 @@ describe("homologation", () => {
         });
     });
 
+    it("keeps a skill's characteristic per line when the lines test it differently", () => {
+        const [merged] = docsOf(
+            homologate([
+                reading("rt", [skill("rt", "rtid", "fellowship", "Haggle.")]),
+                reading("dh2", [skill("dh2", "dh2id", "intelligence", "Appraise.")]),
+            ])[0],
+        );
+        const system = Object(merged?.["system"]);
+        expect(system["characteristic"]).toEqual({ dh2: "intelligence", rt: "fellowship" });
+    });
+
     it("never merges by name alone", () => {
-        // Identity fields disagree: two different skills.
+        // Identity fields disagree: a pistol and a basic weapon of one name are two weapons.
+        const weapon = (line: Line, id: string, cls: string): JsonObject => ({
+            ...skill(line, id, "x", "y"),
+            type: "weapon",
+            system: { class: cls, source: { [line]: { provenance: "raw", book: "b", page: "1" } } },
+        });
         const apart = homologate([
-            reading("rt", [skill("rt", "rtid", "perception", "Spot lamps.")]),
-            reading("dh2", [skill("dh2", "dh2id", "intelligence", "Trim wicks.")]),
+            reading("rt", [weapon("rt", "rtid", "pistol")], "items-weapons"),
+            reading("dh2", [weapon("dh2", "dh2id", "basic")], "items-weapons"),
         ]);
         expect(docsOf(apart[0])[0]?.["_id"]).toBe("rtid");
         expect(docsOf(apart[1])[0]?.["_id"]).toBe("dh2id");
