@@ -26,6 +26,14 @@ describe("table classification", () => {
         expect(classifyTable(table(["Name", "Space"])).contentType).not.toBe("ship-component");
     });
 
+    it("recognises ship weapons by their damage, and no modifier table as ship items", () => {
+        const weapons = ["Lamp Weapons", "Appropriate Hull Types", "Power", "Space", "SP", "Strength Damage"];
+        expect(classifyTable(table(weapons)).contentType).toBe("ship-weapon");
+        const modifiers = ["Craftsmanship", "Strength", "Damage", "Space", "SP"];
+        expect(classifyTable(table(modifiers)).contentType).not.toBe("ship-weapon");
+        expect(classifyTable(table(modifiers)).contentType).not.toBe("ship-component");
+    });
+
     it("matches acquisition signals as whole header words, not inside other words", () => {
         expect(classifyTable(table(["Time Required", "Bonus", "Penalty"])).contentType).toBe("unknown");
         expect(classifyTable(table(["Item", "Req"])).contentType).toBe("gear");

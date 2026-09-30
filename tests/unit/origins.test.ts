@@ -67,8 +67,10 @@ describe("origin list parsing", () => {
             npc: "rt-npc",
             terracraft: "rt-terracraft",
             aircraft: "rt-aircraft",
+            voidcraft: "rt-voidcraft",
         });
         expect(TARGETS.dh1.actorTypes.aircraft).toBe("aircraft");
+        expect(TARGETS.dh1.actorTypes.voidcraft).toBe("voidcraft");
         expect(DEFAULT_TARGET.actorTypes.npc).toBe("dh2-npc");
     });
 

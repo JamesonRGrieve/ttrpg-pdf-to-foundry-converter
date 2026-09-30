@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject } from "../types/entity.ts";
+import { labelPairs, labelPanel } from "./label-panel.ts";
 import { parseAvailability } from "./notation.ts";
 
 /**
@@ -32,10 +33,7 @@ const PANEL_LABELS = [
     "vehicle traits",
 ] as const;
 // A label may drop its colon when a number follows it directly ("REAR 16").
-const PANEL_LABEL = new RegExp(
-    `(?<![\\p{L}])(${PANEL_LABELS.join("|").replace(/ /gu, "\\s+")})(?:\\s*:\\s*|\\s+(?=[+-]?\\d))`,
-    "giu",
-);
+const PANEL = labelPanel(PANEL_LABELS, true);
 
 /** The size scale of the system's vehicle-size configuration, smallest first (1–10). */
 const SIZE_SCALE = [
@@ -83,22 +81,7 @@ const PROFILE_LABELS = ["integrity", "front", "side", "rear"] as const;
  * occurrence wins). A value runs to the next label on its line.
  */
 export function panelPairs(text: string): Map<string, string> {
-    const pairs = new Map<string, string>();
-    for (const line of text.split("\n")) {
-        const hits = [...line.matchAll(PANEL_LABEL)];
-        hits.forEach((m, i) => {
-            const label = (m[1] ?? "").toLowerCase().replace(/\s+/gu, " ");
-            const end = hits[i + 1]?.index ?? line.length;
-            const value = line
-                .slice(m.index + m[0].length, end)
-                .replace(/\s+/gu, " ")
-                .trim();
-            if (!pairs.has(label)) {
-                pairs.set(label, value);
-            }
-        });
-    }
-    return pairs;
+    return labelPairs(text, PANEL);
 }
 
 /** Whether labelled text is a vehicle profile: armour facings and structural integrity. */

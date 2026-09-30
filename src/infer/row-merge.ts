@@ -146,14 +146,39 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
     const typicalFill = mode(recordFills.length > 0 ? recordFills : fills);
     const fullest = Math.max(...rows.map((r) => filled(shape.cells(r))));
     const out: T[] = [];
+    // Key-only lines that open the record below them.
+    const leads = new Set<T>();
     rows.forEach((row, i) => {
         const prev = out[out.length - 1];
         const gap = gaps[i - 1];
+        if (prev !== undefined && leads.has(prev) && sameFaces(prev, row)) {
+            prev.runs.push(...row.runs);
+            leads.delete(prev);
+            return;
+        }
         if (prev === undefined || gap === undefined || !sameFaces(prev, row)) {
             out.push({ ...row, runs: [...row.runs] });
             return;
         }
         const line = shape.cells(row);
+        // A name on its own line, nearer the record below than the one above,
+        // is that record's first line: its values sit beside its last line.
+        const next = rows[i + 1];
+        const gapBelow = gaps[i];
+        if (
+            filled(line) === 1 &&
+            (line[0] ?? "").trim().length > 0 &&
+            next !== undefined &&
+            gapBelow !== undefined &&
+            gapBelow < gap &&
+            filled(shape.cells(next)) >= typicalFill &&
+            sameFaces(row, next)
+        ) {
+            const lead = { ...row, runs: [...row.runs] };
+            leads.add(lead);
+            out.push(lead);
+            return;
+        }
         const above = shape.cells(prev);
         // A capitalised key opens a record unless the line is a mere fragment —
         // at most a third of a typical row's cells — at the leading inside a row.

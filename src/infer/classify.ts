@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { normalizeHeader } from "./columns.ts";
+import { headerRole, normalizeHeader } from "./columns.ts";
 import type { Classification, ContentType, DetectedTable } from "./types.ts";
 
 /**
@@ -46,9 +46,17 @@ export function classifyTable(table: DetectedTable): Classification {
         return { contentType: "unknown", confidence: 0 };
     }
 
-    // A ship component's space and ship points appear in no other table kind.
-    if (headers.includes("space") && headers.some((h) => h === "sp" || h === "ship points")) {
-        return { contentType: "ship-component", confidence: 0.9 };
+    // A ship component's space, ship points and hull types appear together in
+    // no other table kind (a table of modifiers to them lists no hulls); one
+    // that also prints damage is a ship weapon.
+    if (
+        headers.includes("space") &&
+        headers.some((h) => h === "sp" || h === "ship points") &&
+        headers.some((h) => headerRole(h) === "hullTypes")
+    ) {
+        // Damage may share a merged header ("Strength Damage").
+        const armed = headers.some((h) => h.split(" ").some((w) => headerRole(w) === "damage"));
+        return { contentType: armed ? "ship-weapon" : "ship-component", confidence: 0.9 };
     }
 
     const weaponScore = headerOverlap(headers, WEAPON_HEADERS);

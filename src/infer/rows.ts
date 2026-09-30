@@ -13,6 +13,7 @@ import {
     parseRateOfFire,
     parseReload,
     parseShipPower,
+    parseShipWeaponType,
     parseWeaponClass,
     parseWeight,
     BODY_LOCATIONS,
@@ -163,14 +164,20 @@ function forceField(cells: RowCells): RowMapping {
 
 /** A ship component: the hulls it fits, the power it draws or makes, its space and ship points. */
 function shipComponent(cells: RowCells): RowMapping {
+    const out = shipFit(cells);
+    const power = read(out, cells, "power", parseShipPower);
+    if (power !== null) {
+        out.system["power"] = power;
+    }
+    return out;
+}
+
+/** What any ship component takes to fit: the hulls it fits, its space and ship points. */
+function shipFit(cells: RowCells): RowMapping {
     const out = mapping();
     const hulls = read(out, cells, "hullTypes", parseHullTypes);
     if (hulls !== null) {
         out.system["hullType"] = hulls;
-    }
-    const power = read(out, cells, "power", parseShipPower);
-    if (power !== null) {
-        out.system["power"] = power;
     }
     const space = read(out, cells, "space", parseInteger);
     if (space !== null) {
@@ -179,6 +186,40 @@ function shipComponent(cells: RowCells): RowMapping {
     const points = read(out, cells, "shipPoints", parseInteger);
     if (points !== null) {
         out.system["shipPoints"] = points;
+    }
+    return out;
+}
+
+/**
+ * A ship weapon: a ship component that also strikes — its strength, damage
+ * (one dice expression), critical rating and range; its weapon type is the
+ * table's group row naming it ("Lances").
+ */
+function shipWeapon(cells: RowCells): RowMapping {
+    const out = shipFit(cells);
+    // A weapon draws power; its schema field is the amount drawn.
+    const power = read(out, cells, "power", parseShipPower);
+    if (power !== null) {
+        out.system["power"] = power.used;
+    }
+    const weaponType = read(out, cells, "type", parseShipWeaponType);
+    if (weaponType !== null) {
+        out.system["weaponType"] = weaponType;
+    }
+    for (const [role, key] of [
+        ["strength", "strength"],
+        ["crit", "crit"],
+        ["range", "range"],
+    ] as const) {
+        const value = read(out, cells, role, parseInteger);
+        if (value !== null) {
+            out.system[key] = value;
+        }
+    }
+    const damage = read(out, cells, "damage", parseDamage);
+    if (damage !== null) {
+        const bonus = damage.bonus === 0 ? "" : `${damage.bonus > 0 ? "+" : ""}${damage.bonus}`;
+        out.system["damage"] = `${damage.formula}${bonus}`;
     }
     return out;
 }
@@ -361,5 +402,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
             return effectItem(cells, "effect", PHYSICAL_EFFECT.has(type));
         case "shipComponent":
             return shipComponent(cells);
+        case "shipWeapon":
+            return shipWeapon(cells);
     }
 }

@@ -6,7 +6,7 @@ import {
     isAttributeScale,
     mergedHeaderRoles,
     normalizeHeader,
-    shipPowerRoles,
+    shipTableRoles,
 } from "../../src/infer/columns.ts";
 import {
     detectEntries,
@@ -16,6 +16,7 @@ import {
     type TextLine,
     valueUnfinished,
     withoutFigures,
+    withoutOverprints,
 } from "../../src/infer/detect-entries.ts";
 import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
@@ -144,8 +145,18 @@ describe("columns", () => {
             return role === null ? null : [role];
         });
         expect(roles[1]).toEqual(["name"]);
-        expect(shipPowerRoles(roles, headers)).toEqual([null, ["power"], ["space"], ["shipPoints"]]);
-        expect(shipPowerRoles([["name"], null], ["Power", "Threshold"])).toEqual([["name"], null]);
+        expect(shipTableRoles(roles, headers)).toEqual([null, ["power"], ["space"], ["shipPoints"]]);
+        expect(shipTableRoles([["name"], null], ["Power", "Threshold"])).toEqual([["name"], null]);
+    });
+
+    it("reads a ship weapon's strength and crit rating only in a ship table", () => {
+        const headers = ["Lamp Weapons", "Space", "SP", "Strength", "Crit Rating"];
+        const roles = headers.map((h) => {
+            const role = headerRole(h);
+            return role === null ? null : [role];
+        });
+        expect(shipTableRoles(roles, headers).slice(3)).toEqual([["strength"], ["crit"]]);
+        expect(shipTableRoles([null, null], ["Strength", "Crit Rating"])).toEqual([null, null]);
     });
 });
 
@@ -276,6 +287,20 @@ describe("row merging", () => {
             "Glimmer Device",
             "Wick Bomb",
             "Lamp Mine",
+        ]);
+    });
+
+    it("gives a name's first line to the record below when its values sit beside its last line", () => {
+        const rows = [
+            textLine(200, ["Wick Cannons", "All", "3"]),
+            textLine(186, ["Wick Cannon", "", ""]),
+            textLine(180, ["Broadside", "Some", "6"]),
+            textLine(166, ["Lamp Battery", "All", "4"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Wick Cannons",
+            "Wick Cannon Broadside",
+            "Lamp Battery",
         ]);
     });
 
@@ -1131,6 +1156,16 @@ describe("headings", () => {
         expect(headingOf(heading([["the lantern of", 100, 70]]), body, false)?.text).toBe("the lantern of");
         expect(headingOf(heading([["The Lantern of", 100, 70]]), body, false)).toBeNull();
     });
+
+    it("reads a long display line with no capitals as a heading in a heading face", () => {
+        const faces = new Set(["display|normal"]);
+        const lost = heading([["tempest-class strike lantern", 100, 140]]);
+        expect(headingOf(lost, body, false, faces)?.text).toBe("tempest-class strike lantern");
+        // Elsewhere it reads as prose; at body size it is running text.
+        expect(headingOf(lost, body, false)).toBeNull();
+        const bodySize = heading([["tempest-class strike lantern", 100, 140]], 10);
+        expect(headingOf(bodySize, body, false, faces)).toBeNull();
+    });
 });
 
 describe("figures in the text column", () => {
@@ -1251,6 +1286,84 @@ describe("entry detection", () => {
         );
         const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
         expect(entry?.fields).toEqual([["Requires", `${value} Lore (Wards)`]]);
+    });
+
+    it("reads ships as voidcraft, joining a header to a profile a sidebar split off", () => {
+        const field = (text: string, y: number): IRTextRun => ({
+            ...run(text, y, "b-bold", 10),
+            weight: "bold",
+        });
+        const HEADER = ["Dimensions: 1 km", "Mass: 5 megatonnes", "Crew: 900 crew", "Accel: 4 gravities"];
+        const header = (y: number): IRTextRun[] => HEADER.map((t, i) => field(t, y - 12 * i));
+        const profile = (y: number, speed: number): IRTextRun[] =>
+            [
+                `Speed: ${speed} Manoeuvrability: +20`,
+                "Detection: +15 Hull Integrity: 35",
+                "Armour: 18 Turret Rating: 2",
+                "Space: 40 SP: 40",
+            ].map((t, i) => field(t, y - 12 * i));
+        const ir = irOf(
+            [0],
+            [
+                run("CRUISER HULLS", 780, "h", 18),
+                run(body, 760, "b", 10),
+                run("GLOW-CLASS CRUISER", 740, "h2", 14),
+                ...header(720),
+                run(body, 668, "b", 10),
+                ...profile(656, 5),
+                run("WICK-CLASS CRUISER", 590, "h2", 14),
+                ...header(570),
+                run(body, 518, "b", 10),
+                run("USING THE WICK", 500, "h2", 14),
+                run(body, 480, "b", 10),
+                ...profile(468, 7),
+                run(body, 400, "b", 10),
+            ],
+        );
+        const ships = infer(ir, createLogger("error"), TARGETS.rt).graph.entities.filter(
+            (e) => e.fields["type"] === "rt-voidcraft",
+        );
+        const summary = ships.map((e) => {
+            const system = Object(e.fields["system"]);
+            return [e.fields["name"], system["speed"], system["hullType"], system["mass"]];
+        });
+        expect(summary).toEqual([
+            ["Glow-Class Cruiser", 5, "cruiser", "5 megatonnes"],
+            ["Wick-Class Cruiser", 7, "cruiser", "5 megatonnes"],
+        ]);
+    });
+
+    it("reads a short italic lead label as a field, not an italic sentence", () => {
+        const italic = (text: string, y: number): IRTextRun => ({
+            ...run(text, y, "b-italic", 10),
+            italic: true,
+        });
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 10 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                italic("Mass: 6 lamps approx.", 570),
+                italic("Some of the old lamps: burn", 558),
+                run(body, 546, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields).toEqual([["Mass", "6 lamps approx."]]);
+        expect(entry?.body).toContain("Some of the old lamps: burn");
+    });
+
+    it("drops glyphs a text layer overprints on a whole display line", () => {
+        const whole = { ...run("WICK HULLS", 700, "h", 18), x: 100, width: 120 };
+        const glyphs = [
+            { ...run("WI", 700, "h", 18), x: 100, width: 24 },
+            { ...run("CK", 700, "h", 18), x: 124, width: 26 },
+        ];
+        expect(withoutOverprints([whole, ...glyphs])).toEqual([whole]);
+        // Neighbouring text, or another face over the line, is no copy.
+        const beside = { ...run("GLOW", 700, "h", 18), x: 230, width: 50 };
+        const other = { ...run("WI", 700, "b", 18), x: 100, width: 24 };
+        expect(withoutOverprints([whole, other, beside])).toEqual([whole, other, beside]);
     });
 
     it("reads no heading or body from a table's lines", () => {

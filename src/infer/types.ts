@@ -68,6 +68,7 @@ export type ContentType =
     | "mental-disorder"
     | "rolltable"
     | "ship-component"
+    | "ship-weapon"
     | "unknown";
 
 export interface Classification {

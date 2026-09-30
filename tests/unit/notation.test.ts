@@ -12,6 +12,7 @@ import {
     parseRateOfFire,
     parseReload,
     parseShipPower,
+    parseShipWeaponType,
     parseWeaponClass,
     parseWeight,
 } from "../../src/infer/notation.ts";
@@ -157,5 +158,13 @@ describe("ship component cells", () => {
         expect(parseHullTypes("Light Cruisers, Cruisers")).toEqual(["light-cruiser", "cruiser"]);
         expect(parseHullTypes("Transports and Cruisers")).toEqual(["transport", "cruiser"]);
         expect(parseHullTypes("Lamp Boats")).toBeNull();
+    });
+
+    it("reads a ship weapon type, singular or plural, before its mounting", () => {
+        expect(parseShipWeaponType("Macrobatteries")).toBe("macrobattery");
+        expect(parseShipWeaponType("Nova Cannons")).toBe("nova-cannon");
+        expect(parseShipWeaponType("Torpedo Tubes")).toBe("torpedo");
+        expect(parseShipWeaponType("Landing Bays")).toBe("landing-bay");
+        expect(parseShipWeaponType("Lamp Arrays")).toBeNull();
     });
 });

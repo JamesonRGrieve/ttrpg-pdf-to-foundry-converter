@@ -24,6 +24,7 @@ export interface ActorTypes {
     npc: string;
     terracraft: string;
     aircraft: string;
+    voidcraft: string;
 }
 
 export interface TargetSchema {
@@ -35,12 +36,16 @@ export interface TargetSchema {
 /** Lines the system registers a line-specific aircraft type for; the rest use the shared one. */
 const LINE_AIRCRAFT: ReadonlySet<Line> = new Set(["dh2", "dw", "ow", "rt"]);
 
+/** Lines the system registers a line-specific voidcraft type for; the rest use the shared one. */
+const LINE_VOIDCRAFT: ReadonlySet<Line> = new Set(["rt"]);
+
 /** A line's own actor types, as the system registers them (`<line>-npc`, …). */
 function actorTypes(line: Line): ActorTypes {
     return {
         npc: `${line}-npc`,
         terracraft: `${line}-terracraft`,
         aircraft: LINE_AIRCRAFT.has(line) ? `${line}-aircraft` : "aircraft",
+        voidcraft: LINE_VOIDCRAFT.has(line) ? `${line}-voidcraft` : "voidcraft",
     };
 }
 

@@ -99,6 +99,36 @@ function joinRuns(runs: readonly IRTextRun[]): string {
     return text.replace(/\s+/gu, " ").trim();
 }
 
+/** Points a run may overhang the run it overprints (glyph side bearings). */
+const OVERPRINT_SLACK = 1;
+
+/**
+ * Runs of a line without overprints: a text layer may set a display line
+ * twice — once whole, once again glyph by glyph over it ("BATTLECRUISER
+ * HULLS" under "BA", "T", "TL", …). A run lying within an earlier run of the
+ * same font and size, whose text it repeats, is that copy. `runs` are in x order.
+ */
+export function withoutOverprints(runs: readonly IRTextRun[]): IRTextRun[] {
+    const kept: IRTextRun[] = [];
+    const letters = (s: string): string => s.replace(/\s+/gu, "").toLowerCase();
+    for (const r of runs) {
+        const text = letters(r.text);
+        const covered = kept.some(
+            (k) =>
+                k.font === r.font &&
+                k.size === r.size &&
+                text.length > 0 &&
+                r.x >= k.x - OVERPRINT_SLACK &&
+                r.x + r.width <= k.x + k.width + OVERPRINT_SLACK &&
+                letters(k.text).includes(text),
+        );
+        if (!covered) {
+            kept.push(r);
+        }
+    }
+    return kept;
+}
+
 export function buildLines(ir: IR): TextLine[] {
     const byColumn = new Map<string, IRTextRun[]>();
     for (const r of ir.runs) {
@@ -107,8 +137,11 @@ export function buildLines(ir: IR): TextLine[] {
     }
     const out: TextLine[] = [];
     for (const columnRuns of byColumn.values()) {
-        for (const { runs } of groupByBaseline(columnRuns, BASELINE_TOLERANCE, true)) {
-            runs.sort((a, b) => numAsc(a.x, b.x));
+        for (const group of groupByBaseline(columnRuns, BASELINE_TOLERANCE, true)) {
+            // Wider first at one x, so a whole line precedes the glyphs overprinting it.
+            const runs = withoutOverprints(
+                [...group.runs].sort((a, b) => numAsc(a.x, b.x) || numAsc(b.width, a.width)),
+            );
             const text = joinRuns(runs);
             const [first] = runs;
             if (text.length === 0 || first === undefined) {
@@ -237,6 +270,11 @@ export function headingOf(
     // A heading is title-like and contiguous (labels spread across columns are
     // a table row). A mixed-case line breaking off on a comma or connecting
     // word is running text; a display heading in capitals may wrap there.
+    // A display-size line with no capitals at all, in a face that sets headings
+    // elsewhere, is small capitals whose case the text layer lost
+    // ("tempest-class strike frigate"), not running prose.
+    const caseLostDisplay =
+        !/\p{Lu}/u.test(line.text) && headingFaces.has(face) && size > body.size + LEVEL_STEP;
     const lastWord = line.text.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "";
     const brokenOff = /,$/u.test(line.text.trim()) || FUNCTION_WORDS.has(lastWord);
     // Table header labels (bold) sit spread across columns; a display heading
@@ -260,7 +298,10 @@ export function headingOf(
         /[:.]$/u.test(line.text) ||
         !/\p{L}/u.test(line.text) ||
         /(^|[\s:])[+-]?\d/u.test(outsideParens) ||
-        (readsAsProse(line.text) && !scrambledCase(line.text) && !shortDisplay(line.text, size, body.size)) ||
+        (readsAsProse(line.text) &&
+            !scrambledCase(line.text) &&
+            !shortDisplay(line.text, size, body.size) &&
+            !caseLostDisplay) ||
         // (A line with no capitals at all is display type whose case was lost.)
         (brokenOff && /\p{Ll}/u.test(line.text) && /\p{Lu}/u.test(line.text)) ||
         spread
@@ -471,10 +512,17 @@ export function endsSentence(value: string): boolean {
     return /[.!?]["”’)]*\s*$/u.test(value);
 }
 
+/** Most words an italic lead label carries; longer italic leads are emphasis in running text. */
+const MAX_ITALIC_LABEL_WORDS = 2;
+
+/**
+ * A `Label: value` line: its label is the lead set apart from the text — in
+ * bold, or in italics as a short capitalised label ("Mass: 6 megatonnes").
+ */
 function fieldOf(line: TextLine): [string, string] | null {
     const runs = visibleRuns(line);
     const first = runs[0];
-    if (first === undefined || first.weight !== "bold") {
+    if (first === undefined) {
         return null;
     }
     const m = /^(?<label>[^:]{1,40}):\s*(?<value>.*)$/u.exec(line.text);
@@ -482,6 +530,16 @@ function fieldOf(line: TextLine): [string, string] | null {
     const value = m?.groups?.["value"]?.trim();
     if (label === undefined || value === undefined) {
         return null;
+    }
+    if (first.weight !== "bold") {
+        const roman = runs.findIndex((r) => !r.italic);
+        const italicLead = joinRuns(roman < 0 ? runs : runs.slice(0, roman));
+        const italicLabel =
+            first.italic &&
+            /^\p{Lu}/u.test(label) &&
+            label.split(/\s+/u).length <= MAX_ITALIC_LABEL_WORDS &&
+            italicLead.startsWith(label);
+        return italicLabel && value.length > 0 ? [label, value] : null;
     }
     // The label must be the bold lead, not a colon somewhere in prose.
     const boldText = joinRuns(runs.filter((r) => r.weight === "bold"));

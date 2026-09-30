@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NOTE_MARKERS } from "../util/text.ts";
-import { ALL_HULLS, HULL_TYPES } from "./schema.ts";
+import { ALL_HULLS, HULL_TYPES, SHIP_WEAPON_TYPES } from "./schema.ts";
 
 /**
  * Parsers for the generic d100 stat notation printed in stat tables — dice
@@ -176,6 +176,32 @@ export function parseHullTypes(raw: string): string[] | null {
         .map((t) => t.trim().replace(/s$/u, "").replace(/\s+/gu, "-"))
         .filter((t) => t.length > 0);
     return types.length > 0 && types.every((t) => HULL_TYPE_SET.has(t)) ? types : null;
+}
+
+const SHIP_WEAPON_TYPE_SET: ReadonlySet<string> = new Set(SHIP_WEAPON_TYPES);
+
+/**
+ * A ship weapon type as printed, singular or plural, perhaps followed by the
+ * mounting ("Macrobatteries", "Nova Cannons", "Torpedo Tubes") → the schema's
+ * weapon type named by its longest leading run of words; null when none is one.
+ */
+export function parseShipWeaponType(raw: string): string | null {
+    const words = clean(raw).toLowerCase().split(/\s+/u);
+    for (let n = words.length; n > 0; n--) {
+        const lead = words.slice(0, n);
+        const last = (lead.pop() ?? "").replace(/ies$/u, "y").replace(/oes$/u, "o").replace(/s$/u, "");
+        const type = [...lead, last].join("-");
+        if (SHIP_WEAPON_TYPE_SET.has(type)) {
+            return type;
+        }
+    }
+    return null;
+}
+
+/** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */
+export function parseHullType(raw: string): string | null {
+    const [type, ...rest] = parseHullTypes(raw) ?? [];
+    return type !== undefined && type !== ALL_HULLS && rest.length === 0 ? type : null;
 }
 
 /**

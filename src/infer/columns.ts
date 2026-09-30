@@ -40,7 +40,9 @@ export type Role =
     | "space"
     | "shipPoints"
     | "hullTypes"
-    | "power";
+    | "power"
+    | "strength"
+    | "crit";
 
 /** Normalized header text (or a word within it) → role. Order matters: first match wins. */
 const HEADER_ROLES: readonly [RegExp, Role][] = [
@@ -79,18 +81,45 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
 ];
 
 /**
- * In a table of ship components — one with space and ship-point columns — a
- * "Power" column is the power a component draws or makes, not a name.
+ * Headers that name a ship component's own fields only in a ship table: its
+ * power drawn or made, and a ship weapon's strength and critical rating.
  */
-export function shipPowerRoles(
+const SHIP_TABLE_ROLES: readonly [RegExp, Role][] = [
+    [/^power$/u, "power"],
+    [/^(str|strength)$/u, "strength"],
+    [/^crit( rating)?$/u, "crit"],
+];
+
+const shipRole = (header: string): Role | undefined => SHIP_TABLE_ROLES.find(([re]) => re.test(header))?.[1];
+
+/**
+ * In a table of ship components — one with space and ship-point columns — a
+ * "Power" column is the power a component draws or makes, not a name, and a
+ * ship weapon's "Strength" and "Crit Rating" are its own fields, alone or in
+ * a merged header ("Strength Damage").
+ */
+export function shipTableRoles(
     roles: readonly (readonly Role[] | null)[],
     headers: readonly string[],
 ): (Role[] | null)[] {
     const flat = roles.flatMap((r) => r ?? []);
     const shipTable = flat.includes("space") && flat.includes("shipPoints");
-    return roles.map((r, i) =>
-        shipTable && normalizeHeader(headers[i] ?? "") === "power" ? ["power"] : r === null ? null : [...r],
-    );
+    return roles.map((r, i) => {
+        const header = normalizeHeader(headers[i] ?? "");
+        const whole = shipTable ? shipRole(header) : undefined;
+        if (whole !== undefined) {
+            return [whole];
+        }
+        // A merged header naming a ship field reads word by word, when every word is a field.
+        const words = header.split(" ");
+        if (shipTable && words.length > 1 && words.some((w) => shipRole(w) !== undefined)) {
+            const merged = words.map((w) => shipRole(w) ?? headerRole(w));
+            if (merged.every((m): m is Role => m !== null && m !== undefined)) {
+                return merged;
+            }
+        }
+        return r === null ? null : [...r];
+    });
 }
 
 export function normalizeHeader(header: string): string {

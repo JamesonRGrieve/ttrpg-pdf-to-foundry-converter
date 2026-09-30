@@ -38,7 +38,8 @@ export type ItemType =
     | "mutation"
     | "malignancy"
     | "mentalDisorder"
-    | "shipComponent";
+    | "shipComponent"
+    | "shipWeapon";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -60,7 +61,19 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     malignancy: "items-malignancies",
     mentalDisorder: "items-mental-disorders",
     shipComponent: "items-ship-components",
+    shipWeapon: "items-ship-weapons",
 };
+
+/** The system's ship weapon types (the ship weapon `weaponType` choices). */
+export const SHIP_WEAPON_TYPES = [
+    "macrobattery",
+    "lance",
+    "nova-cannon",
+    "torpedo",
+    "bombardment-cannon",
+    "landing-bay",
+    "attack-craft",
+] as const;
 
 export const ACTOR_SEGMENT = "actors-bestiary";
 
@@ -215,7 +228,7 @@ export function buildItem(input: ItemInput): JsonObject {
     return { name: input.name, type: input.type, system, effects: [], flags: {} };
 }
 
-export interface NpcInput {
+export interface ActorInput {
     name: string;
     /** The system's Actor type (the target line's own, e.g. `<line>-npc`). */
     actorType: string;
@@ -226,8 +239,8 @@ export interface NpcInput {
     system: JsonObject;
 }
 
-/** Build an NPC Actor document body (the target line's NPC type; line also carried in `gameSystem`). */
-export function buildNpc(input: NpcInput): JsonObject {
+/** Build an Actor document body (an NPC, a voidcraft, …; line also carried in `gameSystem`). */
+export function buildActor(input: ActorInput): JsonObject {
     return {
         name: input.name,
         type: input.actorType,
@@ -244,14 +257,14 @@ export function buildNpc(input: NpcInput): JsonObject {
     };
 }
 
-/** Pack segment of land craft (conventional ground vehicles and mounts). */
 /** Pack segment of each craft class the parser emits. */
-export const CRAFT_SEGMENT: Readonly<Record<"terracraft" | "aircraft", string>> = {
+export const CRAFT_SEGMENT: Readonly<Record<"terracraft" | "aircraft" | "voidcraft", string>> = {
     terracraft: "vehicles-terracraft",
     aircraft: "vehicles-aircraft",
+    voidcraft: "vehicles-voidcraft",
 };
 
-export interface VehicleInput extends NpcInput {
+export interface VehicleInput extends ActorInput {
     /** Named rules printed beneath the profile, as HTML. */
     specialRules: string;
     /** The profile's weapons text, as HTML. */

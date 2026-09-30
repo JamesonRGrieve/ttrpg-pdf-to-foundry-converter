@@ -83,3 +83,39 @@ describe("weapon-table load rows", () => {
         expect(mapped.system).toMatchObject({ availability: "rare" });
     });
 });
+
+describe("ship weapon rows", () => {
+    it("maps a ship weapon's fit, power drawn and strike profile", () => {
+        const mapped = mapRow("shipWeapon", {
+            name: "Wick Lance",
+            hullTypes: "Light Cruisers, Cruisers",
+            power: "9",
+            space: "4",
+            shipPoints: "2",
+            strength: "1",
+            damage: "1d10+4",
+            crit: "3",
+            range: "6",
+            type: "Lances",
+        });
+        expect(mapped.unparsed).toEqual([]);
+        expect(mapped.system).toEqual({
+            hullType: ["light-cruiser", "cruiser"],
+            space: 4,
+            shipPoints: 2,
+            power: 9,
+            weaponType: "lance",
+            strength: 1,
+            crit: 3,
+            range: 6,
+            damage: "1d10+4",
+        });
+    });
+
+    it("leaves dashed or note-marked strike values unset and reports unreadable ones", () => {
+        const mapped = mapRow("shipWeapon", { name: "Wick Tubes", damage: "—", crit: "†", range: "6–40" });
+        expect(mapped.system).not.toHaveProperty("damage");
+        expect(mapped.system).not.toHaveProperty("crit");
+        expect(mapped.unparsed).toEqual(["range: 6–40"]);
+    });
+});

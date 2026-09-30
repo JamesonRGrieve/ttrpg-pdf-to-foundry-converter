@@ -13,7 +13,7 @@ import {
     mergedHeaderRoles,
     normalizeHeader,
     type Role,
-    shipPowerRoles,
+    shipTableRoles,
 } from "./columns.ts";
 import { detectEntries, type Entry } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
@@ -44,8 +44,8 @@ import { buildRollTable, rollResults } from "./roll-tables.ts";
 import { mapRow, type RowCells, rowType } from "./rows.ts";
 import {
     ACTOR_SEGMENT,
+    buildActor,
     buildItem,
-    buildNpc,
     buildOriginPath,
     buildVehicle,
     CRAFT_SEGMENT,
@@ -58,6 +58,14 @@ import {
 import type { TargetSchema } from "./targets.ts";
 import type { ContentType, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
+import {
+    hasShipHeader,
+    headingHullType,
+    isShipLabel,
+    isShipProfile,
+    parseShip,
+    shipPairs,
+} from "./voidcraft.ts";
 
 /**
  * Structural inference: IR → Foundry compendium entities. Everything is found
@@ -98,6 +106,7 @@ const TABLE_ITEM_TYPE: Partial<Record<ContentType, ItemType>> = {
     skill: "skill",
     "psychic-power": "psychicPower",
     "ship-component": "shipComponent",
+    "ship-weapon": "shipWeapon",
     "critical-injury": "criticalInjury",
     condition: "condition",
     mutation: "mutation",
@@ -176,7 +185,7 @@ class EntityCollector {
 
 /** Resolve a table's headers to roles; merged headers ("Clip Rld") yield several. */
 function columnRoles(table: DetectedTable): (Role[] | null)[] {
-    return shipPowerRoles(
+    return shipTableRoles(
         table.headers.map((h) => {
             const role = headerRole(h);
             return role === null ? mergedHeaderRoles(h) : [role];
@@ -377,8 +386,15 @@ function extractTables(
         }
         // A caption naming a tier ("… Tier 2 …") gives every row that tier.
         const captionTier = /\btier\s*(\d)\b/iu.exec(table.tableTitle ?? "")?.[1];
+        // A section row groups the records under it; in a ship weapon table it
+        // names their weapon type ("Lances").
+        let section: string | null = null;
         for (const row of table.rows) {
-            if (row.isHeaderRow || row.isSectionHeader) {
+            if (row.isSectionHeader) {
+                section = row.sectionName;
+                continue;
+            }
+            if (row.isHeaderRow) {
                 continue;
             }
             const rawName = row.cells.find((c) => c.colIndex === nameCol)?.text ?? "";
@@ -402,6 +418,9 @@ function extractTables(
             const itemType = rowType(type, cells);
             if (itemType === null) {
                 continue;
+            }
+            if (itemType === "shipWeapon" && cells.type === undefined && section !== null) {
+                cells.type = section;
             }
             const mapped = mapRow(itemType, cells);
             for (const u of mapped.unparsed) {
@@ -523,6 +542,105 @@ function addVehicle(out: EntityCollector, entry: Entry): boolean {
     return true;
 }
 
+/**
+ * An entry carrying a ship profile is a voidcraft: its profile gives the stat
+ * block, its prose and its other labelled rules the description. `hullHint`
+ * is the hull type a heading above it names. Returns false when the entry is
+ * no ship.
+ */
+function addShip(
+    out: EntityCollector,
+    entry: Entry,
+    pairs: ReadonlyMap<string, string>,
+    rules: readonly (readonly [string, string])[],
+    hullHint: string | null,
+): boolean {
+    if (!isShipProfile(pairs)) {
+        return false;
+    }
+    const name = cleanName(entry.heading.text);
+    if (!startsLikeName(name) || readsAsProse(name) || endsMidSentence(name)) {
+        return false;
+    }
+    const { system, unparsed } = parseShip(pairs, hullHint);
+    for (const u of unparsed) {
+        out.warnings.push(`p${out.page(entry.heading.pageIndex)} ${name}: unparsed ${u}`);
+    }
+    out.add(
+        "Actor",
+        CRAFT_SEGMENT.voidcraft,
+        buildActor({
+            actorType: out.target.actorTypes.voidcraft,
+            name,
+            line: out.line,
+            book: out.book,
+            page: out.page(entry.heading.pageIndex),
+            description: toHtml(
+                [entry.body, ...rules.map(([label, value]) => `${label}: ${value}`)].join("\n\n"),
+            ),
+            system,
+        }),
+        entry.heading.pageIndex,
+        "entry:voidcraft",
+    );
+    return true;
+}
+
+/**
+ * Ship entries, each added as a voidcraft. A section heading naming a hull
+ * type ("Cruiser Hulls") gives the hull type of the ships in it; a smaller
+ * heading naming one ("Frigates") gives it to the ships after it, until
+ * another does or a larger heading that is no ship opens a new section.
+ *
+ * A ship's header printed with no profile waits for one: the next entry
+ * printing a profile but no header, within a page, is its profile — sidebars
+ * and boxed text set between the two in reading order head it otherwise.
+ */
+const PROFILE_PAGE_REACH = 1;
+function addShips(out: EntityCollector, entries: readonly Entry[]): Set<Entry> {
+    const ships = new Set<Entry>();
+    const pairs = entries.map((e) => shipPairs(e.fields, e.body));
+    const rules = (e: Entry): [string, string][] => e.fields.filter(([label]) => !isShipLabel(label));
+    let hull: { type: string; size: number } | null = null;
+    let waiting: { entry: Entry; pairs: Map<string, string>; hint: string | null } | null = null;
+    entries.forEach((entry, i) => {
+        const named = headingHullType(entry.heading.text);
+        if (named !== null) {
+            hull = { type: named, size: entry.heading.size };
+            return;
+        }
+        // The nearest enclosing section naming a hull type gives it outright.
+        const section = entry.sections.map(headingHullType).findLast((t) => t !== null) ?? null;
+        const hint = section ?? hull?.type ?? null;
+        const own = pairs[i] ?? new Map<string, string>();
+        if (
+            waiting !== null &&
+            isShipProfile(own) &&
+            !hasShipHeader(own) &&
+            entry.heading.pageIndex - waiting.entry.heading.pageIndex <= PROFILE_PAGE_REACH
+        ) {
+            const profile = new Map([...own, ...waiting.pairs]);
+            const printedRules = [...rules(waiting.entry), ...rules(entry)];
+            if (addShip(out, waiting.entry, profile, printedRules, waiting.hint)) {
+                ships.add(waiting.entry).add(entry);
+                waiting = null;
+                return;
+            }
+        }
+        if (hasShipHeader(own) && !isShipProfile(own)) {
+            waiting = { entry, pairs: own, hint };
+            return;
+        }
+        if (addShip(out, entry, own, rules(entry), hint)) {
+            ships.add(entry);
+            waiting = null;
+        } else if (hull !== null && entry.heading.size > hull.size) {
+            hull = null;
+        }
+    });
+    return ships;
+}
+
 /** Blank lines between paragraphs of an entry body. */
 const PARAGRAPH_SPLIT = /\n{2,}/u;
 
@@ -596,9 +714,10 @@ function extractEntries(
     out: EntityCollector,
     descriptions: Map<string, string>,
 ): number {
-    const vehicles = new Set(entries.filter((entry) => addVehicle(out, entry)));
+    const ships = addShips(out, entries);
+    const vehicles = new Set(entries.filter((entry) => !ships.has(entry) && addVehicle(out, entry)));
     const kinds = siblingKinds(
-        entries.filter((entry) => !vehicles.has(entry)),
+        entries.filter((entry) => !vehicles.has(entry) && !ships.has(entry)),
         entryType,
     );
     const typed = entries.flatMap((entry) => {
@@ -843,7 +962,7 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
         out.add(
             "Actor",
             ACTOR_SEGMENT,
-            buildNpc({
+            buildActor({
                 name,
                 actorType: out.target.actorTypes.npc,
                 line: out.line,
