@@ -34,6 +34,7 @@ import { parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
     originStepNamedBy,
+    readFieldedOrigins,
     readOriginPaths,
     readOriginTable,
 } from "./origin-paths.ts";
@@ -670,7 +671,10 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
 }
 
 function extractOriginPaths(entries: readonly Entry[], out: EntityCollector): void {
-    for (const origin of readOriginPaths(entries, out.target.originSteps)) {
+    for (const origin of [
+        ...readOriginPaths(entries, out.target.originSteps),
+        ...readFieldedOrigins(entries, out.target.originSteps),
+    ]) {
         addOrigin(out, origin);
     }
 }

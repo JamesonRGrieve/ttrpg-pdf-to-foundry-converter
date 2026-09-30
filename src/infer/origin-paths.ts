@@ -49,7 +49,7 @@ type GrantField =
 
 /** Grant labels → the grant they carry. */
 const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
-    [/\bexperience cost\b/iu, "xpCost"],
+    [/\bexperience cost\b|^\s*(?:package\s+)?cost\s*$/iu, "xpCost"],
     [/\bprerequisites?\b/iu, "prerequisites"],
     [/\b(?:instant changes|unlocked advances)\b/iu, "changes"],
     [/\bcharacteristic modifiers?\b/iu, "modifiers"],
@@ -521,6 +521,82 @@ export function wordPrefix(prefix: string, text: string): string | null {
         }
     }
     return null;
+}
+
+/** An experience price: "100 xp", "200 XP". */
+const XP_PRICE = /\d[\d,]*\s*xp\b/iu;
+
+/** An entry's inline `Label: value` fields as label entries, the shape `grantsOf` reads. */
+function fieldEntries(entry: Entry): Entry[] {
+    return entry.fields.map(([label, value]) => ({
+        heading: { ...entry.heading, text: label },
+        sections: [],
+        fields: [],
+        body: value,
+    }));
+}
+
+/** Pages past its own heading that an origin's grant headings may run on. */
+const GRANT_PAGE_REACH = 1;
+
+/**
+ * Origins printed as one heading with inline fields: a price in experience
+ * under a section naming a creation step ("… Background Packages") makes the
+ * heading an origin of that step. Fields naming earlier steps ("Home World:
+ * …", "Career: …") are its prerequisites; its other fields, and those of the
+ * headings after it up to its next sibling (one set like it) — its "Effects",
+ * however they are set — are its grants. An origin grants something; a priced
+ * heading granting nothing is a price list.
+ */
+export function readFieldedOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const out: OriginPathReading[] = [];
+    entries.forEach((entry, i) => {
+        const priced = entry.fields.some(
+            ([label, value]) => labelField(label) === "xpCost" && XP_PRICE.test(value),
+        );
+        const step = stepOfSections(entry.sections, steps);
+        if (!priced || step === undefined) {
+            return;
+        }
+        const required = entry.fields.filter(
+            ([label]) => stepNamedIn(label, steps, false, true) !== undefined,
+        );
+        const requiredLabels = new Set(required.map(([label]) => label));
+        const under: Entry[] = [];
+        for (const e of entries.slice(i + 1)) {
+            if (
+                e.heading.style === entry.heading.style ||
+                e.heading.pageIndex > entry.heading.pageIndex + GRANT_PAGE_REACH
+            ) {
+                break;
+            }
+            under.push(e);
+        }
+        const granting = [entry, ...under]
+            .flatMap(fieldEntries)
+            .filter((e) => !requiredLabels.has(e.heading.text));
+        const read = grantsOf(granting);
+        const grantsSomething =
+            Object.keys(read.modifiers).length > 0 ||
+            Object.values(read.grants).some((v) => Array.isArray(v) && v.length > 0);
+        if (!grantsSomething) {
+            return;
+        }
+        out.push({
+            name: headingName(entry.heading.text),
+            step,
+            pageIndex: entry.heading.pageIndex,
+            description: entry.body,
+            ...read,
+            ...(required.length === 0
+                ? {}
+                : { requirements: required.map(([label, value]) => `${label}: ${value}`).join(" ") }),
+        });
+    });
+    return out;
 }
 
 /** Read every origin-path rules block among the document's entries (in order). */

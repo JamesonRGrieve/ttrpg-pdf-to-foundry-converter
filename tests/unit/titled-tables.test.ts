@@ -118,6 +118,34 @@ describe("titled tables", () => {
         expect(tables[0]?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("1d10 E");
     });
 
+    it("finds a caption set in several runs, its number in a larger size", () => {
+        const ir = irOf([
+            run("Table", 60, 700, { ...bold, width: 30 }),
+            run("", 90, 700, { ...bold, width: 0.2 }),
+            run("6-1:", 93, 700, { ...bold, size: 16, width: 20 }),
+            run("Ranged", 116, 700, { ...bold, width: 38 }),
+            run("Lamps", 157, 700, { ...bold, width: 30 }),
+            run("NAME", 60, 680, bold),
+            run("CLASS", 200, 680, bold),
+            run("DAM", 300, 680, bold),
+            run("Rushlight", 60, 660),
+            run("Basic", 200, 660),
+            run("1d10 E", 300, 660),
+            run("Glim", 60, 640),
+            run("Pistol", 200, 640),
+            run("1d5 E", 300, 640),
+            run("Wick", 60, 620),
+            run("Basic", 200, 620),
+            run("2d5 E", 300, 620),
+            run("Ember", 60, 600),
+            run("Heavy", 200, 600),
+            run("1d10 X", 300, 600),
+        ]);
+        expect(detectTitledTables(ir).map((t) => [t.tableTitle, t.rows.length])).toEqual([
+            ["Ranged Lamps", 4],
+        ]);
+    });
+
     it("splits header labels set closer than a word space where the rows start their cells", () => {
         const ir = irOf([
             run("Table 1-5: Wick Mishaps", 60, 700, bold),

@@ -116,6 +116,22 @@ describe("statblock rows", () => {
         expect(detectStatRows(ir)[0]?.values).toEqual([40, 20, 45, 45, 30, 10, 35, 30, 5]);
     });
 
+    it("names statblocks sharing one caption by the heading above it", () => {
+        const block = (name: string, top: number): IRTextRun[] => [
+            run(name, 60, top, { size: 11 }),
+            run("Main Profile", 60, top - 12, { size: 8 }),
+            run(LABELS, 60, top - 24, { size: 8 }),
+            run("30 25 35 30 30 20 35 30 25", 60, top - 36, { size: 9.5 }),
+            run("Wounds:", 60, top - 50, bold),
+            run("12", 100, top - 50),
+        ];
+        const ir = irOf([...block("GLIM BEAST", 700), ...block("LAMP WARDEN", 560)]);
+        expect(detectStatRows(ir).map((b) => [b.name, b.caption])).toEqual([
+            ["GLIM BEAST", "GLIM BEAST"],
+            ["LAMP WARDEN", "LAMP WARDEN"],
+        ]);
+    });
+
     it("takes no statblock from a worked example under a sentence", () => {
         const ir = irOf([
             run("so the characteristics now look like this.", 60, 700),

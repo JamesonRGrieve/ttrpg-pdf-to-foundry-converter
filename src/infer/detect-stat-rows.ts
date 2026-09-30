@@ -174,7 +174,26 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
         }
     });
 
-    const names = captionNames(found.map((f) => lines[f.caption]?.text ?? ""));
+    // A caption several statblocks share ("Main Profile") labels them all and
+    // names none; each is named by the line just above it.
+    const captionCounts = new Map<string, number>();
+    for (const f of found) {
+        const text = lines[f.caption]?.text ?? "";
+        captionCounts.set(text, (captionCounts.get(text) ?? 0) + 1);
+    }
+    const naming = found.map((f) => {
+        const caption = lines[f.caption];
+        const above = lines[f.caption - 1];
+        const shared = caption !== undefined && (captionCounts.get(caption.text) ?? 0) > 1;
+        return shared &&
+            above !== undefined &&
+            sameColumn(above, caption) &&
+            above.y - caption.y <= ROW_REACH_FACTOR * sizeOf(caption) &&
+            !endsSentence(above.text)
+            ? f.caption - 1
+            : f.caption;
+    });
+    const names = captionNames(naming.map((i) => lines[i]?.text ?? ""));
     const captions = new Set(found.map((f) => f.caption));
     return found.map((f, k) => {
         const start = lines[f.values];
@@ -203,7 +222,7 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
         return {
             pageIndex: start?.pageIndex ?? 0,
             name: names[k] ?? "",
-            caption: lines[f.caption]?.text ?? null,
+            caption: lines[naming[k] ?? f.caption]?.text ?? null,
             bannerNumber: null,
             labels: f.row,
             values: f.numbers,

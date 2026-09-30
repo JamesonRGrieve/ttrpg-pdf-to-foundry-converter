@@ -139,7 +139,11 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
     const wide = percentile(sorted, WIDE_PERCENTILE);
     const twoClusters = narrow > 0 && wide / narrow >= TWO_CLUSTER_RATIO;
     const threshold = (narrow + wide) / 2;
-    const typicalFill = mode(rows.map((r) => filled(shape.cells(r))));
+    // A record's typical fill, from the lines carrying more than a key (a
+    // table of wrapped names has more name-only lines than records).
+    const fills = rows.map((r) => filled(shape.cells(r)));
+    const recordFills = fills.filter((f) => f > 1);
+    const typicalFill = mode(recordFills.length > 0 ? recordFills : fills);
     const fullest = Math.max(...rows.map((r) => filled(shape.cells(r))));
     const out: T[] = [];
     rows.forEach((row, i) => {
@@ -164,11 +168,18 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
         // A line breaking off mid-phrase opens a row its next line completes;
         // a line completing the row above joins it.
         const opensAwaited = awaitsRest(line, fullest);
+        // A line with no key of its own under a line that is only a key: a
+        // name set on lines around its row's values (the values centred
+        // between them) — the values complete the name's record.
+        const completesKey =
+            (line[0] ?? "").trim().length === 0 && filled(above) === 1 && (above[0] ?? "").trim().length > 0;
         const continues =
             !opensAwaited &&
             (bySpacing ||
                 (!setApart &&
-                    (continuesStructurally(line, above, typicalFill) || awaitsRest(above, fullest))));
+                    (completesKey ||
+                        continuesStructurally(line, above, typicalFill) ||
+                        awaitsRest(above, fullest))));
         if (continues) {
             prev.runs.push(...row.runs);
         } else {

@@ -244,6 +244,23 @@ describe("row merging", () => {
         expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 90, 70, 50]);
     });
 
+    it("keeps a name wrapped around its row's centred values in one record", () => {
+        const rows = [
+            textLine(200, ["Glimmer", "", ""]),
+            textLine(194.6, ["", "Thrown", "Rare"]),
+            textLine(189.2, ["Device", "", ""]),
+            textLine(177, ["Wick", "", ""]),
+            textLine(171.6, ["", "Thrown", "Common"]),
+            textLine(166.2, ["Bomb", "", ""]),
+            textLine(154, ["Lamp Mine", "Heavy", "Rare"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Glimmer Device",
+            "Wick Bomb",
+            "Lamp Mine",
+        ]);
+    });
+
     it("joins a line that wraps several unfinished cells, one of them mid-sentence", () => {
         const rows = [
             textLine(100, ["Deep", "Glow 40,", "Soothes the"]),

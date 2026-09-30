@@ -20,6 +20,8 @@ import type { DetectedTable, TableCell, TableRow, TitledTable } from "./types.ts
  */
 
 const TABLE_TITLE_RE = /^Table\s+\d+[-–]\d+:?\s*(.*)/i;
+/** The first run of a caption: it opens with the word. */
+const CAPTION_START = /^Table\b/i;
 
 /** A numbered table caption ("Table 3-2: …"), not a heading of its own. */
 export function isTableCaption(text: string): boolean {
@@ -111,15 +113,21 @@ function findTableTitles(ir: IR): TitleHit[] {
         r.weight === "bold" || r.font !== bodyFont || r.weight !== bodyWeight;
     const hits: TitleHit[] = [];
     for (const run of ir.runs) {
-        if (!captionFace(run) || !TABLE_TITLE_RE.test(run.text) || inRunningText(ir, run)) {
+        // A caption may be set in several runs ("Table" · "6-1:" in a larger
+        // numeral · "Ranged Weapons"): its first run opens with the word, and
+        // the whole caption line is what is tested.
+        if (!captionFace(run) || !CAPTION_START.test(run.text) || inRunningText(ir, run)) {
             continue;
         }
         const text = captionText(ir, run);
         const m = text.match(TABLE_TITLE_RE);
+        if (m === null) {
+            continue;
+        }
         hits.push({
             pageIndex: run.pageIndex,
             y: run.y,
-            title: restoreWordSpaces(m?.[1]?.trim() ?? ""),
+            title: restoreWordSpaces(m[1]?.trim() ?? ""),
             run,
         });
     }

@@ -7,6 +7,7 @@ import {
     equipmentItem,
     originCellName,
     originStepNamedBy,
+    readFieldedOrigins,
     readOriginPaths,
     readOriginTable,
     splitTopLevel,
@@ -208,5 +209,81 @@ describe("origin tables", () => {
         });
         expect(originCellName("Silence is a lantern.")).toEqual({ name: "Silence is a lantern.", rest: "" });
         expect(originCellName("and so it goes.")).toBeNull();
+    });
+});
+
+describe("origins with inline fields", () => {
+    const dh1 = TARGETS.dh1.originSteps;
+    const fielded = (heading: string, fields: [string, string][], sections: string[]): Entry => ({
+        heading: { text: heading, size: 10, style: "h", pageIndex: 36 },
+        sections,
+        fields,
+        body: "Lamplighters of the reed worlds.",
+    });
+
+    it("reads a priced package requiring earlier steps as the step its section names", () => {
+        const [origin] = readFieldedOrigins(
+            [
+                fielded(
+                    "WICK GUILD RUNNER",
+                    [
+                        ["Home World", "Reed Born."],
+                        ["Career", "Lamplighter"],
+                        ["Cost", "100 xp"],
+                        ["Skills", "Lantern Lore (Reeds)"],
+                        ["Talents", "Wick Training (Oil)"],
+                    ],
+                    ["IV: Lamps", "Background Packages"],
+                ),
+            ],
+            dh1,
+        );
+        expect(origin?.name).toBe("WICK GUILD RUNNER");
+        expect(origin?.step.key).toBe("background");
+        expect(origin?.xpCost).toBe(100);
+        expect(origin?.requirements).toBe("Home World: Reed Born. Career: Lamplighter");
+        expect(origin?.grants["skills"]).toEqual([
+            { name: "Lantern Lore", specialization: "Reeds", level: "known" },
+        ]);
+    });
+
+    it("takes grants from the sub-headings under a priced package", () => {
+        const sections = ["IV: Lamps", "Background Packages"];
+        const [origin] = readFieldedOrigins(
+            [
+                fielded("THE EMBER VAULTS", [["Package Cost", "200 xp"]], sections),
+                {
+                    // "Effects" set larger than the package headings: not nested, still its grants.
+                    ...fielded("Effects", [["Talents", "You gain Wick Training (Oil)"]], sections),
+                    heading: { text: "Effects", size: 12, style: "effects", pageIndex: 36 },
+                    body: "Apply all of the following changes to your character.",
+                },
+                fielded("THE NEXT PACKAGE", [["Package Cost", "100 xp"]], sections),
+            ],
+            dh1,
+        );
+        expect(origin?.xpCost).toBe(200);
+        expect(origin?.requirements).toBeUndefined();
+        expect((origin?.grants["talents"] as unknown[]).length).toBeGreaterThan(0);
+    });
+
+    it("reads no origin from a priced heading that grants nothing (a price list)", () => {
+        const sections = ["IV: Lamps", "Background Packages"];
+        const priceList = [fielded("WICK ADVANCES", [["Cost", "100 xp"]], sections)];
+        expect(readFieldedOrigins(priceList, dh1)).toEqual([]);
+    });
+
+    it("reads nothing from an entry without a price or a section naming its step", () => {
+        const fields: [string, string][] = [
+            ["Home World", "Reed Born."],
+            ["Cost", "100 xp"],
+        ];
+        expect(
+            readFieldedOrigins(
+                [fielded("LAMP", [["Home World", "Reed Born."]], ["Background Packages"])],
+                dh1,
+            ),
+        ).toEqual([]);
+        expect(readFieldedOrigins([fielded("LAMP", fields, ["IV: Lamps"])], dh1)).toEqual([]);
     });
 });
