@@ -64,19 +64,61 @@ export function rowValues(text: string, count: number): number[] | null {
     return tokens.map((t) => (ABSENT.test(t) ? 0 : Number(/^\d+/u.exec(t)?.[0])));
 }
 
+/** A cell's value once its letter spacing is closed up: digits, or dashes for none. */
+const CELL_VALUE = /^(?:\d+|[-–—]+)$/u;
+
+interface Placed {
+    x: number;
+    width: number;
+    text: string;
+}
+
+/**
+ * The row's values read by position: each value run belongs to the label it
+ * sits nearest under, so a value set letter-spaced ("0 5", "- -") stays one
+ * value. Null when the labels are not one run each, a run holds several
+ * values, or a label is left without a value.
+ */
+export function cellValues(labels: readonly Placed[], values: readonly Placed[]): number[] | null {
+    const heads = labels.filter((r) => r.text.trim().length > 0);
+    const cells = heads.map(() => "");
+    const centre = (r: Placed): number => r.x + r.width / 2;
+    for (const v of values) {
+        const pieces = v.text.split(/\s+/u).filter((p) => p.length > 0);
+        if (pieces.length === 0) {
+            continue;
+        }
+        if (pieces.length > 1 && pieces.some((p) => p.length > 1)) {
+            return null;
+        }
+        let nearest = 0;
+        heads.forEach((h, i) => {
+            const best = heads[nearest];
+            if (best !== undefined && Math.abs(centre(h) - centre(v)) < Math.abs(centre(best) - centre(v))) {
+                nearest = i;
+            }
+        });
+        cells[nearest] = `${cells[nearest] ?? ""}${pieces.join("")}`;
+    }
+    if (cells.some((c) => !CELL_VALUE.test(c))) {
+        return null;
+    }
+    return cells.map((c) => (/^\d/u.test(c) ? Number(c) : 0));
+}
+
 /**
  * Names from captions: when most captions end in the same word (a label every
  * statblock carries, discovered from the document), that word is dropped
  * wherever it stands in a caption.
  */
-export function captionNames(captions: readonly string[]): string[] {
+export function captionNames(captions: readonly string[], share = CAPTION_WORD_SHARE): string[] {
     const last = captions.map((c) => c.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "");
     const counts = new Map<string, number>();
     for (const w of last) {
         counts.set(w, (counts.get(w) ?? 0) + 1);
     }
     const [shared, count] = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? ["", 0];
-    const strip = captions.length >= MIN_CAPTIONS && count >= CAPTION_WORD_SHARE * captions.length;
+    const strip = captions.length >= MIN_CAPTIONS && count >= share * captions.length;
     return captions.map((c) => {
         const words = c.trim().split(/\s+/u);
         const kept = words.filter((w) => w.toLowerCase() !== shared);
@@ -123,7 +165,9 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
             return;
         }
         const row = tokensOf(line.text);
-        const numbers = rowValues(below.text, row.length);
+        const oneRunEach = line.runs.filter((r) => r.text.trim().length > 0).length === row.length;
+        const numbers =
+            (oneRunEach ? cellValues(line.runs, below.runs) : null) ?? rowValues(below.text, row.length);
         // A caption names the creature; a sentence above a worked example does not.
         if (numbers !== null && !endsSentence(above.text)) {
             found.push({ labels: i, values: valuesAt, caption: i - 1, row, numbers });

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { IR, IRTextRun } from "../types/ir.ts";
+import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import type { DetectedTable, TableCell, TableRow } from "./types.ts";
 
 /**
@@ -38,7 +39,10 @@ function mergeFragmentedRuns(runs: IRTextRun[]): IRTextRun[] {
             next.font === current.font &&
             next.weight === current.weight
         ) {
-            current.text += next.text;
+            // One cell; its pieces are words where a word space parts them.
+            current.text = wordBreakBetween(current.text, next.text, gap, wordSpace(current.size, next.size))
+                ? `${current.text} ${next.text}`
+                : current.text + next.text;
             current.width = next.x + next.width - current.x;
         } else {
             if (current.text.length > 0) {

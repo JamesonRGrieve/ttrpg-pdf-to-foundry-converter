@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { captionNames, detectStatRows, isLabelRow, rowValues } from "../../src/infer/detect-stat-rows.ts";
+import {
+    captionNames,
+    cellValues,
+    detectStatRows,
+    isLabelRow,
+    rowValues,
+} from "../../src/infer/detect-stat-rows.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun {
@@ -65,6 +71,19 @@ describe("statblock rows", () => {
         ).toEqual(["Lamp Warden", "Wick Hound", "Ember Moth - Young", "Glim"]);
         // Too few captions to discover a shared word.
         expect(captionNames(["Lamp Warden Profile"])).toEqual(["Lamp Warden Profile"]);
+        // A stricter share leaves names that share a last word by chance.
+        const names = ["Wick Cultist", "Ember Cultist", "Lamp Warden", "Glim Moth"];
+        expect(captionNames(names)).toEqual(["Wick", "Ember", "Lamp Warden", "Glim Moth"]);
+        expect(captionNames(names, 0.8)).toEqual(names);
+    });
+
+    it("reads each value under its label, closing up letter-spaced values", () => {
+        const labels = ["WS", "BS", "S"].map((text, i) => ({ x: 10 + 25 * i, width: 12, text }));
+        const at = (x: number, text: string) => ({ x, width: 12, text });
+        expect(cellValues(labels, [at(10, "35"), at(35, "0 5"), at(60, "- -")])).toEqual([35, 5, 0]);
+        // A run holding several values, or a label with none, is not read by position.
+        expect(cellValues(labels, [at(10, "35 40"), at(60, "20")])).toBeNull();
+        expect(cellValues(labels, [at(10, "35"), at(60, "20")])).toBeNull();
     });
 
     it("reads a statblock from its caption, rows and labelled fields, past a tab in the side margin", () => {

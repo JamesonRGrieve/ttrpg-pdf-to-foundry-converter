@@ -58,6 +58,19 @@ export function wordBreakBetween(prev: string, next: string, gap: number, wordGa
     return gap > wordGap || (/[,.:;!?]$/u.test(prev) && /^\p{L}/u.test(next));
 }
 
+/** A word space, in the larger of two neighbours' sizes. */
+const WORD_SPACE_EM = 0.15;
+
+/**
+ * The narrowest gap between two runs of these sizes that is a word space. It
+ * scales with the larger size, so a small-capitals initial and its letters
+ * (or letter-spaced display text) never read as separate words, while a word
+ * space next to a larger numeral still does.
+ */
+export function wordSpace(leftSize: number, rightSize: number): number {
+    return WORD_SPACE_EM * Math.max(leftSize, rightSize);
+}
+
 /** Printed note markers (footnote daggers etc.) that annotate a value, never part of it. */
 export const NOTE_MARKERS = /[†‡*§¶]+/gu;
 

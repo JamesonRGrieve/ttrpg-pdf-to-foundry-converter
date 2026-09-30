@@ -32,6 +32,32 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\btraits?\b/iu, "trait"],
 ];
 
+/**
+ * A kind a heading tags itself with: "NAME (TALENT)", "NAME (UNIQUE PSY
+ * POWER)". Singular only, and never a bare "power" — "Resistance (Psychic
+ * Powers)" and "Weapon Training (Power)" name what a talent covers.
+ */
+const KIND_TAG = /\s*\((?:[^()]*\s)?(talent|trait|psychic power|psy power)\)\s*$/iu;
+/** The same, leading the name: "TALENT: NAME", "NEW TALENT: NAME". */
+const KIND_PREFIX = /^(?:\p{L}+\s+)?(talent|trait|psychic power|psy power)\s*:\s*(?=\S)/iu;
+const TAGGED_KINDS: Readonly<Record<string, ItemType>> = {
+    talent: "talent",
+    trait: "trait",
+    "psychic power": "psychicPower",
+    "psy power": "psychicPower",
+};
+
+/** The kind a heading's tag names, if it carries one. */
+export function headingKindTag(heading: string): ItemType | null {
+    const word = (KIND_TAG.exec(heading) ?? KIND_PREFIX.exec(heading.trim()))?.[1]?.toLowerCase();
+    return word === undefined ? null : (TAGGED_KINDS[word] ?? null);
+}
+
+/** A heading without its kind tag. */
+export function withoutKindTag(heading: string): string {
+    return heading.replace(KIND_TAG, "").trim().replace(KIND_PREFIX, "");
+}
+
 /** Characteristic names and abbreviations as printed → the schema's characteristic keys. */
 export const CHARACTERISTICS: Readonly<Record<string, string>> = {
     "weapon skill": "weaponSkill",
@@ -117,6 +143,23 @@ function sectionType(sections: readonly string[]): ItemType | null {
     return null;
 }
 
+/**
+ * The fielded kind an entry's own text refers to itself as ("… each time the
+ * character uses this Talent"), when it names exactly one.
+ */
+function selfNamedKind(entry: Entry): ItemType | null {
+    const text = [entry.body, ...entry.fields.map(([, value]) => value)].join(" ");
+    const kinds = new Set(SELF_REFERENCES.filter(([re]) => re.test(text)).map(([, kind]) => kind));
+    return kinds.size === 1 ? ([...kinds][0] ?? null) : null;
+}
+
+/** How an entry of a fielded kind refers to itself in its own text. */
+const SELF_REFERENCES: readonly [RegExp, ItemType][] = [
+    [/\bthis talent\b/iu, "talent"],
+    [/\bthis skill\b/iu, "skill"],
+    [/\bthis (?:psychic )?power\b/iu, "psychicPower"],
+];
+
 /** The fielded kind the nearest enclosing section naming any catalogue kind names, if fielded. */
 function fieldedSectionKind(sections: readonly string[]): ItemType | null {
     for (const section of [...sections].reverse()) {
@@ -139,14 +182,22 @@ export function entryType(entry: Entry): ItemType | null {
     if (has(fields, "skills") && has(fields, "talents", "traits")) {
         return null;
     }
+    const tagged = headingKindTag(entry.heading.text);
+    if (tagged !== null) {
+        return tagged;
+    }
     if (has(fields, "focus power", "sustained", "sustain", "psychic power")) {
         return "psychicPower";
     }
     if (has(fields, "tier")) {
         return "talent";
     }
-    // A talent printed with its prerequisites but no tier, under a Talents section.
-    if (has(fields, "prerequisite", "prerequisites") && fieldedSectionKind(entry.sections) === "talent") {
+    // A talent printed with its prerequisites but no tier, under a Talents
+    // section — or under any section, when its own text calls it "this Talent".
+    if (
+        has(fields, "prerequisite", "prerequisites") &&
+        (fieldedSectionKind(entry.sections) === "talent" || selfNamedKind(entry) === "talent")
+    ) {
         return "talent";
     }
     if (
@@ -206,7 +257,7 @@ const splitList = (s: string): string[] =>
 /** Build the item body for a typed entry. */
 export function entryItem(entry: Entry, type: ItemType): EntryItem {
     const fields = fieldMap(entry);
-    const { name, characteristic } = splitCharacteristic(entry.heading.text);
+    const { name, characteristic } = splitCharacteristic(withoutKindTag(entry.heading.text));
     const html = toHtml(entry.body);
     const system: JsonObject = {};
     const variantized: Record<string, JsonValue> = {};

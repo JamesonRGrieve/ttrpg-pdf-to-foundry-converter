@@ -5,9 +5,9 @@ import { bodyStyle } from "../util/body-style.ts";
 import { numAsc } from "../util/ordered.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
-import { wordBreakBetween } from "../util/text.ts";
+import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import { isTableCaption } from "./detect-titled-tables.ts";
-import { FUNCTION_WORDS, readsAsProse, scrambledCase } from "./names.ts";
+import { FUNCTION_WORDS, NUMBERED_LABEL, readsAsProse, scrambledCase } from "./names.ts";
 
 /**
  * Catalogue entries (talents, traits, powers, conditions, …) found by
@@ -28,6 +28,8 @@ import { FUNCTION_WORDS, readsAsProse, scrambledCase } from "./names.ts";
 const BASELINE_TOLERANCE = 2.5;
 /** A heading line is at most this many characters. */
 const MAX_HEADING_LENGTH = 60;
+/** A rank closing a name of at least two words: "Wick Mastery 2". */
+const RANK_SUFFIX = /(?<=\p{L}+\s+\p{L}+)\s+\d{1,2}$/u;
 /** A line ending within this many points of its column's right edge wrapped. */
 const WRAP_SLACK = 12;
 // A stray run (an unstripped page number, a marginal mark) can end past the
@@ -36,8 +38,6 @@ const WRAP_SLACK = 12;
 const EDGE_PERCENTILE = 0.9;
 /** Size step (points) that separates two heading levels. */
 const LEVEL_STEP = 0.4;
-/** A gap between runs wider than this many font-sizes is a word space. */
-const WORD_GAP_FACTOR = 0.2;
 /** A gap inside a line wider than this many font-sizes separates table columns, not words. */
 // A display face's word space can run past one font-size (≈1.25×); table
 // header labels sit further apart (≈1.4× and up).
@@ -82,6 +82,7 @@ export interface Entry {
 function joinRuns(runs: readonly IRTextRun[]): string {
     let text = "";
     let prevEnd = Number.NEGATIVE_INFINITY;
+    let prevSize = 0;
     for (const r of runs) {
         if (r.text.length === 0) {
             continue;
@@ -89,10 +90,11 @@ function joinRuns(runs: readonly IRTextRun[]): string {
         // Adjacent runs without a gap continue one word.
         const gap = r.x - prevEnd;
         text +=
-            text.length > 0 && wordBreakBetween(text, r.text, gap, WORD_GAP_FACTOR * r.size)
+            text.length > 0 && wordBreakBetween(text, r.text, gap, wordSpace(prevSize, r.size))
                 ? ` ${r.text}`
                 : r.text;
         prevEnd = r.x + r.width;
+        prevSize = r.size;
     }
     return text.replace(/\s+/gu, " ").trim();
 }
@@ -225,8 +227,13 @@ export function headingOf(
     }
     // A field label or a sentence is not a heading, and a line carrying a value
     // outside parentheses — a word starting with a digit or sign ("12", "+10",
-    // "2kg", "01-15") — is a table row, not a name.
-    const outsideParens = line.text.replace(/\([^)]*\)/gu, " ");
+    // "2kg", "01-15") — is a table row, not a name. A name may end in its rank
+    // ("Wick Mastery 2") or follow a numbered label ("Rank 2: Glow").
+    const outsideParens = line.text
+        .replace(/\([^)]*\)/gu, " ")
+        .trim()
+        .replace(RANK_SUFFIX, "")
+        .replace(NUMBERED_LABEL, "");
     // A heading is title-like and contiguous (labels spread across columns are
     // a table row). A mixed-case line breaking off on a comma or connecting
     // word is running text; a display heading in capitals may wrap there.

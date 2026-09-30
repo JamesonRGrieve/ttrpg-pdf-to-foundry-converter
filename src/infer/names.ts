@@ -185,6 +185,37 @@ export function cleanName(raw: string): string {
     );
 }
 
+/** A heading led by a numbered label: "Rank 2: Name", "Tier 1: Name". */
+export const NUMBERED_LABEL = /^(\p{L}+)\s*\d+\s*:\s*(?=\S)/u;
+/** Fewest headings a numbered label must lead to be one the document grades its entries by. */
+const MIN_LABELLED_HEADINGS = 3;
+
+/**
+ * The words the document's headings use as numbered labels — a grade printed
+ * before an entry's name ("Rank 2: Name"), discovered from how many headings
+ * it leads, never from a vocabulary.
+ */
+export function headingLabels(headings: readonly string[]): Set<string> {
+    const counts = new Map<string, number>();
+    for (const h of headings) {
+        const word = NUMBERED_LABEL.exec(h.trim())?.[1]?.toLowerCase();
+        if (word !== undefined) {
+            counts.set(word, (counts.get(word) ?? 0) + 1);
+        }
+    }
+    return new Set([...counts].filter(([, n]) => n >= MIN_LABELLED_HEADINGS).map(([w]) => w));
+}
+
+/** A heading without the numbered label it leads with, when that label is one of `labels`. */
+export function stripHeadingLabel(heading: string, labels: ReadonlySet<string>): string {
+    const trimmed = heading.trim();
+    const match = NUMBERED_LABEL.exec(trimmed);
+    const word = match?.[1]?.toLowerCase();
+    return match !== null && word !== undefined && labels.has(word)
+        ? trimmed.slice(match[0].length)
+        : heading;
+}
+
 /** The system's NPC `tier` enum. */
 const NPC_TIERS = ["troop", "elite", "master", "horde"] as const;
 export type NpcTier = (typeof NPC_TIERS)[number];

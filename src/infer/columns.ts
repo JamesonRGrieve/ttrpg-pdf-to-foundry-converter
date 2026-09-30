@@ -127,10 +127,15 @@ export function isAttributeScale(leadRoles: readonly Role[] | null | undefined):
 }
 
 /**
- * A table keyed by "Advance" lists what a character may buy — skills,
- * talents and the like side by side, each with its price — and defines none
- * of them: it is no catalogue.
+ * A table of what a character may buy — skills, talents and the like side by
+ * side, each with its price — defines none of them: it is no catalogue. It is
+ * keyed by "Advance", or prices rows gated by prerequisites (a catalogue of
+ * talents names prerequisites but no price; a catalogue of goods, a price but
+ * no prerequisites).
  */
-export function isAdvanceList(leadRoles: readonly Role[] | null | undefined): boolean {
-    return leadRoles?.includes("advance") ?? false;
+export function isAdvanceList(roles: readonly Role[] | null | undefined): boolean {
+    return (
+        (roles?.includes("advance") ?? false) ||
+        ((roles?.includes("cost") ?? false) && (roles?.includes("prerequisites") ?? false))
+    );
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { canonicalizeText, stripSubsetPrefix, wordBreakBetween } from "../../src/util/text.ts";
+import { canonicalizeText, stripSubsetPrefix, wordBreakBetween, wordSpace } from "../../src/util/text.ts";
 
 // All non-ASCII / invisible characters are written as \u escape sequences so
 // the exact codepoint under test is unambiguous in the source.
@@ -116,5 +116,16 @@ describe("wordBreakBetween", () => {
         expect(wordBreakBetween("lan", "tern", 0.2, 1.5)).toBe(false);
         expect(wordBreakBetween("Glow:", "The", 0.5, 1.5)).toBe(true);
         expect(wordBreakBetween("ratio 3:", "1", 0.5, 1.5)).toBe(false);
+    });
+});
+
+describe("wordSpace", () => {
+    it("scales with the larger neighbour, so a large initial's letters stay one word", () => {
+        // A word space beside a larger numeral is still a space.
+        expect(wordBreakBetween("rank", "2:", 3, wordSpace(11.25, 16))).toBe(true);
+        expect(wordBreakBetween("herald of", "khorne", 2.2, wordSpace(11, 11))).toBe(true);
+        // A small-capitals initial and its letters, letter-spaced.
+        expect(wordBreakBetween("g", "r e a t", 1.43, wordSpace(13, 9.1))).toBe(false);
+        expect(wordBreakBetween("(e", "lite", 0.13, wordSpace(13, 9.1))).toBe(false);
     });
 });

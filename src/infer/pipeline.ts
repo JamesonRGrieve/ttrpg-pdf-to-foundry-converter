@@ -16,16 +16,18 @@ import {
 } from "./columns.ts";
 import { detectEntries, type Entry } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
-import { detectStatRows } from "./detect-stat-rows.ts";
+import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import { entryItem, entryType, typeNamedBy } from "./entry-types.ts";
 import {
     cleanName,
     endsMidSentence,
+    headingLabels,
     readsAsProse,
     rejoinSplitWords,
     startsLikeName,
+    stripHeadingLabel,
     wordsOf,
 } from "./names.ts";
 import { parseNpc } from "./npc.ts";
@@ -599,10 +601,15 @@ function extractEntries(
     });
     const modal = modalHeadingSizes(typed);
     const headingTypes = new Map<string, string>(typed.map(({ entry, type }) => [entry.heading.text, type]));
+    const labels = headingLabels(typed.map(({ entry }) => entry.heading.text));
     let count = 0;
     for (const typedEntry of typed) {
         const { type } = typedEntry;
         let { entry } = typedEntry;
+        entry = {
+            ...entry,
+            heading: { ...entry.heading, text: stripHeadingLabel(entry.heading.text, labels) },
+        };
         const component =
             entry.fields.length === 0 && entry.heading.size < (modal.get(type) ?? 0) - SUBHEADING_STEP;
         if (component) {
@@ -724,6 +731,11 @@ function rowTexts(row: TableRow, columns: number): string[] {
 
 /** How many pages before its statblock a creature's own heading and prose may begin. */
 const STATBLOCK_PROSE_REACH = 1;
+/**
+ * Share of grid banners ending in one word for it to be their label. Banners
+ * carry real names, which may share a last word by chance, so nearly all must.
+ */
+const GRID_BANNER_WORD_SHARE = 0.8;
 
 /**
  * The prose entry introducing a statblock: the nearest heading of the same
@@ -791,10 +803,22 @@ function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
 }
 
 function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector): number {
-    // Statblocks print their characteristics as a grid or as a row.
-    const grids = [...detectNumericGrids(ir), ...detectStatRows(ir)];
-    for (const grid of grids) {
-        const npc = parseNpc(grid);
+    // Statblocks print their characteristics as a grid or as a row. A label
+    // nearly every grid's banner carries ("… Profile") is no part of a name;
+    // row captions already drop theirs.
+    const numeric = detectNumericGrids(ir);
+    const grids = [...numeric, ...detectStatRows(ir)];
+    const npcs = grids.map(parseNpc);
+    const bannerNames = captionNames(
+        npcs.slice(0, numeric.length).map((n) => n.name),
+        GRID_BANNER_WORD_SHARE,
+    );
+    for (const [i, grid] of grids.entries()) {
+        const parsed = npcs[i];
+        if (parsed === undefined) {
+            continue;
+        }
+        const npc = { ...parsed, name: bannerNames[i] ?? parsed.name };
         for (const u of npc.unparsed) {
             out.warnings.push(`p${out.page(grid.pageIndex)} ${npc.name}: unparsed ${u}`);
         }

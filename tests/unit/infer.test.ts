@@ -18,15 +18,17 @@ import {
 } from "../../src/infer/detect-entries.ts";
 import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
-import { entryItem, entryType, typeNamedBy } from "../../src/infer/entry-types.ts";
+import { entryItem, entryType, headingKindTag, typeNamedBy } from "../../src/infer/entry-types.ts";
 import {
     cleanName,
     endsMidSentence,
+    headingLabels,
     readsAsProse,
     rejoinSplitWords,
     restoreWordSpaces,
     splitTier,
     startsLikeName,
+    stripHeadingLabel,
     titleCase,
     wordsOf,
 } from "../../src/infer/names.ts";
@@ -121,6 +123,9 @@ describe("columns", () => {
         expect(headerRole("Advance")).toBe("advance");
         expect(isAdvanceList(["advance"])).toBe(true);
         expect(isAdvanceList(["name"])).toBe(false);
+        expect(isAdvanceList(["name", "cost", "type", "prerequisites"])).toBe(true);
+        expect(isAdvanceList(["name", "prerequisites", "benefit"])).toBe(false);
+        expect(isAdvanceList(["name", "weight", "cost", "availability"])).toBe(false);
         expect(isAttributeScale(["roll"])).toBe(false);
         expect(isAttributeScale(null)).toBe(false);
     });
@@ -187,6 +192,19 @@ describe("names", () => {
     it("takes a schema tier out of a statblock heading", () => {
         expect(splitTier("REEDSTALKER (Elite)")).toEqual({ name: "Reedstalker", tier: "elite" });
         expect(splitTier("Lamp (Brass)")).toEqual({ name: "Lamp (Brass)", tier: null });
+    });
+
+    it("strips a numbered label the document grades its headings by", () => {
+        const headings = ["Rank 1: Glow", "Rank 2: Flare", "rank 3: Blaze", "Lamp 9: Wick", "Plain Name"];
+        const labels = headingLabels(headings);
+        expect([...labels]).toEqual(["rank"]);
+        expect(headings.map((h) => stripHeadingLabel(h, labels))).toEqual([
+            "Glow",
+            "Flare",
+            "Blaze",
+            "Lamp 9: Wick",
+            "Plain Name",
+        ]);
     });
 });
 
@@ -708,6 +726,35 @@ describe("entry typing", () => {
         // A talent printed with prerequisites but no tier, under a Talents section.
         expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Talents", "A"]))).toBe("talent");
         expect(entryType(entry("WICK FOCUS", [["Prerequisites", "Ag 30"]], ["Traits"]))).toBe("trait");
+        // Under a section that names no kind, a talent that calls itself one.
+        const lore = ["IV: Lamps and Wicks", "Kindly Flames"];
+        expect(
+            entryType(
+                entry("WARM HAND", [["Prerequisites", "None"]], lore, "With this Talent the bearer glows."),
+            ),
+        ).toBe("talent");
+        expect(
+            entryType(
+                entry(
+                    "WARM HAND",
+                    [
+                        ["Prerequisites", "None"],
+                        ["Effect", "Each use of this Talent…"],
+                    ],
+                    lore,
+                ),
+            ),
+        ).toBe("talent");
+        expect(entryType(entry("WARM HAND", [["Prerequisites", "None"]], lore))).toBeNull();
+        // A heading tagged with its own kind, under any section; the tag is no part of the name.
+        expect(entryType(entry("WARM HAND (TALENT)", [], lore))).toBe("talent");
+        expect(entryItem(entry("WARM HAND (TALENT)", [], lore), "talent").name).toBe("Warm Hand");
+        expect(entryType(entry("Ember Storm (Unique Psy Power)", [], lore))).toBe("psychicPower");
+        expect(entryType(entry("NEW TALENT: WICK USE (LAMPWRIGHT)", [], lore))).toBe("talent");
+        expect(entryItem(entry("TALENT: WARM HAND", [], lore), "talent").name).toBe("Warm Hand");
+        // What a talent covers is no tag.
+        expect(headingKindTag("Resistance (Psychic Powers)")).toBeNull();
+        expect(headingKindTag("Melee Weapon Training (Power)")).toBeNull();
         expect(typeNamedBy("Table 2-1: Mutations")).toBe("mutation");
         expect(typeNamedBy("Weapons Upgrades")).toBe("weaponModification");
         expect(typeNamedBy("Armour Upgrades")).toBe("armourModification");
@@ -934,6 +981,32 @@ describe("headings", () => {
         expect(headingOf(italic, body, false)?.text).toBe("Captain Vane’s Lantern");
         const mixed = { ...line, runs: [roman, { ...name, font: "other" }] };
         expect(headingOf(mixed, body, false)).toBeNull();
+    });
+
+    it("keeps a name ending in its rank, not a line carrying other values", () => {
+        const ranked = heading([
+            ["WICK", 100, 30],
+            ["MASTERY", 134, 50],
+            ["2", 188, 8],
+        ]);
+        expect(headingOf(ranked, body, false)?.text).toBe("WICK MASTERY 2");
+        const labelled = heading([
+            ["RANK", 100, 30],
+            ["2:", 134, 10],
+            ["GLOW", 148, 30],
+        ]);
+        expect(headingOf(labelled, body, false)?.text).toBe("RANK 2: GLOW");
+        const lone = heading([
+            ["CHAPTER", 100, 50],
+            ["3", 154, 8],
+        ]);
+        expect(headingOf(lone, body, false)).toBeNull();
+        const row = heading([
+            ["WICK", 100, 30],
+            ["12", 134, 12],
+            ["LAMP", 150, 30],
+        ]);
+        expect(headingOf(row, body, false)).toBeNull();
     });
 
     it("keeps a heading whose word space is a little wide", () => {

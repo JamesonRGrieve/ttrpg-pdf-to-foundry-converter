@@ -2,7 +2,7 @@
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
 import { inMarginBand, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
-import { wordBreakBetween } from "../util/text.ts";
+import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 
 /**
@@ -301,25 +301,27 @@ interface Banner {
     column: number;
 }
 
-/** Points of horizontal gap between runs that make a word space in statblock text. */
+/** Points of horizontal gap within which a field label's runs still read as one label. */
 const PANEL_WORD_GAP = 3;
 
 /** Join a line's runs left to right, spacing only across visible gaps. */
 function joinLine(runs: readonly IRTextRun[]): string {
     const fragments: string[] = [];
     let prevEnd = Number.NEGATIVE_INFINITY;
+    let prevSize = 0;
     for (const r of [...runs].sort((a, b) => a.x - b.x)) {
         if (r.text.length === 0) {
             continue;
         }
         if (
             fragments.length > 0 &&
-            wordBreakBetween(fragments.join(""), r.text, r.x - prevEnd, PANEL_WORD_GAP)
+            wordBreakBetween(fragments.join(""), r.text, r.x - prevEnd, wordSpace(prevSize, r.size))
         ) {
             fragments.push(" ");
         }
         fragments.push(r.text);
         prevEnd = r.x + r.width;
+        prevSize = r.size;
     }
     return fragments.join("").replace(/\s+/gu, " ").trim();
 }
