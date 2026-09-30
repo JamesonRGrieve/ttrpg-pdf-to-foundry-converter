@@ -49,6 +49,9 @@ export function isLabelRow(text: string): boolean {
     );
 }
 
+/** A line set at most this share of the labels' size is a superscript note over the values. */
+const SUPERSCRIPT_SHARE = 0.7;
+
 /** A line holding only bracketed numbers: notes set over a statblock's values. */
 const NOTES_ONLY = /^\s*(?:\(\d+\)\s*)+$/u;
 
@@ -134,7 +137,10 @@ export function captionNames(captions: readonly string[], share = CAPTION_WORD_S
     const lastWord = (c: string): string => c.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "";
     const enough = captions.length >= MIN_CAPTIONS;
     const common = (count: number): boolean => enough && count >= share * captions.length;
-    let [shared, count] = mostCommon(spaced.map(lastWord));
+    // A trailing note is a shared label only when no caption carries another
+    // (tiers vary: "(Elite)", "(Master)").
+    const notes = new Set(spaced.flatMap((c) => TRAILING_NOTE.exec(c)?.[1]?.toLowerCase() ?? []));
+    let [shared, count] = notes.size > 1 ? ["", 0] : mostCommon(spaced.map(lastWord));
     if (!common(count)) {
         [shared, count] = mostCommon(spaced.map((c) => lastWord(c.replace(TRAILING_NOTE, ""))));
     }
@@ -167,10 +173,14 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
             return;
         }
         const reach = ROW_REACH_FACTOR * sizeOf(line);
-        // A line of bracketed notes over some values (printed unnatural
-        // characteristics) may sit between the labels and the values.
+        // A line of notes over some values (printed unnatural characteristics,
+        // bracketed or set as small superscripts) may sit between the labels
+        // and the values.
         const next = lines[i + 1];
-        const valuesAt = next !== undefined && NOTES_ONLY.test(next.text) ? i + 2 : i + 1;
+        const notes =
+            next !== undefined &&
+            (NOTES_ONLY.test(next.text) || sizeOf(next) < SUPERSCRIPT_SHARE * sizeOf(line));
+        const valuesAt = notes ? i + 2 : i + 1;
         const below = lines[valuesAt];
         const above = lines[i - 1];
         if (

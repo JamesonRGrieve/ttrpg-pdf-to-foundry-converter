@@ -82,6 +82,9 @@ describe("statblock rows", () => {
         expect(captionNames(tiered)).toEqual(["Lamp Warden (Elite)", "Wick Hound (Troop)", "Glim (Master)"]);
         const minions = ["Wick Hound (Minion)", "Lamp Moth (Minion)", "Glim (Minion)"];
         expect(captionNames(minions)).toEqual(["Wick Hound", "Lamp Moth", "Glim"]);
+        // The most common tier is still a tier, not a shared label.
+        const tiers = ["Wick Hound (Elite)", "Lamp Moth (Elite)", "Glim (Master)"];
+        expect(captionNames(tiers)).toEqual(tiers);
     });
 
     it("reads a row of ten labels, the tenth the schema's influence", () => {
@@ -122,6 +125,16 @@ describe("statblock rows", () => {
             run("Glim Beast", 60, 700, { size: 11 }),
             run(LABELS, 60, 680, { size: 11.75 }),
             run("(8) (8)", 110, 667, { size: 7 }),
+            run("40 20 45 45 30 10 35 30 5", 60, 660, { size: 14.75 }),
+        ]);
+        expect(detectStatRows(ir)[0]?.values).toEqual([40, 20, 45, 45, 30, 10, 35, 30, 5]);
+    });
+
+    it("reads the values past a note set as a small superscript over them", () => {
+        const ir = irOf([
+            run("Glim Beast", 60, 700, { size: 11 }),
+            run(LABELS, 60, 680, { size: 11.75 }),
+            run("8", 220, 671, { size: 5 }),
             run("40 20 45 45 30 10 35 30 5", 60, 660, { size: 14.75 }),
         ]);
         expect(detectStatRows(ir)[0]?.values).toEqual([40, 20, 45, 45, 30, 10, 35, 30, 5]);
