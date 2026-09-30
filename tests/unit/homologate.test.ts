@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import type { Line } from "../../src/infer/schema.ts";
-import { targetedInputs } from "../../src/node/target-args.ts";
+import { danglingTarget, targetedInputs } from "../../src/node/target-args.ts";
 import type { EmittedPack } from "../../src/stages/emit.ts";
 import { homologate, type LineDocuments } from "../../src/stages/homologate.ts";
 import type { JsonObject } from "../../src/types/entity.ts";
@@ -153,5 +153,13 @@ describe("per-input targets", () => {
             { input: "c.pdf", targetId: "rt" },
             { input: "d.pdf", targetId: "dw" },
         ]);
+    });
+
+    it("finds a --target given after every input", () => {
+        const pdf = { kind: "positional", value: "a.pdf" } as const;
+        const target = { kind: "option", name: "target", value: "rt" } as const;
+        expect(danglingTarget([pdf, target])).toBe(true);
+        expect(danglingTarget([target, pdf])).toBe(false);
+        expect(danglingTarget([pdf])).toBe(false);
     });
 });

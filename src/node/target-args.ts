@@ -19,6 +19,12 @@ export interface TargetedInput {
     targetId: string | undefined;
 }
 
+/** Whether a `--target` is given with no input after it (it would apply to nothing). */
+export function danglingTarget(tokens: readonly ArgToken[]): boolean {
+    const last = tokens.findLastIndex((t) => t.kind === "option" && t.name === "target");
+    return last >= 0 && !tokens.slice(last + 1).some((t) => t.kind === "positional");
+}
+
 export function targetedInputs(tokens: readonly ArgToken[]): TargetedInput[] {
     const out: TargetedInput[] = [];
     let targetId: string | undefined;

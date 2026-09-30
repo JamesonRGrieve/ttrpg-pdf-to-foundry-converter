@@ -13,7 +13,7 @@ import type { BuiltModule } from "../stages/module.ts";
 import { EXIT, makeConfig, type ConfigOverrides, type EngineConfig, type ExitCode } from "./config.ts";
 import { FileIrCache } from "./ir-cache.ts";
 import { FileOcrPageStore } from "./ocr-store.ts";
-import { targetedInputs, type TargetedInput } from "./target-args.ts";
+import { danglingTarget, targetedInputs, type TargetedInput } from "./target-args.ts";
 import { NodeTesseractEngine } from "./tesseract-node.ts";
 
 /**
@@ -190,6 +190,10 @@ async function main(): Promise<ExitCode> {
         return EXIT.ERROR;
     }
     const log = createLogger(opts.config.logLevel);
+    if (danglingTarget(tokens)) {
+        process.stderr.write(`--target applies to the inputs after it; put it before them\n\n${USAGE}`);
+        return EXIT.ERROR;
+    }
     const inputs = resolveTargets(targetedInputs(tokens));
     if (typeof inputs === "string") {
         process.stderr.write(`${inputs}\n\n${USAGE}`);
