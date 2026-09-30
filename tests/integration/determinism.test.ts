@@ -64,6 +64,15 @@ describe("encrypted refusal", () => {
         expect(result.encrypted).toBe(true);
         expect(recognized).toBe(0);
     });
+
+    it("reads a PDF whose encryption only restricts permissions (no password to open)", async () => {
+        const fixture = (name: string): Uint8Array =>
+            new Uint8Array(readFileSync(resolve(repoRoot, "fixtures/rendered", name)));
+        const open = await extract(fixture("field-manual.pdf"));
+        const restricted = await extract(fixture("restricted.pdf"));
+        expect(restricted.encrypted).toBe(false);
+        expect(restricted.textRuns.map((r) => r.text)).toEqual(open.textRuns.map((r) => r.text));
+    });
 });
 
 describe("image recovery (Tier A)", () => {

@@ -45,3 +45,5 @@ for (const source of readdirSync(SRC)
     process.stdout.write(`rendered ${target}\n`);
 }
 run(process.execPath, [join(SRC, "gen-encrypted.mjs")]);
+// Needs the rendered field manual above.
+run(process.execPath, [join(SRC, "gen-restricted.mjs")]);

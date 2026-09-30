@@ -18,10 +18,15 @@ import { scanPlacements } from "./placements.ts";
  * into provenance. Produces `RawDoc`, the only structure downstream stages are
  * forbidden from re-reading.
  *
- * Encrypted input is *refused, never decrypted* (C4): we probe with pdf-lib's
- * default (encryption-rejecting) load and, if it reports encryption, return a
- * `RawDoc` flagged `encrypted` without any password attempt.
+ * Password-protected input is *refused* (C4): a document that will not open
+ * without a password returns a `RawDoc` flagged `encrypted`, and no password
+ * is ever asked for or tried. A document whose /Encrypt entry only restricts
+ * permissions (an empty user password) opens as it does in any viewer; its
+ * text is read, but pdf-lib, which never decrypts, cannot read its images.
  */
+
+/** The name pdf.js gives the error for a document that needs a password to open. */
+const PASSWORD_EXCEPTION = "PasswordException";
 
 /** Pinned extractor identity recorded in provenance (§9.5). */
 export const EXTRACTOR_ID = `pdfjs-dist ${PINS["pdfjs-dist"]} + pdf-lib ${PINS["pdf-lib"]}`;
@@ -305,22 +310,19 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
     // that reuses the same bytes. Cloning keeps the input pristine.
     const bytes = pdfBytes.slice();
 
-    // Encryption gate — refuse, do NOT decrypt (C4 / §4). We load with
-    // `ignoreEncryption` so the parser reads the raw (still-encrypted) structure
-    // without attempting any password/decryption, then refuse on the flag. This
-    // is deliberately not `instanceof EncryptedPDFError`: pdf-lib's ES5-transpiled
-    // error subclass breaks `instanceof`, so we key on the document flag instead.
+    // pdf-lib reads the raw structure (`ignoreEncryption`: it never decrypts).
+    // A document carrying an /Encrypt entry may still open without a password
+    // (permissions-only protection, an empty user password, which every viewer
+    // opens); its streams are encrypted, so pdf-lib cannot read its images.
     const pdflibDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-    if (pdflibDoc.isEncrypted) {
-        return empty(true);
-    }
+    const restricted = pdflibDoc.isEncrypted;
 
-    const images = extractImageXObjects(pdflibDoc);
+    const images = restricted ? [] : extractImageXObjects(pdflibDoc);
 
     // Best-effort image placements from content streams (§6.3). Failure here only
     // weakens image→entity association; it never affects Tier A asset bytes.
     const placements: ImagePlacement[] = [];
-    const pdflibPages = pdflibDoc.getPages();
+    const pdflibPages = restricted ? [] : pdflibDoc.getPages();
     for (const [i, pdflibPage] of pdflibPages.entries()) {
         const leaf = pdflibPage.node;
         const content = pageContentBytes(pdflibDoc, leaf.get(PDFName.of("Contents")));
@@ -347,7 +349,19 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
         useSystemFonts: false,
         stopAtErrors: false,
     });
-    const doc = await loadingTask.promise;
+    // Encryption gate — refuse, never ask for or try a password (C4 / §4): a
+    // document that will not open without one is refused. pdf.js reports that
+    // as a PasswordException (keyed on its name: bundled error classes break
+    // `instanceof`).
+    let doc: PdfjsDocument;
+    try {
+        doc = await loadingTask.promise;
+    } catch (err: unknown) {
+        if (err instanceof Error && err.name === PASSWORD_EXCEPTION) {
+            return empty(true);
+        }
+        throw err;
+    }
     try {
         const metadata = await doc.getMetadata();
         const meta = readMeta(metadata.info);
