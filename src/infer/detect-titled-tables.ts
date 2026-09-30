@@ -6,7 +6,7 @@ import { columnAt } from "../util/columns.ts";
 import { inMarginBand, inSideMargin, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
-import { normalizeHeader } from "./columns.ts";
+import { headerRole, normalizeHeader } from "./columns.ts";
 import { restoreWordSpaces } from "./names.ts";
 import { mergeContinuationRows } from "./row-merge.ts";
 import type { DetectedTable, TableCell, TableRow, TitledTable } from "./types.ts";
@@ -439,6 +439,49 @@ export function alignBoundariesToData(bounds: number[], body: readonly RawRow[])
     }
 }
 
+/**
+ * Split header runs that set two labels as one ("Clip Rld") where the
+ * records below start a column at the run's left edge and again inside it:
+ * at the word nearest each inner edge, each piece becoming its own run —
+ * only when every piece is a schema field label and the whole is not one, so
+ * a long label over centred values ("Crit Rating", "Roll D100") or a label
+ * naming one field ("Armour Type") stays whole. Word positions are estimated
+ * from the run's even glyph advance.
+ */
+export function splitHeaderRuns(runs: readonly IRTextRun[], edges: readonly number[]): IRTextRun[] {
+    return runs.flatMap((run) => {
+        const words = [...run.text.matchAll(/\S+/gu)];
+        const advance = run.text.length > 0 ? run.width / run.text.length : 0;
+        const inside = edges.filter(
+            (e) => e > run.x + COLUMN_EDGE_TOLERANCE && e < run.x + run.width - COLUMN_EDGE_TOLERANCE,
+        );
+        const atStart = edges.some((e) => Math.abs(e - run.x) <= COLUMN_EDGE_TOLERANCE);
+        const twoLabels = words.length >= 2 && advance > 0 && headerRole(run.text) === null;
+        if (!twoLabels || inside.length === 0 || !atStart) {
+            return [run];
+        }
+        // Word starts (after the first) nearest each inner edge.
+        const cuts = [
+            ...new Set(
+                inside.map((e) => {
+                    const distance = (index: number): number => Math.abs(run.x + index * advance - e);
+                    const starts = words.slice(1).map((w) => w.index);
+                    return starts.sort((a, b) => distance(a) - distance(b))[0] ?? 0;
+                }),
+            ),
+        ]
+            .filter((c) => c > 0)
+            .sort((a, b) => a - b);
+        const bounds = [0, ...cuts, run.text.length];
+        const pieces = bounds.slice(0, -1).map((start, i) => {
+            const end = bounds[i + 1] ?? run.text.length;
+            const text = run.text.slice(start, end).trimEnd();
+            return { ...run, text, x: run.x + start * advance, width: text.length * advance };
+        });
+        return pieces.every((p) => headerRole(p.text) !== null) ? pieces : [run];
+    });
+}
+
 function inferColumnBoundaries(headerRow: RawRow, edges: readonly number[]): number[] {
     const merged = mergeAdjacentText(headerRow.runs, edges);
     return merged.map((m) => m.x);
@@ -810,16 +853,24 @@ function findHeader(lines: readonly RawRow[]): RawRow | null {
 }
 
 /**
- * The text columns a table occupies: those holding its header labels. A wide
- * table's header continues across a gutter on the same baseline in the same
- * header face; a neighbouring column's prose on that baseline does not share
- * the face, so it is left out.
+ * The text columns a table occupies: those holding its header labels, and any
+ * between them (a column of values under a label set as one run with its
+ * neighbour's, "Clip Rld"). A wide table's header continues across a gutter
+ * on the same baseline in the same header face; a neighbouring column's prose
+ * on that baseline does not share the face, so it is left out.
  */
 function headerColumns(header: RawRow, band: readonly IRTextRun[]): Set<number> {
     const faces = new Set(header.runs.map((r) => `${r.font}|${r.weight}`));
     const columns = new Set(header.runs.map((r) => r.column));
     for (const r of band) {
         if (Math.abs(r.y - header.y) < Y_TOL && faces.has(`${r.font}|${r.weight}`)) {
+            columns.add(r.column);
+        }
+    }
+    const lowest = Math.min(...columns);
+    const highest = Math.max(...columns);
+    for (const r of band) {
+        if (r.column > lowest && r.column < highest) {
             columns.add(r.column);
         }
     }
@@ -845,8 +896,9 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
     if (header === null) {
         return null;
     }
-    const { index: headerIdx, row: headerRow } = header;
+    const { index: headerIdx } = header;
     const edges = cellEdges(lines.slice(headerIdx + 1));
+    const headerRow = { ...header.row, runs: splitHeaderRuns(header.row.runs, edges) };
     const colBoundaries = inferColumnBoundaries(headerRow, edges);
     if (colBoundaries.length < MIN_COLUMNS) {
         return null;

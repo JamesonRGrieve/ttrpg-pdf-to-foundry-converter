@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { centredInColumn, cutAtEdges, detectTitledTables } from "../../src/infer/detect-titled-tables.ts";
+import {
+    centredInColumn,
+    cutAtEdges,
+    detectTitledTables,
+    splitHeaderRuns,
+} from "../../src/infer/detect-titled-tables.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun {
@@ -335,5 +340,28 @@ describe("titled tables", () => {
         ]);
         const [table] = detectTitledTables(ir);
         expect(table?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("†");
+    });
+});
+
+describe("header runs holding two labels", () => {
+    // "Clip Rld" set as one run 40pt wide from x=300: "Rld" starts near x=325.
+    const merged = run("Clip Rld", 300, 700, { width: 40, weight: "bold" });
+
+    it("splits where records start a column at the run's edge and inside it", () => {
+        expect(splitHeaderRuns([merged], [300, 325]).map((r) => [r.text, r.x])).toEqual([
+            ["Clip", 300],
+            ["Rld", 325],
+        ]);
+    });
+
+    it("keeps whole a label over centred values, one naming a single field, or pieces naming no field", () => {
+        // Values centred under the label start only inside it.
+        expect(splitHeaderRuns([merged], [325])).toEqual([merged]);
+        // One field's label ("Armour Type" names the name column).
+        const single = run("Armour Type", 300, 700, { width: 55, weight: "bold" });
+        expect(splitHeaderRuns([single], [300, 335])).toEqual([single]);
+        // Pieces that are no schema labels.
+        const prose = run("Lamp Oil", 300, 700, { width: 40, weight: "bold" });
+        expect(splitHeaderRuns([prose], [300, 325])).toEqual([prose]);
     });
 });
