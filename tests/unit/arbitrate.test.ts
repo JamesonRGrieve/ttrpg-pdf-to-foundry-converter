@@ -149,6 +149,19 @@ describe("arbitrate", () => {
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["SAMPLE"]);
     });
 
+    it("reads a cell whose font maps letters to marks from OCR, but keeps a printed dash value", () => {
+        const raw = doc([run('C0%-)D/"33&', 100, 42), run("S/–/–", 300, 20)]);
+        const words = [
+            word("Acid", 95, [100, 698, 117, 708]),
+            word("Shells", 95, [121, 698, 142, 708]),
+            word("S/-/-", 95, [300, 698, 320, 708]),
+        ];
+        expect(arbitrate(raw, [{ pageIndex: 0, words }]).textRuns.map((r) => r.text)).toEqual([
+            "Acid Shells",
+            "S/–/–",
+        ]);
+    });
+
     it("reads a row drawn over and over in overlapping pieces from OCR", () => {
         // Each piece drawn three times; what survives still overlaps.
         const pieces = [run("La", 100, 10), run("L mp", 100, 20), run("mp", 110, 10)];

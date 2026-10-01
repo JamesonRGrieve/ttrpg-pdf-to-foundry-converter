@@ -427,6 +427,21 @@ describe("page numbering", () => {
         expect(printedPage(numbering, 10)).toBe("12");
     });
 
+    it("numbers a part of the book whose folios agree on their own offset by it", () => {
+        // Pages 3–9 print folios two ahead; pages 20–25 five behind; two stray
+        // numbers on pages 40–41 agree with each other and nothing else.
+        const runs = [
+            ...[3, 4, 5, 6, 7, 8, 9].map((p) => irRun(String(p + 2), p, 20)),
+            ...[20, 21, 22, 23, 24, 25].map((p) => irRun(String(p - 5), p, 20)),
+            irRun("7", 40, 20),
+            irRun("8", 41, 20),
+        ];
+        const numbering = inferPageNumbering(
+            irOf([3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 40, 41], runs),
+        );
+        expect([4, 12, 22, 40].map((p) => printedPage(numbering, p))).toEqual(["6", "14", "17", "42"]);
+    });
+
     it("falls back to 1-based PDF pages without consistent folios", () => {
         expect(printedPage(inferPageNumbering(irOf([], [])), 0)).toBe("1");
     });

@@ -82,6 +82,14 @@ const CORRUPT_LINE_SHARE = 0.1;
 const MIN_DISOWNED_LETTERS = 6;
 /** A disowned line's OCR reading must spell at least this share of its letters. */
 const DISOWNED_OCR_SHARE = 0.5;
+/**
+ * A line at least this long, less than GARBLED_ALNUM_SHARE of it letters and
+ * digits, is a font encoding that maps letters to punctuation
+ * ("C0%-)D/\"33&" for a two-word name), however few letters remain; shorter
+ * runs of marks ("S/–/–", "—") are printed values.
+ */
+const MIN_GARBLED_LENGTH = 6;
+const GARBLED_ALNUM_SHARE = 0.5;
 
 // Code points that indicate a broken or custom font encoding: control
 // characters, private-use glyphs, the replacement character, or anything
@@ -626,10 +634,14 @@ function arbitratePage(
         // that are still ordinary ones ("0V:hAamh" for "RANGED"): OCR's
         // reading replaces it.
         const lineLetters = letterCount(lineText);
+        const garbled =
+            lineText.length >= MIN_GARBLED_LENGTH && lineLetters < GARBLED_ALNUM_SHARE * lineText.length;
+        const ocrLetters = letterCount(confident.map((w) => w.text).join(""));
         if (
             groups.length === 0 &&
-            lineLetters >= MIN_DISOWNED_LETTERS &&
-            letterCount(confident.map((w) => w.text).join("")) >= DISOWNED_OCR_SHARE * lineLetters
+            (lineLetters >= MIN_DISOWNED_LETTERS || garbled) &&
+            ocrLetters > 0 &&
+            ocrLetters >= DISOWNED_OCR_SHARE * lineLetters
         ) {
             rewriteByRuns(line, confident);
             return;
