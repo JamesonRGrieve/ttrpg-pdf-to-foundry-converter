@@ -485,6 +485,76 @@ function applyEdits(text: string, edits: readonly Edit[]): string {
     return out;
 }
 
+/** OCR words top to bottom, left to right. */
+function readingOrder(words: readonly OcrWord[]): OcrWord[] {
+    return [...words].sort((a, b) => numAsc(b.box[3], a.box[3]) || numAsc(a.box[0], b.box[0]));
+}
+
+/** Fewest tokens a face must set before its agreement with OCR is judged. */
+const MIN_FACE_TOKENS = 30;
+/**
+ * Fewest characters a token needs to count in that judgement: OCR seldom
+ * reads a label of one to three letters ("WS", "S", "Int") as a word of its
+ * own, though it reads the label right.
+ */
+const MIN_JUDGED_TOKEN = 4;
+/** A face whose tokens OCR reads as written less often than this share is mis-encoded… */
+const MIS_ENCODED_SHARE = 0.25;
+/** …when, too, less than this share of its characters are letters or digits (its glyphs map to marks). */
+const MIS_ENCODED_ALNUM_SHARE = 0.75;
+
+/**
+ * Faces whose text the OCR reading almost never matches and that set mostly
+ * marks: a font whose encoding maps its glyphs to other characters throughout ("I\"3\"\"" for
+ * "Melee", "<" for "4"). Judged over the whole document, so a face's short
+ * cells, too brief to judge alone, are known by the rest of its text.
+ */
+export function misEncodedFaces(
+    runsByPage: ReadonlyMap<number, readonly RawTextRun[]>,
+    ocrByPage: ReadonlyMap<number, OcrPage>,
+): Set<string> {
+    const tokens = new Map<string, { total: number; read: number; chars: number; alnum: number }>();
+    for (const [pageIndex, runs] of runsByPage) {
+        const page = ocrByPage.get(pageIndex);
+        if (page === undefined) {
+            continue;
+        }
+        const lines = buildLines(runs);
+        const { perLine } = assignWords(lines, readingOrder(page.words));
+        lines.forEach((line, li) => {
+            const read = new Set(
+                align(
+                    line.tokens.map((t) => t.text),
+                    at(perLine, li).map((w) => w.text),
+                ).flatMap((g) => g.tokens),
+            );
+            line.tokens.forEach((token, ti) => {
+                const first = token.segments[0];
+                if (first === undefined || [...token.text].length < MIN_JUDGED_TOKEN) {
+                    return;
+                }
+                const face = stripSubsetPrefix(at(runs, first.run).fontName);
+                const count = tokens.get(face) ?? { total: 0, read: 0, chars: 0, alnum: 0 };
+                count.total += 1;
+                count.read += read.has(ti) ? 1 : 0;
+                count.chars += [...token.text].length;
+                count.alnum += letterCount(token.text);
+                tokens.set(face, count);
+            });
+        });
+    }
+    return new Set(
+        [...tokens]
+            .filter(
+                ([, c]) =>
+                    c.total >= MIN_FACE_TOKENS &&
+                    c.read < MIS_ENCODED_SHARE * c.total &&
+                    c.alnum < MIS_ENCODED_ALNUM_SHARE * c.chars,
+            )
+            .map(([face]) => face),
+    );
+}
+
 /** How often a line's text is drawn over again in place before its layer is no longer read. */
 const OVERDRAWN_COPIES_PER_RUN = 2;
 
@@ -519,9 +589,10 @@ function arbitratePage(
     page: OcrPage,
     pageIndex: number,
     copies: readonly RawTextRun[],
+    misEncoded: ReadonlySet<string>,
 ): RawTextRun[] {
     const lines = buildLines(runs);
-    const words = [...page.words].sort((a, b) => numAsc(b.box[3], a.box[3]) || numAsc(a.box[0], b.box[0]));
+    const words = readingOrder(page.words);
     const { perLine, lineless } = assignWords(lines, words);
 
     const edits = new Map<number, Edit[]>();
@@ -617,7 +688,11 @@ function arbitratePage(
         const confident = lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE);
         const lineText = line.tokens.map((t) => t.text).join("");
         const corrupt = [...lineText].filter((ch) => CORRUPTION.test(ch)).length;
-        if (lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) {
+        // A line set wholly in a mis-encoded face is OCR's to read, however short.
+        const inMisEncoded =
+            misEncoded.size > 0 &&
+            line.runs.every((i) => misEncoded.has(stripSubsetPrefix(at(runs, i).fontName)));
+        if ((lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) || inMisEncoded) {
             rewriteByRuns(line, confident);
             return;
         }
@@ -808,6 +883,7 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
         }
     }
     const scale = scanScale([...scanned.values()]);
+    const misEncoded = misEncodedFaces(runsByPage, ocrByPage);
     const textRuns: RawTextRun[] = [];
     for (const page of pages) {
         const runs = runsByPage.get(page.pageIndex) ?? [];
@@ -819,7 +895,13 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
             textRuns.push(
                 ...(ocrPage === undefined
                     ? runs
-                    : arbitratePage(runs, ocrPage, page.pageIndex, copiesByPage.get(page.pageIndex) ?? [])),
+                    : arbitratePage(
+                          runs,
+                          ocrPage,
+                          page.pageIndex,
+                          copiesByPage.get(page.pageIndex) ?? [],
+                          misEncoded,
+                      )),
             );
         }
     }

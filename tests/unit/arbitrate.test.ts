@@ -149,6 +149,24 @@ describe("arbitrate", () => {
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["SAMPLE"]);
     });
 
+    it("reads every line of a face OCR never reads as written from OCR, however short", () => {
+        // Forty cells in a face whose glyphs encode other letters, one per row,
+        // with OCR reading "Lamp" over each; and a short body word OCR agrees with.
+        const cells = Array.from({ length: 40 }, (_, i) => ({
+            ...run('I"3"', 100, 20, { fontName: "ABCDEF+Cells" }),
+            y: 700 - i * 12,
+        }));
+        const words = cells.map((c) => word("Lamp", 95, [100, c.y - 2, 120, c.y + 8]));
+        const body = { ...run("Wick", 300, 20), y: 700 };
+        const out = arbitrate(doc([...cells, body]), [
+            { pageIndex: 0, words: [...words, word("Wick", 95, [300, 698, 320, 708])] },
+        ]).textRuns;
+        expect(new Set(out.filter((r) => r.fontName.endsWith("Cells")).map((r) => r.text))).toEqual(
+            new Set(["Lamp"]),
+        );
+        expect(out.find((r) => r.x === 300)?.text).toBe("Wick");
+    });
+
     it("reads a cell whose font maps letters to marks from OCR, but keeps a printed dash value", () => {
         const raw = doc([run('C0%-)D/"33&', 100, 42), run("S/–/–", 300, 20)]);
         const words = [
