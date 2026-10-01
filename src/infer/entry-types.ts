@@ -206,6 +206,7 @@ const SELF_REFERENCES: readonly [RegExp, ItemType][] = [
     [/\bthis talent\b/iu, "talent"],
     [/\bthis skill\b/iu, "skill"],
     [/\bthis (?:psychic )?power\b/iu, "psychicPower"],
+    [/\bthis order\b/iu, "order"],
 ];
 
 /** The fielded kind the nearest enclosing section naming any catalogue kind names, if fielded. */
@@ -222,6 +223,15 @@ function fieldedSectionKind(sections: readonly string[]): ItemType | null {
     return null;
 }
 
+/**
+ * A `Type:` field that opens by naming the schema's order kind, at most one
+ * qualifying word first: "Sweeping Order (Free Action)", "Order (Half
+ * Action)" — not prose that runs on into the field ("… in order").
+ */
+const ORDER_TYPE = /^\s*(?:[\p{L}-]+\s+)?order\b/iu;
+/** A `Type:` field naming only an action: "Full Action", "Half Action". */
+const ACTION_TYPE = /^\s*[\p{L}-]+\s+action\s*$/iu;
+
 export function entryType(entry: Entry): ItemType | null {
     const fields = fieldMap(entry);
     // A creature's statblock lists its skills beside its talents or traits;
@@ -233,6 +243,12 @@ export function entryType(entry: Entry): ItemType | null {
     const tagged = headingKindTag(entry.heading.text);
     if (tagged !== null) {
         return tagged;
+    }
+    // An order printed with only its action as its type ("Type: Full Action")
+    // names itself in its own text ("… to issue this Order").
+    const printedType = fields.get("type") ?? "";
+    if (ORDER_TYPE.test(printedType) || (ACTION_TYPE.test(printedType) && selfNamedKind(entry) === "order")) {
+        return "order";
     }
     if (skillTypeTag(entry.heading.text) !== null) {
         return "skill";
@@ -370,6 +386,17 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "order": {
+            // The printed kind and action ("Sweeping Order (Free Action)"),
+            // qualified by an `Order:` line when the kind is printed apart.
+            system["notes"] = [text("order"), text("type")].filter((v) => v !== undefined).join(" ");
+            const requirements = [text("prerequisites") ?? text("prerequisite"), text("cost")].filter(
+                (v): v is string => v !== undefined,
+            );
+            system["requirements"] = toHtml(requirements.join("\n\n"));
+            variantized["effect"] = toHtml([text("effect") ?? "", entry.body].join("\n\n"));
+            break;
+        }
         default: {
             const weight = text("weight") ?? text("wt");
             const parsedWeight = weight === undefined ? null : parseWeight(weight);

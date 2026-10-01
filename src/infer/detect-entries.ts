@@ -99,36 +99,6 @@ function joinRuns(runs: readonly IRTextRun[]): string {
     return text.replace(/\s+/gu, " ").trim();
 }
 
-/** Points a run may overhang the run it overprints (glyph side bearings). */
-const OVERPRINT_SLACK = 1;
-
-/**
- * Runs of a line without overprints: a text layer may set a display line
- * twice — once whole, once again glyph by glyph over it ("BATTLECRUISER
- * HULLS" under "BA", "T", "TL", …). A run lying within an earlier run of the
- * same font and size, whose text it repeats, is that copy. `runs` are in x order.
- */
-export function withoutOverprints(runs: readonly IRTextRun[]): IRTextRun[] {
-    const kept: IRTextRun[] = [];
-    const letters = (s: string): string => s.replace(/\s+/gu, "").toLowerCase();
-    for (const r of runs) {
-        const text = letters(r.text);
-        const covered = kept.some(
-            (k) =>
-                k.font === r.font &&
-                k.size === r.size &&
-                text.length > 0 &&
-                r.x >= k.x - OVERPRINT_SLACK &&
-                r.x + r.width <= k.x + k.width + OVERPRINT_SLACK &&
-                letters(k.text).includes(text),
-        );
-        if (!covered) {
-            kept.push(r);
-        }
-    }
-    return kept;
-}
-
 export function buildLines(ir: IR): TextLine[] {
     const byColumn = new Map<string, IRTextRun[]>();
     for (const r of ir.runs) {
@@ -138,10 +108,7 @@ export function buildLines(ir: IR): TextLine[] {
     const out: TextLine[] = [];
     for (const columnRuns of byColumn.values()) {
         for (const group of groupByBaseline(columnRuns, BASELINE_TOLERANCE, true)) {
-            // Wider first at one x, so a whole line precedes the glyphs overprinting it.
-            const runs = withoutOverprints(
-                [...group.runs].sort((a, b) => numAsc(a.x, b.x) || numAsc(b.width, a.width)),
-            );
+            const runs = [...group.runs].sort((a, b) => numAsc(a.x, b.x));
             const text = joinRuns(runs);
             const [first] = runs;
             if (text.length === 0 || first === undefined) {

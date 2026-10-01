@@ -46,7 +46,8 @@ export type ItemType =
     | "malignancy"
     | "mentalDisorder"
     | "shipComponent"
-    | "shipWeapon";
+    | "shipWeapon"
+    | "order";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -69,6 +70,7 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     mentalDisorder: "items-mental-disorders",
     shipComponent: "items-ship-components",
     shipWeapon: "items-ship-weapons",
+    order: "items-orders",
 };
 
 /** The system's ship weapon types (the ship weapon `weaponType` choices). */

@@ -140,6 +140,13 @@ describe("arbitrate", () => {
         expect([joined?.text, joined?.x, joined?.width, joined?.fontSize]).toEqual(["Sample", 100, 48, 11]);
     });
 
+    it("reads an initial printed twice over itself once in the word it begins", () => {
+        const initial = run("S", 100, 8, { fontSize: 16 });
+        const raw = doc([initial, { ...initial }, run("AMPLE", 108, 40, { fontSize: 11 })]);
+        const ocr = [{ pageIndex: 0, words: [word("SAMPLE", 34, [100, 698, 148, 708])] }];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["SAMPLE"]);
+    });
+
     it("sets a word of one-letter runs after a larger initial in its letters' size", () => {
         const letters = ["S", "a", "m", "p", "l", "e"].map((ch, i) =>
             run(ch, 100 + i * 8, 8, { fontSize: i === 0 ? 16 : 11 }),

@@ -399,6 +399,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "mutation":
         case "malignancy":
         case "mentalDisorder":
+        case "order":
             return effectItem(cells, "effect", PHYSICAL_EFFECT.has(type));
         case "shipComponent":
             return shipComponent(cells);

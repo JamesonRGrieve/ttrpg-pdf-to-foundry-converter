@@ -16,7 +16,6 @@ import {
     type TextLine,
     valueUnfinished,
     withoutFigures,
-    withoutOverprints,
 } from "../../src/infer/detect-entries.ts";
 import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
@@ -730,6 +729,64 @@ describe("entry typing", () => {
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
     });
 
+    it("types an entry whose Type names an order, keeping its kind, requirements and effect", () => {
+        const sweeping = entry("LAMPS LIT!", [
+            ["Type", "Sweeping Order (Free Action)"],
+            ["Cost", "200 xp"],
+            ["Effect", "Every lamp in range is lit."],
+        ]);
+        expect(entryType(sweeping)).toBe("order");
+        const item = entryItem(sweeping, "order");
+        expect(item.system).toEqual({
+            notes: "Sweeping Order (Free Action)",
+            requirements: "<p>200 xp</p>",
+        });
+        expect(item.variantized["effect"]).toBe("<p>Every lamp in range is lit.</p><p>Prose.</p>");
+
+        const veteran = entry("TRIM THE WICK", [
+            ["Type", "Order (Half Action)"],
+            ["Order", "Veteran"],
+            ["Prerequisite", "Steady Hand"],
+            ["Effect", "The wick is trimmed."],
+        ]);
+        expect(entryItem(veteran, "order").system).toEqual({
+            notes: "Veteran Order (Half Action)",
+            requirements: "<p>Steady Hand</p>",
+        });
+        // An advance of another type is no order, whatever its text says of orders.
+        expect(
+            entryType(
+                entry("LAMP BEARER", [
+                    ["Type", "Passive"],
+                    ["Effect", "Relays orders."],
+                ]),
+            ),
+        ).toBeNull();
+        // An entry typed by its action alone is an order when it calls itself one.
+        const action = entry("WATCH THE WICK", [
+            ["Type", "Full Action"],
+            ["Effect", "The Comrade must be in Cohesion to issue this Order."],
+        ]);
+        expect(entryType(action)).toBe("order");
+        expect(
+            entryType({
+                ...action,
+                fields: [
+                    ["Type", "Full Action"],
+                    ["Effect", "Trim it."],
+                ],
+            }),
+        ).toBeNull();
+        // Nor is one whose Type runs on into prose that mentions an order.
+        expect(
+            entryType(
+                entry("SIDESTEP", [
+                    ["Type", "Reaction Subtype: Movement The character must be aware in order"],
+                ]),
+            ),
+        ).toBeNull();
+    });
+
     it("leaves a creature statblock's text section untyped, whatever rules sit inside it", () => {
         expect(
             entryType(
@@ -1392,19 +1449,6 @@ describe("entry detection", () => {
         const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
         expect(entry?.fields).toEqual([["Mass", "6 lamps approx."]]);
         expect(entry?.body).toContain("Some of the old lamps: burn");
-    });
-
-    it("drops glyphs a text layer overprints on a whole display line", () => {
-        const whole = { ...run("WICK HULLS", 700, "h", 18), x: 100, width: 120 };
-        const glyphs = [
-            { ...run("WI", 700, "h", 18), x: 100, width: 24 },
-            { ...run("CK", 700, "h", 18), x: 124, width: 26 },
-        ];
-        expect(withoutOverprints([whole, ...glyphs])).toEqual([whole]);
-        // Neighbouring text, or another face over the line, is no copy.
-        const beside = { ...run("GLOW", 700, "h", 18), x: 230, width: 50 };
-        const other = { ...run("WI", 700, "b", 18), x: 100, width: 24 };
-        expect(withoutOverprints([whole, other, beside])).toEqual([whole, other, beside]);
     });
 
     it("reads no heading or body from a table's lines", () => {

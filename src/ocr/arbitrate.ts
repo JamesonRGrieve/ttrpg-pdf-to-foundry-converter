@@ -2,6 +2,7 @@
 import type { RawDoc, RawTextRun } from "../types/ir.ts";
 import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
+import { withoutReprints } from "../util/reprints.ts";
 import { stripSubsetPrefix } from "../util/text.ts";
 import { OCR_FONT_NAME, scanPageRuns, scanScale, setSideways } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
@@ -707,7 +708,7 @@ export function smallCapsFonts(runs: readonly RawTextRun[]): Set<string> {
 export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
     const ocrByPage = new Map(ocr.map((p) => [p.pageIndex, p] as const));
     const runsByPage = new Map<number, RawTextRun[]>();
-    for (const run of raw.textRuns) {
+    for (const run of withoutReprints(raw.textRuns)) {
         const list = runsByPage.get(run.pageIndex) ?? [];
         list.push(run);
         runsByPage.set(run.pageIndex, list);

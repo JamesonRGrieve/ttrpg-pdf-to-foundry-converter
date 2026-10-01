@@ -12,6 +12,7 @@ import { groupByBaseline } from "../util/baselines.ts";
 import { columnAt } from "../util/columns.ts";
 import { byteCompare, chain, numAsc } from "../util/ordered.ts";
 import { inFurnitureBand, inSideMargin } from "../util/page-bands.ts";
+import { withoutReprints } from "../util/reprints.ts";
 import { BAND_HEIGHT, quantizeCoord, quantizeSize, quantizeWidth } from "../util/rounding.ts";
 import { percentile } from "../util/stats.ts";
 import { canonicalizeText, stripSubsetPrefix } from "../util/text.ts";
@@ -353,7 +354,8 @@ export function normalize(raw: RawDoc): IR {
     const pages: IRPage[] = [];
     const runs: IRTextRun[] = [];
     const runsByPage = new Map<number, RawTextRun[]>();
-    for (const r of raw.textRuns) {
+    const textRuns = withoutReprints(raw.textRuns);
+    for (const r of textRuns) {
         const list = runsByPage.get(r.pageIndex) ?? [];
         list.push(r);
         runsByPage.set(r.pageIndex, list);
@@ -362,7 +364,7 @@ export function normalize(raw: RawDoc): IR {
     const fontSet = new Set<string>();
     const sizeSet = new Set<number>();
     // First pass: quantize sizes/fonts so buckets exist before we index into them.
-    for (const r of raw.textRuns) {
+    for (const r of textRuns) {
         sizeSet.add(quantizeSize(r.fontSize));
         fontSet.add(canonFontName(r.fontName));
     }
@@ -410,19 +412,11 @@ export function normalize(raw: RawDoc): IR {
         docMargin.top = Math.max(docMargin.top, geom.marginTop);
         docMargin.bottom = Math.min(docMargin.bottom, geom.marginBottom);
 
-        // A run printed twice over itself (an overprint in the text layer)
-        // carries its text once.
-        const printed = new Set<string>();
         for (const r of pageRuns) {
             const size = quantizeSize(r.fontSize);
             const x = quantizeCoord(r.x);
             const y = quantizeCoord(r.y);
             const text = canonicalizeText(r.text);
-            const placement = [x, y, quantizeWidth(r.width), size, r.fontName, r.weight, text].join("\u0000");
-            if (text.trim().length > 0 && printed.has(placement)) {
-                continue;
-            }
-            printed.add(placement);
             const column = layout.columnOf.get(r) ?? 0;
             const columnLeft = layout.lefts[column] ?? geom.marginLeft;
             const band = Math.floor((page.height - r.y) / BAND_HEIGHT);
