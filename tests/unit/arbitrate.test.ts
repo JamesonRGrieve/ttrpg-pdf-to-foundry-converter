@@ -41,7 +41,9 @@ function doc(runs: RawTextRun[]): RawDoc {
     return {
         encrypted: false,
         extractor: "test",
-        pages: [{ pageIndex: 0, width: 600, height: 800, rotation: 0, viewBox: [0, 0, 600, 800] }],
+        pages: [
+            { pageIndex: 0, width: 600, height: 800, rotation: 0, viewBox: [0, 0, 600, 800], edgeText: [] },
+        ],
         textRuns: runs,
         images: [],
         placements: [],

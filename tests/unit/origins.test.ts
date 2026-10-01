@@ -15,6 +15,8 @@ import {
 import { DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
 
 const STEPS = DEFAULT_TARGET.originSteps;
+/** No page carries running text. */
+const NO_HEADS: ReadonlyMap<number, readonly string[]> = new Map();
 
 const entry = (text: string, pageIndex: number, sections: string[], body = ""): Entry => ({
     heading: { text, size: 10, style: "h", pageIndex },
@@ -114,7 +116,7 @@ describe("origin rules blocks", () => {
                 "A reed worlder starts with 7+1d5 wounds.",
             ),
         ];
-        const [origin] = readOriginPaths(entries, STEPS);
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
         expect(origin?.name).toBe("REED WORLD");
         expect(origin?.step.key).toBe("homeWorld");
         expect(origin?.modifiers).toEqual({ agility: 5, strength: -5 });
@@ -134,7 +136,7 @@ describe("origin rules blocks", () => {
             entry("STARTING TALENTS", 20, s, "Wick Training (Oil or Tallow)"),
             entry("BACKGROUND APTITUDE", 20, s, "Finesse or Offence"),
         ];
-        const [origin] = readOriginPaths(entries, STEPS);
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
         expect(origin?.step.key).toBe("background");
         expect(origin?.grants["skills"]).toEqual([
             { name: "Lantern Lore", specialization: "Reeds", level: "known" },
@@ -152,7 +154,7 @@ describe("origin rules blocks", () => {
             entry("ROLE APTITUDES", 40, s, "Finesse, Perception"),
             entry("ROLE TALENT", 40, s, "Wick Training"),
         ];
-        const [origin] = readOriginPaths(entries, STEPS);
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
         expect(origin?.name).toBe("LAMPLIGHTER");
         expect(origin?.description).toBe("Keepers of the wick.");
     });
@@ -166,9 +168,46 @@ describe("origin rules blocks", () => {
             entry("PREREQUISITES", 50, s, "Willpower 35"),
             entry("EQUIPMENT", 50, s, "Lantern"),
         ];
-        const [origin] = readOriginPaths(entries, STEPS);
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
         expect(origin?.name).toBe("WARDEN");
         expect(origin?.step.key).toBe("elite");
+        // Its price and requirement are its content even when it grants nothing listed.
+        const [priced] = readOriginPaths(entries.slice(0, -1), STEPS, NO_HEADS);
+        expect([priced?.name, priced?.xpCost, priced?.requirements]).toEqual(["WARDEN", 300, "Willpower 35"]);
+    });
+
+    it("takes the step from the page's running head, and offers listed special abilities", () => {
+        const steps = TARGETS.dw.originSteps;
+        const s = ["LANTERN KEEPERS", "WICK WARDEN"];
+        const entries = [
+            entry("WICK WARDEN", 70, ["LANTERN KEEPERS"], "Wardens tend the wicks."),
+            entry(
+                "STARTING SKILLS",
+                71,
+                s,
+                "The Warden begins with Lantern Lore (Reeds) and Wick-Use as Trained Advanced Skills.",
+            ),
+            // Set in the other column, before its sibling label.
+            entry("STEADY FLAME", 71, [...s, "STARTING SKILLS"], "The flame never gutters."),
+            entry("SPECIAL ABILITY", 71, s, "Choose one of the following:"),
+            entry("BRIGHT WICK", 71, [...s, "SPECIAL ABILITY"], "Light carries twice as far."),
+        ];
+        expect(readOriginPaths(entries, steps, NO_HEADS)).toEqual([]);
+        const [origin] = readOriginPaths(entries, steps, new Map([[70, ["II: Specialities"]]]));
+        expect(origin?.name).toBe("WICK WARDEN");
+        expect(origin?.step.key).toBe("speciality");
+        expect(origin?.grants["skills"]).toEqual([
+            { name: "Lantern Lore", specialization: "Reeds", level: "trained" },
+            { name: "Wick-Use", specialization: "", level: "trained" },
+        ]);
+        expect(origin?.grants["choices"]).toEqual([
+            {
+                type: "specialAbility",
+                label: "Special Ability",
+                count: 1,
+                options: [{ name: "Bright Wick", description: "Light carries twice as far." }],
+            },
+        ]);
     });
 
     it("ignores a section that only describes a step in prose", () => {
@@ -178,7 +217,7 @@ describe("origin rules blocks", () => {
             entry("INSTANT CHANGES", 30, s, "Explains what changes."),
             entry("UNLOCKED ADVANCES", 30, s, "Explains what unlocks."),
         ];
-        expect(readOriginPaths(entries, STEPS)).toEqual([]);
+        expect(readOriginPaths(entries, STEPS, NO_HEADS)).toEqual([]);
     });
 });
 

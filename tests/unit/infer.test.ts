@@ -13,6 +13,7 @@ import {
     endsSentence,
     type Entry,
     headingOf,
+    runningHeads,
     type TextLine,
     valueUnfinished,
     withoutFigures,
@@ -67,7 +68,14 @@ import { inMarginBand, inSideMargin, measureMarginBands } from "../../src/util/p
 function irOf(pageIndexes: number[], runs: IRTextRun[]): IR {
     return {
         irVersion: 0,
-        pages: pageIndexes.map((p) => ({ pageIndex: p, width: 600, height: 800, rotation: 0, columns: 1 })),
+        pages: pageIndexes.map((p) => ({
+            pageIndex: p,
+            width: 600,
+            height: 800,
+            rotation: 0,
+            columns: 1,
+            edgeText: [],
+        })),
         runs,
         sizeBuckets: [],
         fonts: [],
@@ -1126,6 +1134,21 @@ describe("table continuations", () => {
         expect(centred.map((r) => r.runs.map((x) => x.text))).toEqual([
             ["1", "The flame gutters."],
             ["2", "smokes and dims.", "Soot: the wick"],
+        ]);
+    });
+});
+
+describe("running heads", () => {
+    it("gives each page the edge labels repeated across pages, not a one-off", () => {
+        const ir = irOf([0, 1, 2, 3], []);
+        const labels = ["II: Lanterns", "II: Lanterns", "II: Lanterns", "Wick"];
+        const pages = ir.pages.map((p, i) => ({ ...p, edgeText: [labels[i] ?? ""] }));
+        const heads = runningHeads({ ...ir, pages });
+        expect([0, 1, 2, 3].map((i) => heads.get(i))).toEqual([
+            ["II: Lanterns"],
+            ["II: Lanterns"],
+            ["II: Lanterns"],
+            undefined,
         ]);
     });
 });

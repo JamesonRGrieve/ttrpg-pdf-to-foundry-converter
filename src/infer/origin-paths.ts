@@ -45,13 +45,15 @@ type GrantField =
     | "traits"
     | "xpCost"
     | "prerequisites"
-    | "changes";
+    | "changes"
+    | "specialAbilities";
 
 /** Grant labels → the grant they carry. */
 const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
     [/\bexperience cost\b|^\s*(?:package\s+)?cost\s*$/iu, "xpCost"],
     [/\bprerequisites?\b/iu, "prerequisites"],
     [/\b(?:instant changes|unlocked advances)\b/iu, "changes"],
+    [/\bspecial abilit(?:y|ies)\b/iu, "specialAbilities"],
     [/\bcharacteristic modifiers?\b/iu, "modifiers"],
     [/\bfate threshold\b/iu, "fate"],
     [/\bwounds?\b/iu, "wounds"],
@@ -62,6 +64,12 @@ const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
     [/\bequipment\b/iu, "equipment"],
     [/\btraits?\b/iu, "traits"],
 ];
+
+/** A label's text offering its listed items as a choice of one. */
+const CHOOSE_ONE = /\bchoose (?:one|1)\b/iu;
+
+/** Labels pricing or gating what they head: one of each per origin. */
+const PRICE_FIELDS: ReadonlySet<GrantField> = new Set(["xpCost", "prerequisites"]);
 
 /** Labels carrying prose or conditions rather than a grant. */
 const PROSE_FIELDS: ReadonlySet<GrantField> = new Set(["changes", "prerequisites"]);
@@ -79,6 +87,11 @@ const CHARACTERISTIC_STEP = 5;
 
 /** A skill granted without a stated rank is granted at the scale's first rank. */
 const GRANTED_SKILL_LEVEL = "known";
+/** A sentence granting skills at a rank of the schema's scale: "… with A and B as Trained … Skills". */
+const RANKED_SKILLS =
+    /\bwith\s+(?<list>.+?)\s+as\s+(?:an?\s+)?(?<rank>known|trained|experienced|veteran)\b/iu;
+/** Items of a prose list: "A, B and C". */
+const LIST_AND = /^(?:,\s*(?:and\s+)?|\s+and\s+)/iu;
 
 export interface OriginPathReading {
     name: string;
@@ -257,7 +270,7 @@ export function equipmentItem(text: string): { name: string; quantity: number } 
         : { name: capitalizeWords(rest), quantity: Number(count) };
 }
 
-type ChoiceType = "skill" | "talent" | "aptitude" | "equipment" | "trait";
+type ChoiceType = "skill" | "talent" | "aptitude" | "equipment" | "trait" | "specialAbility";
 
 /**
  * A list grant: plain items are granted; an "A or B" item is a choice between
@@ -272,8 +285,12 @@ function listGrants(
 ): { granted: JsonObject[]; choices: JsonObject[] } {
     const granted: JsonObject[] = [];
     const choices: JsonObject[] = [];
-    // A list names things; a sentence under the label is prose, not an item.
-    for (const item of splitTopLevel(text, LIST_SEPARATOR).filter((i) => !readsAsProse(i))) {
+    // A list names things; a sentence under the label is prose, not an item,
+    // and neither is a stray mark or (for skills and talents, which are
+    // capitalised names) a fragment of running text.
+    const named = (i: string): boolean =>
+        type === "skill" || type === "talent" ? /^\s*[\p{Lu}\p{N}]/u.test(i) : /\p{L}/u.test(i);
+    for (const item of splitTopLevel(text, LIST_SEPARATOR).filter((i) => !readsAsProse(i) && named(i))) {
         const alternatives = splitTopLevel(item, ALTERNATIVE);
         const specialisation = specialisationChoice(item, type, label);
         if (alternatives.length > 1) {
@@ -340,8 +357,21 @@ function specialAbility(text: string): JsonObject | null {
         : { name: name.trim(), description: description.trim() };
 }
 
-/** Grants of one rules block. */
-function grantsOf(labels: readonly Entry[]): {
+/** Whether a reading grants anything: a modifier, a wound or fate value, or a listed grant. */
+function grantsAnything(read: { grants: JsonObject; modifiers: Record<string, number> }): boolean {
+    return (
+        Object.keys(read.modifiers).length > 0 ||
+        read.grants["woundsFormula"] !== "" ||
+        read.grants["fateThreshold"] !== 0 ||
+        Object.values(read.grants).some((v) => Array.isArray(v) && v.length > 0)
+    );
+}
+
+/** Grants of one rules block; `optionsOf` gives the headings a label lists beneath it. */
+function grantsOf(
+    labels: readonly Entry[],
+    optionsOf: (label: Entry) => readonly Entry[],
+): {
     grants: JsonObject;
     modifiers: Record<string, number>;
     xpCost?: number;
@@ -398,6 +428,25 @@ function grantsOf(labels: readonly Entry[]): {
                 choices.push(...r.choices);
                 break;
             }
+            case "specialAbilities": {
+                // Each ability a heading of its own beneath the label; "choose
+                // one" makes them options rather than grants.
+                const abilities = optionsOf(entry).map((o) => ({
+                    name: capitalizeWords(headingName(o.heading.text).toLowerCase()),
+                    description: o.body.trim(),
+                }));
+                if (abilities.length === 0) {
+                    const ability = specialAbility(value);
+                    if (ability !== null) {
+                        specialAbilities.push(ability);
+                    }
+                } else if (CHOOSE_ONE.test(value)) {
+                    choices.push({ type: "specialAbility", label, count: 1, options: abilities });
+                } else {
+                    specialAbilities.push(...abilities);
+                }
+                break;
+            }
             case "bonus": {
                 const ability = specialAbility(value);
                 if (ability !== null) {
@@ -406,6 +455,16 @@ function grantsOf(labels: readonly Entry[]): {
                 break;
             }
             case "skills": {
+                // "… begins with A and B as Trained Advanced Skills": the
+                // named skills at the stated rank.
+                const ranked = RANKED_SKILLS.exec(value)?.groups;
+                if (ranked !== undefined) {
+                    const level = (ranked["rank"] ?? GRANTED_SKILL_LEVEL).toLowerCase();
+                    for (const item of splitTopLevel(ranked["list"] ?? "", LIST_AND)) {
+                        skills.push(...skillGrants(item).map((s) => ({ ...s, level })));
+                    }
+                    break;
+                }
                 const r = listGrants(value, "skill", label, skillGrants, (s) => {
                     const { name, specialisations } = withSpecialisations(s);
                     return namedOption(name, { specialization: specialisations.join(", ") });
@@ -484,11 +543,17 @@ function stepOfSections(
     steps: readonly OriginStepDef[],
 ): OriginStepDef | undefined {
     const squash = (s: string): string => s.replace(/\s+/gu, "").toLowerCase();
+    // A section names a step's kind in the plural as often as not ("Lanterns").
+    const forms = (label: string): string[] => {
+        const one = squash(label);
+        return [one, one.endsWith("y") ? `${one.slice(0, -1)}ies` : `${one}s`];
+    };
     for (const section of [...sections].reverse()) {
         const hit = steps.find((s) =>
             s.labels.some(
                 (label) =>
-                    squash(label).length >= MIN_SPACELESS_LABEL && squash(section).includes(squash(label)),
+                    squash(label).length >= MIN_SPACELESS_LABEL &&
+                    forms(label).some((form) => squash(section).includes(form)),
             ),
         );
         if (hit !== undefined) {
@@ -578,11 +643,8 @@ export function readFieldedOrigins(
         const granting = [entry, ...under]
             .flatMap(fieldEntries)
             .filter((e) => !requiredLabels.has(e.heading.text));
-        const read = grantsOf(granting);
-        const grantsSomething =
-            Object.keys(read.modifiers).length > 0 ||
-            Object.values(read.grants).some((v) => Array.isArray(v) && v.length > 0);
-        if (!grantsSomething) {
+        const read = grantsOf(granting, () => []);
+        if (!grantsAnything(read)) {
             return;
         }
         out.push({
@@ -599,36 +661,64 @@ export function readFieldedOrigins(
     return out;
 }
 
-/** Read every origin-path rules block among the document's entries (in order). */
+/**
+ * The headings directly beneath `entries[index]`, read on until its section
+ * closes; headings nested deeper are passed over (two columns can set a
+ * sub-heading's own heading before its sibling's).
+ */
+function childrenOf(entries: readonly Entry[], index: number): Entry[] {
+    const parent = entries[index]?.heading.text;
+    const children: Entry[] = [];
+    for (const e of entries.slice(index + 1)) {
+        if (parent === undefined || !e.sections.includes(parent)) {
+            break;
+        }
+        if (e.sections.at(-1) === parent) {
+            children.push(e);
+        }
+    }
+    return children;
+}
+
+/**
+ * Read every origin-path rules block among the document's entries (in order).
+ * `runningHeads` gives each page's running text, which names the step when no
+ * heading does.
+ */
 export function readOriginPaths(
     entries: readonly Entry[],
     steps: readonly OriginStepDef[],
+    runningHeads: ReadonlyMap<number, readonly string[]>,
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
     entries.forEach((owner, i) => {
-        const labels: Entry[] = [];
-        for (const e of entries.slice(i + 1)) {
-            if (e.sections.at(-1) !== owner.heading.text) {
-                break;
-            }
-            labels.push(e);
-        }
+        const labels = childrenOf(entries, i);
         const fielded = labels.filter((l) => labelField(l.heading.text) !== undefined);
         const step =
             fielded
                 .map((l) => stepNamedIn(l.heading.text, steps, false, false))
                 .find((s) => s !== undefined) ??
             stepOfSections(owner.sections, steps) ??
+            stepOfSections(runningHeads.get(owner.heading.pageIndex) ?? [], steps) ??
             // A rules block with an experience cost is the step bought with experience.
             (fielded.some((l) => labelField(l.heading.text) === "xpCost")
                 ? steps.find((s) => s.boughtWithXp === true)
                 : undefined);
         // Prose rules and prerequisites alone describe a step in general; a
-        // rules block grants something.
-        const grantsSomething = fielded.some(
-            (l) => !PROSE_FIELDS.has(labelField(l.heading.text) ?? "changes"),
-        );
-        if (step === undefined || fielded.length < MIN_GRANT_LABELS || !grantsSomething) {
+        // rules block grants something, and its labels must read as grants.
+        const grantLabels = fielded.some((l) => !PROSE_FIELDS.has(labelField(l.heading.text) ?? "changes"));
+        // A price or prerequisite met twice ("Cost", "Prerequisites", "Cost",
+        // …) lists many things — a table of advances — not one origin's grants.
+        const priced = fielded
+            .map((l) => labelField(l.heading.text))
+            .filter((k) => k !== undefined && PRICE_FIELDS.has(k));
+        const listing = new Set(priced).size < priced.length;
+        if (step === undefined || fielded.length < MIN_GRANT_LABELS || !grantLabels || listing) {
+            return;
+        }
+        // A step bought with experience may hold only its price and requirement.
+        const read = grantsOf(fielded, (label) => childrenOf(entries, entries.indexOf(label)));
+        if (!grantsAnything(read) && read.xpCost === undefined && read.requirements === undefined) {
             return;
         }
         // The origin is named by the heading this rules block extends ("Hive
@@ -655,7 +745,7 @@ export function readOriginPaths(
             step,
             pageIndex: (intro ?? head).heading.pageIndex,
             description: intro?.body ?? "",
-            ...grantsOf(fielded),
+            ...read,
         });
     });
     return out;

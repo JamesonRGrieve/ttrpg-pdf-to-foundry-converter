@@ -19,6 +19,12 @@ export interface RawPage {
     rotation: number;
     /** Visible page box `[x0, y0, x1, y1]` in PDF user space (the renderer's origin). */
     viewBox: readonly [number, number, number, number];
+    /**
+     * Text set on its side along the page edge (a thumb tab, a chapter title
+     * running up the margin), one string per label, in layer order. It is not
+     * read as text runs; it only names the part of the book a page is in.
+     */
+    edgeText: string[];
 }
 
 export interface RawTextRun {
@@ -103,6 +109,8 @@ export interface IRPage {
     height: number;
     rotation: number;
     columns: number;
+    /** The page's edge labels (see `RawPage.edgeText`), text canonicalized. */
+    edgeText: string[];
 }
 
 /**

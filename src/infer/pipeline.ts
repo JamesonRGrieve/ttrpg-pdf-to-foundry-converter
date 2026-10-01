@@ -15,7 +15,7 @@ import {
     type Role,
     shipTableRoles,
 } from "./columns.ts";
-import { detectEntries, type Entry } from "./detect-entries.ts";
+import { detectEntries, type Entry, runningHeads } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
 import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
@@ -795,9 +795,13 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
     );
 }
 
-function extractOriginPaths(entries: readonly Entry[], out: EntityCollector): void {
+function extractOriginPaths(
+    entries: readonly Entry[],
+    heads: ReadonlyMap<number, readonly string[]>,
+    out: EntityCollector,
+): void {
     for (const origin of [
-        ...readOriginPaths(entries, out.target.originSteps),
+        ...readOriginPaths(entries, out.target.originSteps, heads),
         ...readFieldedOrigins(entries, out.target.originSteps),
     ]) {
         addOrigin(out, origin);
@@ -1155,7 +1159,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const detected = detectEntries(ir, tableRuns);
     const entries = extractEntries(joinSkillCharacteristics(detected), out, descriptions);
     const grids = extractActors(ir, detected, out);
-    extractOriginPaths(detected, out);
+    extractOriginPaths(detected, runningHeads(ir), out);
     fitModifications(out.entities, line, book);
     const entities = consolidate(out.entities, descriptions, line);
     log.info(

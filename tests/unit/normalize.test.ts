@@ -47,7 +47,7 @@ function doc(textRuns: RawTextRun[], pageIndexes: number[]): RawDoc {
     return {
         encrypted: false,
         extractor: "test",
-        pages: pageIndexes.map((pageIndex) => ({ pageIndex, ...PAGE })),
+        pages: pageIndexes.map((pageIndex) => ({ pageIndex, ...PAGE, edgeText: [] })),
         textRuns,
         images: [],
         placements: [],

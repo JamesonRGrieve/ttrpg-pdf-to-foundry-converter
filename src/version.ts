@@ -9,4 +9,4 @@
  * feeds it, so cached IR is never reused across such a change.
  */
 export const ENGINE_VERSION = "0.2.0";
-export const IR_VERSION = 30;
+export const IR_VERSION = 31;

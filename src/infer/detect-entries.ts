@@ -521,16 +521,60 @@ function fieldOf(line: TextLine): [string, string] | null {
  * header and records: a line made only of them is a table line, never a
  * heading, field or body text.
  */
-export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
-    const body = bodyStyle(ir);
+/**
+ * Whether a line lies in a page margin: top and bottom bands hold running
+ * heads, feet and folios; a side margin holds thumb-index tabs and marginal
+ * notes.
+ */
+function marginalIn(ir: IR): (line: TextLine) => boolean {
     const heights = new Map(ir.pages.map((p) => [p.pageIndex, p.height] as const));
     const widths = new Map(ir.pages.map((p) => [p.pageIndex, p.width] as const));
     const bands = marginBandsOf(ir);
-    // Top and bottom bands hold running heads, feet and folios; a side margin
-    // holds thumb-index tabs and marginal notes.
-    const marginal = (l: TextLine): boolean =>
+    return (l) =>
         inMarginBand(l.y, heights.get(l.pageIndex) ?? 0, bands) ||
         inSideMargin(l.runs[0]?.x ?? 0, l.right, widths.get(l.pageIndex) ?? 0);
+}
+
+/**
+ * Each page's running text: the margin lines, and the labels set sideways on
+ * its edge, that repeat on many pages, other than folios. A running head names
+ * the part of the book its page belongs to ("II: Lanterns"), a section no
+ * heading on the page may repeat.
+ */
+export function runningHeads(ir: IR): Map<number, string[]> {
+    const marginal = marginalIn(ir);
+    const lines = buildLines(ir);
+    const kept = new Set(withoutRunningFurniture(lines, marginal));
+    const heads = new Map<number, string[]>();
+    const add = (pageIndex: number, text: string): void => {
+        if (/\p{L}/u.test(text)) {
+            heads.set(pageIndex, [...(heads.get(pageIndex) ?? []), text]);
+        }
+    };
+    for (const line of lines) {
+        if (!kept.has(line)) {
+            add(line.pageIndex, line.text);
+        }
+    }
+    const edgePages = new Map<string, number>();
+    for (const page of ir.pages) {
+        for (const label of new Set(page.edgeText)) {
+            edgePages.set(label, (edgePages.get(label) ?? 0) + 1);
+        }
+    }
+    for (const page of ir.pages) {
+        for (const label of page.edgeText) {
+            if ((edgePages.get(label) ?? 0) >= FURNITURE_PAGES) {
+                add(page.pageIndex, label);
+            }
+        }
+    }
+    return heads;
+}
+
+export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
+    const body = bodyStyle(ir);
+    const marginal = marginalIn(ir);
     const inTable = (l: TextLine): boolean => visibleRuns(l).every((r) => tableRuns.has(r));
     const lines = withoutFigures(withoutRunningFurniture(buildLines(ir), marginal)).filter(
         (l) => !inTable(l),

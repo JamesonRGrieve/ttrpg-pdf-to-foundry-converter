@@ -406,6 +406,7 @@ export function normalize(raw: RawDoc): IR {
             height: quantizeCoord(page.height),
             rotation: page.rotation,
             columns,
+            edgeText: page.edgeText.map((label) => canonicalizeText(label)),
         });
         docMargin.left = Math.min(docMargin.left, geom.marginLeft);
         docMargin.right = Math.max(docMargin.right, geom.marginRight);

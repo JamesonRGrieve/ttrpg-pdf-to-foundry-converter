@@ -374,22 +374,38 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
             const width = x1 - x0;
             const height = y1 - y0;
             const pageIndex = p - 1;
+            const edgeText: string[] = [];
             pages.push({
                 pageIndex,
                 width,
                 height,
                 rotation: page.rotate,
                 viewBox: [x0, y0, x1, y1],
+                edgeText,
             });
             // Force font objects into commonObjs before reading text styles.
             await page.getOperatorList();
             const content = await page.getTextContent({ includeMarkedContent: false });
             let order = 0;
+            // Consecutive sideways items set one edge label ("II", ": ", "Lanterns").
+            let edgeLabel: string | null = null;
+            const closeEdgeLabel = (): void => {
+                const label = edgeLabel?.replace(/\s+/gu, " ").trim() ?? "";
+                if (label.length > 0) {
+                    edgeText.push(label);
+                }
+                edgeLabel = null;
+            };
             for (const item of content.items) {
                 const matrix = item.transform.map(Number);
-                if (item.str.length === 0 || !readsAcross(matrix)) {
+                if (item.str.length === 0) {
                     continue;
                 }
+                if (!readsAcross(matrix)) {
+                    edgeLabel = `${edgeLabel ?? ""}${item.str}`;
+                    continue;
+                }
+                closeEdgeLabel();
                 // Text matrix [a, b, c, d, e, f]: size from the (c, d) column, origin (e, f).
                 const [, , c = 0, d = 0, e = 0, f = 0] = matrix;
                 const size = Math.hypot(c, d);
@@ -409,6 +425,7 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
                 });
                 order += 1;
             }
+            closeEdgeLabel();
         }
         return { encrypted: false, extractor: EXTRACTOR_ID, pages, textRuns, images, placements, meta };
     } finally {
