@@ -94,6 +94,14 @@ describe("parseWeight / parseInteger", () => {
     });
 });
 
+describe("parseDamage reading a misread type letter", () => {
+    it("takes a lone 1, l or | after the damage for the type I, but keeps a bonus that joins it", () => {
+        expect(parseDamage("1d10+2 1")).toEqual({ formula: "1d10", bonus: 2, type: "impact" });
+        expect(parseDamage("2d10+7 l")).toEqual({ formula: "2d10", bonus: 7, type: "impact" });
+        expect(parseDamage("1d10+21")).toEqual({ formula: "1d10", bonus: 21, type: "" });
+    });
+});
+
 describe("parseQualities", () => {
     it("slugs qualities, folds ratings, sorts, and keeps commas inside parentheses", () => {
         expect(parseQualities("Sturdy, Spread (3), Quiet")).toEqual(["quiet", "spread-3", "sturdy"]);

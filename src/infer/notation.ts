@@ -38,8 +38,12 @@ export interface Damage {
 
 /** `2d10+3 I`, `1d10 (E)`, `1d5+SB R` → dice formula, flat bonus, damage type. */
 export function parseDamage(raw: string): Damage | null {
-    // A misread "1" in the die size ("1dl0") is a recognition artifact, not notation.
-    const text = clean(raw).replace(/(\d*)d[lI](\d)/gu, "$1d1$2");
+    // A misread "1" in the die size ("1dl0") is a recognition artifact, not
+    // notation; so is a type letter I read as "1", "l" or "|" when it stands
+    // apart at the end ("1d10+2 1"), where a bonus digit would not.
+    const text = clean(raw)
+        .replace(/(\d*)d[lI](\d)/gu, "$1d1$2")
+        .replace(/\s+[1l|]\s*$/u, " I");
     const m =
         /^(?<formula>\d*d\d+)\s*(?:(?<sign>[+-])\s*(?<bonus>\d+))?\s*(?:\+?\s*SB)?\s*\(?(?<type>[EXIR])?\)?$/iu.exec(
             text,
