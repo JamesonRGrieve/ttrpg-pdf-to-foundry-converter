@@ -53,6 +53,11 @@ describe("inlineWeapons", () => {
         ]);
     });
 
+    it("keeps the first damage of a profile printing two, leaving the qualities alone", () => {
+        const [weapon] = inlineWeapons("Lamp rifle (Basic; 1d10+4 I; 1d10+6 R; Pen 0; Balanced)");
+        expect([weapon?.cells.damage, weapon?.cells.special]).toEqual(["1d10+4 I", "Balanced"]);
+    });
+
     it("reads no weapon from a bracket that is no profile, or from a name inside a sentence", () => {
         expect(inlineWeapons("Awareness (Per), Dodge (Ag)")).toEqual([]);
         expect(inlineWeapons("He carries a wick gun (Basic; 1d10 I) at all times")).toEqual([]);

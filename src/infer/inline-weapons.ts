@@ -61,8 +61,9 @@ export function inlineWeapons(text: string): InlineWeapon[] {
                 const label = (labelled["label"] ?? "").toLowerCase();
                 const role = label.startsWith("pen") ? "penetration" : label === "clip" ? "clip" : "reload";
                 cells[role] = labelled["value"] ?? "";
-            } else if (cells.damage === undefined && parseDamage(part) !== null) {
-                cells.damage = part;
+            } else if (parseDamage(part) !== null) {
+                // A second damage is another mode's (or ammunition's); the first is the profile's.
+                cells.damage ??= part;
             } else if (cells.rof === undefined && parseRateOfFire(part) !== null) {
                 cells.rof = part;
             } else if (cells.range === undefined && parseRange(part) !== null) {

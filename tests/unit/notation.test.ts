@@ -100,6 +100,11 @@ describe("parseQualities", () => {
         expect(parseQualities("Graded (2, 3)")).toEqual(["graded-2,3"]);
         expect(parseQualities("—")).toEqual([]);
     });
+
+    it("folds a rating printed in square brackets, and mends a word broken at its hyphen", () => {
+        expect(parseQualities("Toxic [4], Felling [2, 3]")).toEqual(["felling-2,3", "toxic-4"]);
+        expect(parseQualities("Twin- Linked, Quiet")).toEqual(["quiet", "twin-linked"]);
+    });
 });
 
 describe("parseAvailability", () => {

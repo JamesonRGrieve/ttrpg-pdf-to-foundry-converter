@@ -206,7 +206,9 @@ export function parseHullType(raw: string): string | null {
 
 /**
  * A weapon's special-qualities cell → quality identifiers: lowercased,
- * hyphenated, with a rating folded in (`Spread (3)` → `spread-3`), sorted.
+ * hyphenated, with a rating folded in (`Spread (3)`, `Toxic [4]` →
+ * `spread-3`, `toxic-4`), sorted. A word broken at its hyphen across lines
+ * ("Twin- Linked") keeps one hyphen.
  */
 export function parseQualities(raw: string): string[] {
     const text = clean(raw);
@@ -214,14 +216,15 @@ export function parseQualities(raw: string): string[] {
         return [];
     }
     return text
-        .split(/,(?![^(]*\))/u)
+        .split(/,(?![^([]*[)\]])/u)
         .map((q) => q.trim())
         .filter((q) => q.length > 0 && !isEmptyCell(q))
         .map((q) =>
             q
                 .toLowerCase()
-                .replace(/\s*\(([^)]*)\)/gu, (_m, rating: string) => `-${rating.replace(/\s+/gu, "")}`)
-                .replace(/\s+/gu, "-"),
+                .replace(/\s*[([]([^)\]]*)[)\]]/gu, (_m, rating: string) => `-${rating.replace(/\s+/gu, "")}`)
+                .replace(/\s+/gu, "-")
+                .replace(/-{2,}/gu, "-"),
         )
         .sort();
 }
