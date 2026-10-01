@@ -165,6 +165,12 @@ describe("arbitrate", () => {
             new Set(["Lamp"]),
         );
         expect(out.find((r) => r.x === 300)?.text).toBe("Wick");
+        // A line of that face holding only a space is left as it is.
+        const blank = { ...run(" ", 100, 5, { fontName: "ABCDEF+Cells" }), y: 100 };
+        const withBlank = arbitrate(doc([...cells, blank]), [
+            { pageIndex: 0, words: [...words, word("Lamp", 95, [100, 98, 105, 108])] },
+        ]).textRuns;
+        expect(withBlank.find((r) => r.y === 100)?.text).toBe(" ");
     });
 
     it("reads a cell whose font maps letters to marks from OCR, but keeps a printed dash value", () => {

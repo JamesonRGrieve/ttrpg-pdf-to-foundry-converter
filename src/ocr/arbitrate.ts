@@ -691,6 +691,7 @@ function arbitratePage(
         // A line set wholly in a mis-encoded face is OCR's to read, however short.
         const inMisEncoded =
             misEncoded.size > 0 &&
+            lineText.length > 0 &&
             line.runs.every((i) => misEncoded.has(stripSubsetPrefix(at(runs, i).fontName)));
         if ((lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) || inMisEncoded) {
             rewriteByRuns(line, confident);
