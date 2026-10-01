@@ -737,6 +737,15 @@ describe("entry typing", () => {
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
     });
 
+    it("keeps a talent's printed alignment where its aptitudes go", () => {
+        const aligned = entry("WICK DEVOTEE", [
+            ["Tier", "3"],
+            ["Prerequisite", "Fellowship 50"],
+            ["Alignment", "Lantern"],
+        ]);
+        expect(entryItem(aligned, "talent").system["aptitudes"]).toEqual(["Lantern"]);
+    });
+
     it("types an entry whose Type names an order, keeping its kind, requirements and effect", () => {
         const sweeping = entry("LAMPS LIT!", [
             ["Type", "Sweeping Order (Free Action)"],

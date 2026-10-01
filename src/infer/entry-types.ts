@@ -341,7 +341,9 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             if (tier !== null) {
                 system["tier"] = Number(tier[0]);
             }
-            system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? "");
+            // A line whose talents carry an alignment instead of aptitudes
+            // keeps it where aptitudes go.
+            system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? text("alignment") ?? "");
             // A closing full stop ends the printed sentence; it is not part of the value.
             system["prerequisites"] = {
                 text: (text("prerequisites") ?? text("prerequisite") ?? "").replace(/\.\s*$/u, ""),
