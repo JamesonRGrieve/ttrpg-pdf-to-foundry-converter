@@ -1255,6 +1255,16 @@ describe("headings", () => {
         expect(headingOf(heading([["The Lantern of", 100, 70]]), body, false)).toBeNull();
     });
 
+    it("reads small capitals in a bold heading face as a heading, but not a labelled value", () => {
+        const faces = new Set(["display|bold"]);
+        const bold = (text: string): TextLine => {
+            const line = heading([[text, 100, 70]], 7.75);
+            return { ...line, runs: line.runs.map((r) => ({ ...r, weight: "bold" as const })) };
+        };
+        expect(headingOf(bold("COUNTERSNIPE"), body, false, faces)?.text).toBe("COUNTERSNIPE");
+        expect(headingOf(bold("CREW: DRIVER"), body, false, faces)).toBeNull();
+    });
+
     it("reads a long display line with no capitals as a heading in a heading face", () => {
         const faces = new Set(["display|normal"]);
         const lost = heading([["tempest-class strike lantern", 100, 140]]);

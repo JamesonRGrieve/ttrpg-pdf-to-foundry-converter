@@ -138,17 +138,20 @@ const faceOf = (r: IRTextRun): string => `${r.font}|${r.weight}`;
 
 /** A small-size capitals heading is at most this many characters. */
 const MAX_CAPS_HEADING_LENGTH = 40;
+/** A word followed by a colon: a field label. */
+const LABEL_COLON = /\p{L}\s*:/u;
 
 /**
- * A short line of capitals in a (non-bold) face that sets headings elsewhere
- * in the document is a heading at any point size: a small-caps face prints its
- * capitals at a smaller nominal size than body text.
+ * A short line of capitals in a face that sets headings elsewhere in the
+ * document is a heading at any point size: a small-caps face prints its
+ * capitals at a smaller nominal size than body text. A labelled value set in
+ * the same capitals ("CREW: DRIVER") is a field, not a heading.
  */
 function capsHeading(line: TextLine, face: string, headingFaces: ReadonlySet<string>): boolean {
     return (
         headingFaces.has(face) &&
-        !face.endsWith("|bold") &&
         line.text.length <= MAX_CAPS_HEADING_LENGTH &&
+        !LABEL_COLON.test(line.text) &&
         (!TITLE_CASED_WORD.test(line.text) || capitalsCaseLost(line.text))
     );
 }
