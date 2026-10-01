@@ -147,6 +147,26 @@ describe("arbitrate", () => {
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["SAMPLE"]);
     });
 
+    it("reads a row drawn over and over in overlapping pieces from OCR", () => {
+        // Each piece drawn three times; what survives still overlaps.
+        const pieces = [run("La", 100, 10), run("L mp", 100, 20), run("mp", 110, 10)];
+        const raw = doc(pieces.flatMap((p) => [p, { ...p }, { ...p }]));
+        const ocr = [{ pageIndex: 0, words: [word("Lamp", 90, [100, 698, 120, 708])] }];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["Lamp"]);
+        // A cell of several words keeps them as one spaced text.
+        const two = [run("Ol", 100, 10), run("X d", 104, 12), run("Lamp", 118, 20)];
+        const words = [word("Old", 90, [100, 698, 114, 708]), word("Lamp", 90, [118, 698, 138, 708])];
+        const read = arbitrate(doc(two.flatMap((p) => [p, { ...p }, { ...p }])), [{ pageIndex: 0, words }]);
+        expect(read.textRuns.map((r) => r.text)).toEqual(["Old Lamp"]);
+    });
+
+    it("keeps the layer of a row drawn over and over whose pieces come apart cleanly", () => {
+        const pieces = [run("La", 100, 10), run("mp", 110, 10)];
+        const raw = doc(pieces.flatMap((p) => [p, { ...p }, { ...p }]));
+        const ocr = [{ pageIndex: 0, words: [word("Larnp", 90, [100, 698, 120, 708])] }];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["La", "mp"]);
+    });
+
     it("sets a word of one-letter runs after a larger initial in its letters' size", () => {
         const letters = ["S", "a", "m", "p", "l", "e"].map((ch, i) =>
             run(ch, 100 + i * 8, 8, { fontSize: i === 0 ? 16 : 11 }),

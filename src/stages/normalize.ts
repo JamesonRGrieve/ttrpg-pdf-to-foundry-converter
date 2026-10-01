@@ -12,7 +12,7 @@ import { groupByBaseline } from "../util/baselines.ts";
 import { columnAt } from "../util/columns.ts";
 import { byteCompare, chain, numAsc } from "../util/ordered.ts";
 import { inFurnitureBand, inSideMargin } from "../util/page-bands.ts";
-import { withoutReprints } from "../util/reprints.ts";
+import { readReprints } from "../util/reprints.ts";
 import { BAND_HEIGHT, quantizeCoord, quantizeSize, quantizeWidth } from "../util/rounding.ts";
 import { percentile } from "../util/stats.ts";
 import { canonicalizeText, stripSubsetPrefix } from "../util/text.ts";
@@ -354,7 +354,7 @@ export function normalize(raw: RawDoc): IR {
     const pages: IRPage[] = [];
     const runs: IRTextRun[] = [];
     const runsByPage = new Map<number, RawTextRun[]>();
-    const textRuns = withoutReprints(raw.textRuns);
+    const textRuns = readReprints(raw.textRuns).runs;
     for (const r of textRuns) {
         const list = runsByPage.get(r.pageIndex) ?? [];
         list.push(r);

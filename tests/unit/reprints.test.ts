@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import type { RawTextRun } from "../../src/types/ir.ts";
-import { withoutReprints } from "../../src/util/reprints.ts";
+import { readReprints } from "../../src/util/reprints.ts";
 
 function run(text: string, extra: Partial<RawTextRun> = {}): RawTextRun {
     return {
@@ -20,7 +20,9 @@ function run(text: string, extra: Partial<RawTextRun> = {}): RawTextRun {
     };
 }
 
-describe("withoutReprints", () => {
+const withoutReprints = (runs: RawTextRun[]): RawTextRun[] => readReprints(runs).runs;
+
+describe("readReprints", () => {
     it("keeps one of two runs printed over each other", () => {
         expect(withoutReprints([run("Fel"), run("Fel", { renderOrder: 1 })]).map((r) => r.text)).toEqual([
             "Fel",
@@ -37,6 +39,13 @@ describe("withoutReprints", () => {
     it("drops a glyph set a hair left of the value it repeats", () => {
         const value = run("55", { x: 410.02, width: 14.2 });
         expect(withoutReprints([value, run("5", { x: 409.97, width: 7.1 })])).toEqual([value]);
+    });
+
+    it("drops a copy that leaves a letter out or sets it as a space", () => {
+        const word = run("Tabl", { width: 24 });
+        expect(withoutReprints([word, run("T bl", { width: 24, renderOrder: 1 })])).toEqual([word]);
+        // Letters out of order are no copy.
+        expect(withoutReprints([word, run("lb", { width: 10 })])).toHaveLength(2);
     });
 
     it("drops glyphs set one by one over a whole display line", () => {
@@ -59,12 +68,29 @@ describe("withoutReprints", () => {
             run("y", { x: 132.6, width: 4.6 }),
         ];
         expect(withoutReprints(pieces).map((r) => r.text)).toEqual(["be Lu", "ck", "y"]);
+        // A repeated letter the layer set as a space still repeats.
+        const spaced = [run(" 3–", { x: 70.1, width: 15 }), run("3 2:", { x: 74.3, width: 19.9 })];
+        expect(withoutReprints(spaced).map((r) => r.text)).toEqual([" 3–", "2:"]);
         // Touching pieces, or an overlap narrower than half a letter, keep every letter.
         const touching = [run("lamp", { width: 20 }), run("post", { x: 120.4, width: 20 })];
         expect(withoutReprints(touching).map((r) => r.text)).toEqual(["lamp", "post"]);
         // Overlapping letters that differ are no repeat.
         const different = [run("lamp", { width: 20 }), run("stop", { x: 115, width: 20 })];
         expect(withoutReprints(different).map((r) => r.text)).toEqual(["lamp", "stop"]);
+    });
+
+    it("drops a word space set inside a run's own letters, not one between runs", () => {
+        const word = run("Na", { width: 12 });
+        const inside = run(" ", { x: 107.4, width: 0.5 });
+        expect(withoutReprints([word, inside]).map((r) => r.text)).toEqual(["Na"]);
+        const between = run(" ", { x: 112, width: 2 });
+        expect(withoutReprints([word, between]).map((r) => r.text)).toEqual(["Na", " "]);
+    });
+
+    it("returns the exact copies it drops, not the glyphs of a fuller run", () => {
+        const word = run("GET", { width: 24 });
+        const copy = run("GET", { width: 24, renderOrder: 1 });
+        expect(readReprints([word, copy, run("G", { width: 11 })]).copies).toEqual([copy]);
     });
 
     it("treats subsets of one face as the same face", () => {

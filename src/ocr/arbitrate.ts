@@ -2,7 +2,7 @@
 import type { RawDoc, RawTextRun } from "../types/ir.ts";
 import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
-import { withoutReprints } from "../util/reprints.ts";
+import { readReprints } from "../util/reprints.ts";
 import { stripSubsetPrefix } from "../util/text.ts";
 import { OCR_FONT_NAME, scanPageRuns, scanScale, setSideways } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
@@ -477,7 +477,41 @@ function applyEdits(text: string, edits: readonly Edit[]): string {
     return out;
 }
 
-function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: number): RawTextRun[] {
+/** How often a line's text is drawn over again in place before its layer is no longer read. */
+const OVERDRAWN_COPIES_PER_RUN = 2;
+
+/** Points one run may overlap the next before they are two pieces of the same letters. */
+const PIECE_OVERLAP = 1;
+
+/**
+ * Whether a line's text layer is overdrawn past reading: the row it sits on
+ * draws its text over and over in place (at least OVERDRAWN_COPIES_PER_RUN
+ * exact copies, dropped as reprints, for each run the row keeps), and the
+ * pieces left on the line still overlap one another, so they no longer join
+ * into its words. A row whose copies drop away to clean pieces reads as is.
+ */
+function overdrawn(line: Line, runs: readonly RawTextRun[], copies: readonly RawTextRun[]): boolean {
+    const [, y0, , y1] = line.box;
+    const onRow = (r: RawTextRun): boolean => r.y >= y0 && r.y <= y1 && r.text.trim().length > 0;
+    if (copies.filter(onRow).length < OVERDRAWN_COPIES_PER_RUN * runs.filter(onRow).length) {
+        return false;
+    }
+    const pieces = line.runs
+        .map((i) => at(runs, i))
+        .filter((r) => r.text.trim().length > 0)
+        .sort((a, b) => numAsc(a.x, b.x));
+    return pieces.some((r, i) => {
+        const next = pieces[i + 1];
+        return next !== undefined && next.x < r.x + r.width - PIECE_OVERLAP;
+    });
+}
+
+function arbitratePage(
+    runs: readonly RawTextRun[],
+    page: OcrPage,
+    pageIndex: number,
+    copies: readonly RawTextRun[],
+): RawTextRun[] {
     const lines = buildLines(runs);
     const words = [...page.words].sort((a, b) => numAsc(b.box[3], a.box[3]) || numAsc(a.box[0], b.box[0]));
     const { perLine, lineless } = assignWords(lines, words);
@@ -491,15 +525,17 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         edits.set(run, list);
     };
 
-    const rewrite = (segments: readonly Segment[], replacement: string): void => {
+    /** Replace `segments` by `replacement`, set in `chosenHost` or else the run holding most of them. */
+    const rewrite = (segments: readonly Segment[], replacement: string, chosenHost?: number): void => {
         const charsByRun = new Map<number, number>();
         for (const s of segments) {
             charsByRun.set(s.run, (charsByRun.get(s.run) ?? 0) + (s.end - s.start));
         }
-        const [host] = at(
+        const [mostChars] = at(
             [...charsByRun.entries()].sort((a, b) => numAsc(b[1], a[1]) || numAsc(a[0], b[0])),
             0,
         );
+        const host = chosenHost ?? mostChars;
         const hostSegments = segments.filter((s) => s.run === host);
         pushEdit(host, {
             start: Math.min(...hostSegments.map((s) => s.start)),
@@ -540,6 +576,34 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         }
     };
 
+    /**
+     * Replace an overdrawn line (one cell or column: lines split at wide gaps)
+     * with its confident OCR words, set in the first of the runs they are
+     * printed over; those runs' pieces lie under one another's words and give
+     * their text up. Runs no word covers keep theirs.
+     */
+    const rewriteOverdrawn = (line: Line, confident: readonly OcrWord[]): void => {
+        const words = [...confident].sort((a, b) => numAsc(a.box[0], b.box[0]));
+        const slack = LINE_X_SLACK_FRACTION * line.size;
+        const segments = line.tokens.flatMap((t) => t.segments);
+        const covered = [...new Set(segments.map((s) => s.run))]
+            .filter((i) => {
+                const r = at(runs, i);
+                const centre = r.x + r.width / 2;
+                return words.some((w) => centre >= w.box[0] - slack && centre <= w.box[2] + slack);
+            })
+            .sort((a, b) => numAsc(at(runs, a).x, at(runs, b).x) || numAsc(a, b));
+        const [host] = covered;
+        if (host === undefined) {
+            return;
+        }
+        rewrite(
+            segments.filter((s) => covered.includes(s.run)),
+            words.map((w) => w.text).join(" "),
+            host,
+        );
+    };
+
     lines.forEach((line, li) => {
         const lineWords = at(perLine, li);
         const confident = lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE);
@@ -547,6 +611,10 @@ function arbitratePage(runs: readonly RawTextRun[], page: OcrPage, pageIndex: nu
         const corrupt = [...lineText].filter((ch) => CORRUPTION.test(ch)).length;
         if (lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) {
             rewriteByRuns(line, confident);
+            return;
+        }
+        if (overdrawn(line, runs, copies)) {
+            rewriteOverdrawn(line, confident);
             return;
         }
         const groups = align(
@@ -708,10 +776,15 @@ export function smallCapsFonts(runs: readonly RawTextRun[]): Set<string> {
 export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
     const ocrByPage = new Map(ocr.map((p) => [p.pageIndex, p] as const));
     const runsByPage = new Map<number, RawTextRun[]>();
-    for (const run of withoutReprints(raw.textRuns)) {
+    const { runs: layer, copies } = readReprints(raw.textRuns);
+    for (const run of layer) {
         const list = runsByPage.get(run.pageIndex) ?? [];
         list.push(run);
         runsByPage.set(run.pageIndex, list);
+    }
+    const copiesByPage = new Map<number, RawTextRun[]>();
+    for (const copy of copies) {
+        copiesByPage.set(copy.pageIndex, [...(copiesByPage.get(copy.pageIndex) ?? []), copy]);
     }
     const pages = [...raw.pages].sort((a, b) => numAsc(a.pageIndex, b.pageIndex));
     // A page with no text layer at all is a scan: OCR is its only reading.
@@ -731,7 +804,11 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
         if (scan !== undefined) {
             textRuns.push(...scanPageRuns(scan, page.pageIndex, scale, INSERTED_RENDER_ORDER_BASE));
         } else {
-            textRuns.push(...(ocrPage === undefined ? runs : arbitratePage(runs, ocrPage, page.pageIndex)));
+            textRuns.push(
+                ...(ocrPage === undefined
+                    ? runs
+                    : arbitratePage(runs, ocrPage, page.pageIndex, copiesByPage.get(page.pageIndex) ?? [])),
+            );
         }
     }
     const smallCaps = smallCapsFonts(raw.textRuns);
