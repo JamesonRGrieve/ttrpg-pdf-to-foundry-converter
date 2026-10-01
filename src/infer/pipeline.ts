@@ -21,6 +21,7 @@ import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import { entryItem, entryType, joinSkillCharacteristics, typeNamedBy } from "./entry-types.ts";
+import { inlineWeapons } from "./inline-weapons.ts";
 import {
     cleanName,
     endsMidSentence,
@@ -795,6 +796,51 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
     );
 }
 
+/** The reading that names an item from a profile printed inline (see `inline-weapons.ts`). */
+const INLINE_READING = "inline:";
+
+/**
+ * Weapons whose profile is printed only inline — in a statblock's weapon
+ * list or running text — and that no table or entry gives: each is read from
+ * its bracketed profile, cited at the entry printing it. A weapon some other
+ * reading gives keeps that reading and its citation.
+ */
+function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): number {
+    const named = new Set(
+        out.entities.filter((e) => e.documentType === "Item").map((e) => nameKey(String(e.fields["name"]))),
+    );
+    let count = 0;
+    for (const entry of entries) {
+        const text = [entry.body, ...entry.fields.map(([label, value]) => `${label}: ${value}`)].join("\n");
+        for (const weapon of inlineWeapons(text)) {
+            const key = nameKey(weapon.name);
+            if (named.has(key)) {
+                continue;
+            }
+            named.add(key);
+            const mapped = mapRow("weapon", weapon.cells);
+            out.add(
+                "Item",
+                itemSegment("weapon"),
+                buildItem({
+                    type: "weapon",
+                    name: weapon.name,
+                    line: out.line,
+                    book: out.book,
+                    page: out.page(entry.heading.pageIndex),
+                    description: "",
+                    system: mapped.system,
+                    variantized: mapped.variantized,
+                }),
+                entry.heading.pageIndex,
+                `${INLINE_READING}weapon`,
+            );
+            count += 1;
+        }
+    }
+    return count;
+}
+
 function extractOriginPaths(
     entries: readonly Entry[],
     heads: ReadonlyMap<number, readonly string[]>,
@@ -1160,6 +1206,8 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const entries = extractEntries(joinSkillCharacteristics(detected), out, descriptions);
     const grids = extractActors(ir, detected, out);
     extractOriginPaths(detected, runningHeads(ir), out);
+    const inline = extractInlineWeapons(detected, out);
+    log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
     const entities = consolidate(out.entities, descriptions, line);
     log.info(
