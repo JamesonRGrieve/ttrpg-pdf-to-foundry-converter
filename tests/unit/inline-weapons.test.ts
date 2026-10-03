@@ -58,6 +58,17 @@ describe("inlineWeapons", () => {
         expect([weapon?.cells.damage, weapon?.cells.special]).toEqual(["1d10+4 I", "Balanced"]);
     });
 
+    it("keeps the first mode's labelled parts when a profile prints another mode after 'or'", () => {
+        const [weapon] = inlineWeapons(
+            "Wick rifle (Basic; 110m; S/–/–; 1d10+5 E; Pen 1; Clip 6; Reload 2 Full or Melee; 1d10+6 R; Pen 2; Balanced)",
+        );
+        expect([weapon?.cells.damage, weapon?.cells.penetration, weapon?.cells.clip]).toEqual([
+            "1d10+5 E",
+            "1",
+            "6",
+        ]);
+    });
+
     it("reads no weapon from a bracket that is no profile, or from a name inside a sentence", () => {
         expect(inlineWeapons("Awareness (Per), Dodge (Ag)")).toEqual([]);
         expect(inlineWeapons("He carries a wick gun (Basic; 1d10 I) at all times")).toEqual([]);

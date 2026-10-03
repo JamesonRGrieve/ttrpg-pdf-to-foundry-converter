@@ -60,7 +60,8 @@ export function inlineWeapons(text: string): InlineWeapon[] {
             if (labelled !== undefined) {
                 const label = (labelled["label"] ?? "").toLowerCase();
                 const role = label.startsWith("pen") ? "penetration" : label === "clip" ? "clip" : "reload";
-                cells[role] = labelled["value"] ?? "";
+                // As with damage, a second one is another mode's ("… or Melee; …; Pen 2").
+                cells[role] ??= labelled["value"] ?? "";
             } else if (parseDamage(part) !== null) {
                 // A second damage is another mode's (or ammunition's); the first is the profile's.
                 cells.damage ??= part;

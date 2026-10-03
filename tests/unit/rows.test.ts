@@ -119,3 +119,29 @@ describe("ship weapon rows", () => {
         expect(mapped.unparsed).toEqual(["range: 6–40"]);
     });
 });
+
+describe("weapon classes and renown", () => {
+    it("reads a second class printed after a slash, and a renown column", () => {
+        const mapped = mapRow("weapon", {
+            name: "Lamp Lance",
+            class: "Melee/ Thrown",
+            range: "—/10m",
+            damage: "1d10+2 R",
+            renown: "Famed",
+        });
+        expect(mapped.system["class"]).toBe("melee");
+        expect(mapped.system["secondaryClass"]).toBe("thrown");
+        expect(mapped.system["renown"]).toBe("famed");
+    });
+
+    it("sets no second class for a weapon of one class", () => {
+        const mapped = mapRow("weapon", { name: "Wick Gun", class: "Basic", damage: "1d10 I" });
+        expect(mapped.system).not.toHaveProperty("secondaryClass");
+        expect(mapped.system).not.toHaveProperty("renown");
+    });
+
+    it("reads a placed explosive's class", () => {
+        const mapped = mapRow("weapon", { name: "Lamp Charge", class: "Placed Explosive", damage: "2d10 X" });
+        expect(mapped.system["class"]).toBe("placed");
+    });
+});

@@ -283,6 +283,8 @@ export const AVAILABILITY = [
     "extremely-rare",
     "near-unique",
     "unique",
+    // Printed but unrated: no book gives it a modifier or a place in the scale.
+    "uncommon",
 ] as const;
 
 function initials(key: string): string {
@@ -447,7 +449,7 @@ export function parseArmourPoints(raw: string): ArmourPoints | null {
     return { base: Number(m[1]), exceptions };
 }
 
-/** The system's `weaponClasses` keys. */
+/** The system's weapon class keys (`placed` is a placed explosive). */
 export const WEAPON_CLASSES = [
     "melee",
     "pistol",
@@ -456,19 +458,65 @@ export const WEAPON_CLASSES = [
     "thrown",
     "exotic",
     "vehicle",
-    "mounted",
+    "placed",
 ] as const;
+export type WeaponClass = (typeof WEAPON_CLASSES)[number];
 
-/** `Basic`, `Pistol/Melee`, `Melee (Two-handed)` → the leading weapon-class key. */
-export function parseWeaponClass(raw: string): (typeof WEAPON_CLASSES)[number] | null {
-    const words = clean(raw)
-        .toLowerCase()
-        .split(/[^a-z]+/u);
-    for (const word of words) {
+/** The system's renown ranks, lowest first. */
+export const RENOWN_RANKS = ["initiated", "respected", "distinguished", "famed", "hero"] as const;
+
+/** A renown cell ("Famed") → the system's renown rank; null when it names none. */
+export function parseRenown(raw: string): (typeof RENOWN_RANKS)[number] | null {
+    const word = clean(raw).toLowerCase();
+    return RENOWN_RANKS.find((r) => r === word) ?? null;
+}
+
+/** The class words a cell names, in order, each once. */
+function classWords(text: string): WeaponClass[] {
+    const found: WeaponClass[] = [];
+    for (const word of text.split(/[^a-z]+/u)) {
         const hit = WEAPON_CLASSES.find((c) => c === word);
-        if (hit !== undefined) {
-            return hit;
+        if (hit !== undefined && !found.includes(hit)) {
+            found.push(hit);
         }
     }
-    return null;
+    return found;
+}
+
+/**
+ * The second class of a weapon printed with two, set apart by a slash
+ * ("Melee/ Thrown" → `thrown`); null for a weapon of one class.
+ */
+export function parseSecondaryClass(raw: string): WeaponClass | null {
+    const text = clean(raw).toLowerCase();
+    if (!text.includes("/")) {
+        return null;
+    }
+    return classWords(text)[1] ?? null;
+}
+
+/** Letters a misread class word may be missing. */
+const CLASS_LETTERS_LOST = 1;
+
+/**
+ * `Basic`, `Pistol/Melee`, `Melee (Two-handed)` → the leading weapon-class
+ * key. A cell naming none outright may hold one with a letter lost and the
+ * rest split apart ("M lee"): its letters, first anchored, read in order
+ * through the class word.
+ */
+export function parseWeaponClass(raw: string): WeaponClass | null {
+    const text = clean(raw).toLowerCase();
+    const [first] = classWords(text);
+    if (first !== undefined) {
+        return first;
+    }
+    const letters = text.replace(/[^a-z]/gu, "");
+    return (
+        WEAPON_CLASSES.find(
+            (c) =>
+                letters.length >= c.length - CLASS_LETTERS_LOST &&
+                letters.length < c.length &&
+                isSkeleton(letters, c),
+        ) ?? null
+    );
 }

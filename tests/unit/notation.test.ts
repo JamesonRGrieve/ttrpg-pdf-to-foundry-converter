@@ -12,6 +12,8 @@ import {
     parseRange,
     parseRateOfFire,
     parseReload,
+    parseRenown,
+    parseSecondaryClass,
     parseShipPower,
     parseShipWeaponType,
     parseWeaponClass,
@@ -180,6 +182,18 @@ describe("parseAvailability", () => {
         expect(parseAvailability("Ra")).toBe("rare");
     });
 
+    it("stores the unrated Uncommon as printed, leaving short forms to the rated keys", () => {
+        expect(parseAvailability("Uncommon")).toBe("uncommon");
+        expect(parseAvailability("Unc")).toBe("uncommon");
+        expect(parseAvailability("Un")).toBe("unique");
+    });
+
+    it("reads renown ranks", () => {
+        expect(parseRenown("Famed")).toBe("famed");
+        expect(parseRenown("Hero")).toBe("hero");
+        expect(parseRenown("Legend")).toBeNull();
+    });
+
     it("returns null for non-availability text", () => {
         expect(parseAvailability("")).toBeNull();
         expect(parseAvailability("xyz")).toBeNull();
@@ -222,6 +236,21 @@ describe("parseWeaponClass", () => {
         expect(parseWeaponClass("Basic")).toBe("basic");
         expect(parseWeaponClass("Pistol/Melee")).toBe("pistol");
         expect(parseWeaponClass("Something")).toBeNull();
+    });
+
+    it("reads the second of two slashed classes", () => {
+        expect(parseSecondaryClass("Melee/ Thrown")).toBe("thrown");
+        expect(parseSecondaryClass("Pistol/Melee")).toBe("melee");
+        expect(parseSecondaryClass("Melee")).toBeNull();
+        expect(parseSecondaryClass("Melee (Two-handed)")).toBeNull();
+    });
+
+    it("reads a class word with one letter lost and the rest split apart", () => {
+        expect(parseWeaponClass("M lee")).toBe("melee");
+        expect(parseWeaponClass("Bsic")).toBe("basic");
+        expect(parseWeaponClass("Mle")).toBeNull();
+        expect(parseWeaponClass("Mole")).toBeNull();
+        expect(parseWeaponClass("Per")).toBeNull();
     });
 });
 

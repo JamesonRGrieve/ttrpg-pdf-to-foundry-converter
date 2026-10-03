@@ -19,6 +19,7 @@ export type Role =
     | "special"
     | "weight"
     | "availability"
+    | "renown"
     | "cost"
     | "armourPoints"
     | "locations"
@@ -59,6 +60,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(wt|weight|kg)$/u, "weight"],
     // By its stem, so a misread letter later in the word ("Availabiity") still names it.
     [/^(avl|avail[a-z]*)$/u, "availability"],
+    [/^renown$/u, "renown"],
     [/^(cost|price)$/u, "cost"],
     [/^(ap|armou?r points?)$/u, "armourPoints"],
     // A two-line header may reach us as its second line alone ("Covered").
@@ -172,7 +174,7 @@ export function mergedHeaderRoles(header: string): Role[] | null {
 }
 
 /** Item attributes that grade items but never name one. */
-const SCALE_ROLES: ReadonlySet<Role> = new Set(["availability", "weight", "cost"]);
+const SCALE_ROLES: ReadonlySet<Role> = new Set(["availability", "renown", "weight", "cost"]);
 
 /**
  * A table led by an attribute column (its rows keyed by availability, weight

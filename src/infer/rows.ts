@@ -13,6 +13,8 @@ import {
     parseRange,
     parseRateOfFire,
     parseReload,
+    parseRenown,
+    parseSecondaryClass,
     parseShipPower,
     parseShipWeaponType,
     parseWeaponClass,
@@ -75,6 +77,10 @@ function commonPhysical(out: RowMapping, cells: RowCells): void {
     if (availability !== null) {
         out.system["availability"] = availability;
     }
+    const renown = read(out, cells, "renown", parseRenown);
+    if (renown !== null) {
+        out.system["renown"] = renown;
+    }
     out.system["craftsmanship"] = "common";
     out.system["quantity"] = 1;
 }
@@ -92,6 +98,10 @@ function weapon(cells: RowCells): RowMapping {
     const thrown = cls === "thrown" || (range !== null && range.special !== "");
     if (cls !== null) {
         out.system["class"] = cls;
+        const secondary = cells.class === undefined ? null : parseSecondaryClass(cells.class);
+        if (secondary !== null) {
+            out.system["secondaryClass"] = secondary;
+        }
     }
     out.system["melee"] = melee;
     out.system["attack"] = {
