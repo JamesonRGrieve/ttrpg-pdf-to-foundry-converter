@@ -255,8 +255,10 @@ export function parseQualities(raw: string): string[] {
     if (isEmptyCell(text)) {
         return [];
     }
+    // A rating's closing bracket ends its quality even where the comma after
+    // it was left out ("Felling [4] Razor-Sharp").
     return text
-        .split(/,(?![^([]*[)\]])/u)
+        .split(/,(?![^([]*[)\]])|(?<=[)\]])\s+(?=\p{L})/u)
         .map((q) => q.trim())
         .filter((q) => q.length > 0 && !isEmptyCell(q))
         .map((q) =>

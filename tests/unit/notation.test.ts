@@ -147,6 +147,14 @@ describe("parseQualities", () => {
         expect(parseQualities("—")).toEqual([]);
     });
 
+    it("ends a rated quality at its closing bracket where the comma was left out", () => {
+        expect(parseQualities("Felling [4] Razor-Sharp, Toxic [4]")).toEqual([
+            "felling-4",
+            "razor-sharp",
+            "toxic-4",
+        ]);
+    });
+
     it("drops a 'Special' entry that points to the weapon's text", () => {
         expect(parseQualities("Balanced, Special")).toEqual(["balanced"]);
         expect(parseQualities("Special")).toEqual([]);
