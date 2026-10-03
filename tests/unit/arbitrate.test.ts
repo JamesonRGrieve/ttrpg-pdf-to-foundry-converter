@@ -42,7 +42,15 @@ function doc(runs: RawTextRun[]): RawDoc {
         encrypted: false,
         extractor: "test",
         pages: [
-            { pageIndex: 0, width: 600, height: 800, rotation: 0, viewBox: [0, 0, 600, 800], edgeText: [] },
+            {
+                pageIndex: 0,
+                width: 600,
+                height: 800,
+                rotation: 0,
+                viewBox: [0, 0, 600, 800],
+                edgeText: [],
+                hasTextLayer: runs.length > 0,
+            },
         ],
         textRuns: runs,
         images: [],
@@ -130,14 +138,14 @@ describe("smallCapsFonts", () => {
 describe("arbitrate", () => {
     it("joins a letter-spaced run with its split initial into the printed word", () => {
         const raw = doc([run("S", 100, 8), run("a m p l e", 108, 40)]);
-        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])], cells: [] }];
         const texts = arbitrate(raw, ocr).textRuns.map((r) => r.text);
         expect(texts).toEqual(["Sample"]);
     });
 
     it("gives a word joined from a larger initial the full extent and the size of its letters", () => {
         const raw = doc([run("S", 100, 8, { fontSize: 16 }), run("a m p l e", 108, 40, { fontSize: 11 })]);
-        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])], cells: [] }];
         const [joined] = arbitrate(raw, ocr).textRuns;
         expect([joined?.text, joined?.x, joined?.width, joined?.fontSize]).toEqual(["Sample", 100, 48, 11]);
     });
@@ -145,7 +153,7 @@ describe("arbitrate", () => {
     it("reads an initial printed twice over itself once in the word it begins", () => {
         const initial = run("S", 100, 8, { fontSize: 16 });
         const raw = doc([initial, { ...initial }, run("AMPLE", 108, 40, { fontSize: 11 })]);
-        const ocr = [{ pageIndex: 0, words: [word("SAMPLE", 34, [100, 698, 148, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("SAMPLE", 34, [100, 698, 148, 708])], cells: [] }];
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["SAMPLE"]);
     });
 
@@ -159,7 +167,7 @@ describe("arbitrate", () => {
         const words = cells.map((c) => word("Lamp", 95, [100, c.y - 2, 120, c.y + 8]));
         const body = { ...run("Wick", 300, 20), y: 700 };
         const out = arbitrate(doc([...cells, body]), [
-            { pageIndex: 0, words: [...words, word("Wick", 95, [300, 698, 320, 708])] },
+            { pageIndex: 0, words: [...words, word("Wick", 95, [300, 698, 320, 708])], cells: [] },
         ]).textRuns;
         expect(new Set(out.filter((r) => r.fontName.endsWith("Cells")).map((r) => r.text))).toEqual(
             new Set(["Lamp"]),
@@ -168,7 +176,7 @@ describe("arbitrate", () => {
         // A line of that face holding only a space is left as it is.
         const blank = { ...run(" ", 100, 5, { fontName: "ABCDEF+Cells" }), y: 100 };
         const withBlank = arbitrate(doc([...cells, blank]), [
-            { pageIndex: 0, words: [...words, word("Lamp", 95, [100, 98, 105, 108])] },
+            { pageIndex: 0, words: [...words, word("Lamp", 95, [100, 98, 105, 108])], cells: [] },
         ]).textRuns;
         expect(withBlank.find((r) => r.y === 100)?.text).toBe(" ");
     });
@@ -180,7 +188,7 @@ describe("arbitrate", () => {
             word("Shells", 95, [121, 698, 142, 708]),
             word("S/-/-", 95, [300, 698, 320, 708]),
         ];
-        expect(arbitrate(raw, [{ pageIndex: 0, words }]).textRuns.map((r) => r.text)).toEqual([
+        expect(arbitrate(raw, [{ pageIndex: 0, words, cells: [] }]).textRuns.map((r) => r.text)).toEqual([
             "Acid Shells",
             "S/–/–",
         ]);
@@ -190,19 +198,21 @@ describe("arbitrate", () => {
         // Each piece drawn three times; what survives still overlaps.
         const pieces = [run("La", 100, 10), run("L mp", 100, 20), run("mp", 110, 10)];
         const raw = doc(pieces.flatMap((p) => [p, { ...p }, { ...p }]));
-        const ocr = [{ pageIndex: 0, words: [word("Lamp", 90, [100, 698, 120, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Lamp", 90, [100, 698, 120, 708])], cells: [] }];
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["Lamp"]);
         // A cell of several words keeps them as one spaced text.
         const two = [run("Ol", 100, 10), run("X d", 104, 12), run("Lamp", 118, 20)];
         const words = [word("Old", 90, [100, 698, 114, 708]), word("Lamp", 90, [118, 698, 138, 708])];
-        const read = arbitrate(doc(two.flatMap((p) => [p, { ...p }, { ...p }])), [{ pageIndex: 0, words }]);
+        const read = arbitrate(doc(two.flatMap((p) => [p, { ...p }, { ...p }])), [
+            { pageIndex: 0, words, cells: [] },
+        ]);
         expect(read.textRuns.map((r) => r.text)).toEqual(["Old Lamp"]);
     });
 
     it("keeps the layer of a row drawn over and over whose pieces come apart cleanly", () => {
         const pieces = [run("La", 100, 10), run("mp", 110, 10)];
         const raw = doc(pieces.flatMap((p) => [p, { ...p }, { ...p }]));
-        const ocr = [{ pageIndex: 0, words: [word("Larnp", 90, [100, 698, 120, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Larnp", 90, [100, 698, 120, 708])], cells: [] }];
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["La", "mp"]);
     });
 
@@ -210,14 +220,14 @@ describe("arbitrate", () => {
         const letters = ["S", "a", "m", "p", "l", "e"].map((ch, i) =>
             run(ch, 100 + i * 8, 8, { fontSize: i === 0 ? 16 : 11 }),
         );
-        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Sample", 95, [100, 698, 148, 708])], cells: [] }];
         const [joined] = arbitrate(doc(letters), ocr).textRuns;
         expect([joined?.text, joined?.x, joined?.width, joined?.fontSize]).toEqual(["Sample", 100, 48, 11]);
     });
 
     it("inserts a confident OCR word that sits on no text-layer line", () => {
         const raw = doc([run("heading", 100, 40)]);
-        const ocr = [{ pageIndex: 0, words: [word("Caption", 95, [100, 400, 150, 410])] }];
+        const ocr = [{ pageIndex: 0, words: [word("Caption", 95, [100, 400, 150, 410])], cells: [] }];
         const out = arbitrate(raw, ocr).textRuns;
         expect(out.map((r) => r.text)).toEqual(["heading", "Caption"]);
     });
@@ -235,6 +245,7 @@ describe("arbitrate", () => {
                     word("Lamp:", 95, [124, 698, 158, 708]),
                     ...restWords,
                 ],
+                cells: [],
             },
         ];
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["Old Lamp:", rest]);
@@ -258,6 +269,7 @@ describe("arbitrate", () => {
                     word("The", 95, [162, 698, 180, 708]),
                     ...restWords,
                 ],
+                cells: [],
             },
         ];
         const texts = arbitrate(raw, ocr).textRuns.map((r) => r.text);
@@ -279,6 +291,7 @@ describe("arbitrate", () => {
                     word("Lamp", 95, [124, 698, 158, 708]),
                     word("Wick", 95, [172, 698, 200, 708]),
                 ],
+                cells: [],
             },
         ];
         expect(arbitrate(raw, ocr).textRuns.map((r) => [r.text, r.x])).toEqual([
@@ -298,12 +311,13 @@ describe("arbitrate", () => {
                     word("5-4:", 96, [134, 698, 152, 708]),
                     word("LAMPS", 95, [156, 698, 190, 708]),
                 ],
+                cells: [],
             },
         ];
         expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)).toEqual(["TABLE 5-4: LAMPS"]);
         // A line OCR reads part of keeps its text layer.
         const kept = doc([run("Lantern oil burns", 100, 90)]);
-        const partial = [{ pageIndex: 0, words: [word("Lantern", 96, [100, 698, 140, 708])] }];
+        const partial = [{ pageIndex: 0, words: [word("Lantern", 96, [100, 698, 140, 708])], cells: [] }];
         expect(arbitrate(kept, partial).textRuns.map((r) => r.text)).toEqual(["Lantern oil burns"]);
     });
 
@@ -325,6 +339,7 @@ describe("arbitrate", () => {
             {
                 pageIndex: 0,
                 words: [line("first", 100, 0, 700), line("line", 135, 0, 700), line("second", 100, 1, 688)],
+                cells: [],
             },
         ];
         const out = arbitrate(raw, ocr).textRuns;

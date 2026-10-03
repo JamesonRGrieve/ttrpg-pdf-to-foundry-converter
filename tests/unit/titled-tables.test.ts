@@ -32,7 +32,17 @@ function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}):
 function irOf(runs: IRTextRun[]): IR {
     return {
         irVersion: 0,
-        pages: [{ pageIndex: 0, width: 600, height: 800, rotation: 0, columns: 1, edgeText: [] }],
+        pages: [
+            {
+                pageIndex: 0,
+                width: 600,
+                height: 800,
+                rotation: 0,
+                columns: 1,
+                edgeText: [],
+                hasTextLayer: true,
+            },
+        ],
         runs,
         sizeBuckets: [],
         fonts: [],
@@ -97,6 +107,33 @@ describe("titled tables", () => {
         const [table] = detectTitledTables(ir);
         const names = table?.rows.map((r) => r.cells.find((c) => c.colIndex === 0)?.text);
         expect(names).toEqual(["Rushlight", "Tinder Crossbow", "Glim"]);
+    });
+
+    it("finds a caption set larger than the body on a page read from its image, where all is one face", () => {
+        const scanned = (runs: IRTextRun[]): IR => {
+            const ir = irOf(runs);
+            return { ...ir, pages: ir.pages.map((page) => ({ ...page, hasTextLayer: false })) };
+        };
+        const ocr = { font: "ocr" };
+        const prose = Array.from({ length: 6 }, (_, i) =>
+            run("plain running words of the text", 60, 400 - 12 * i, ocr),
+        );
+        const rows = [
+            run("NAME", 60, 680, { ...ocr, weight: "bold" }),
+            run("CLASS", 200, 680, { ...ocr, weight: "bold" }),
+            run("DAM", 300, 680, { ...ocr, weight: "bold" }),
+            run("Rushlight", 60, 660, ocr),
+            run("Basic", 200, 660, ocr),
+            run("1d10 E", 300, 660, ocr),
+            run("Glim", 60, 640, ocr),
+            run("Pistol", 200, 640, ocr),
+            run("1d5 E", 300, 640, ocr),
+        ];
+        const larger = scanned([...prose, run("Table 1-5: Lamps", 60, 700, { ...ocr, size: 13 }), ...rows]);
+        expect(detectTitledTables(larger).map((t) => t.tableTitle)).toEqual(["Lamps"]);
+        // At the body's size it reads as running text, as on a page with a text layer.
+        const level = scanned([...prose, run("Table 1-5: Lamps", 60, 700, ocr), ...rows]);
+        expect(detectTitledTables(level).map((t) => t.tableTitle)).not.toContain("Lamps");
     });
 
     it("finds a caption set in a display face, not one in the body face, and leaves side-margin tabs out", () => {

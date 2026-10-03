@@ -29,9 +29,13 @@ function walk(dir: string): string[] {
     return out;
 }
 
-describe("golden output", () => {
+/** A case runs the whole engine, recognizing a scanned fixture's pages in every pass when cold. */
+const CASE_TIMEOUT_MS = 120_000;
+
+// Cases run side by side: each is its own engine run, sharing nothing.
+describe.concurrent("golden output", () => {
     for (const entry of loadManifest(repoRoot)) {
-        it(`${entry.name} matches golden/ byte-for-byte`, async () => {
+        it(`${entry.name} matches golden/ byte-for-byte`, { timeout: CASE_TIMEOUT_MS }, async () => {
             const output = await runCase(entry, repoRoot);
             const goldenDir = resolve(repoRoot, "golden", entry.name);
             const goldenFiles = walk(goldenDir);

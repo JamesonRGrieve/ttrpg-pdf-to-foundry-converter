@@ -41,6 +41,15 @@ OCR runs inside the engine and must be as reproducible as everything else:
   build file.
 - The model data is the pinned `@tesseract.js-data/eng` package, loaded from
   disk (Node) or the page's own origin (browser), never fetched from a CDN.
+- Pages with no text layer are first read by PP-OCR: the pinned
+  `@gutenye/ocr-models` networks run in the pinned `onnxruntime-web`'s plain
+  WebAssembly build (`ort-wasm-simd-threaded.wasm`, plain SIMD, no
+  relaxed-SIMD instructions, no GPU kernels) on one thread, so no reduction
+  order varies. Node and the browser import it through different entry points
+  that load that same binary; the browser's default entry (with GPU kernels)
+  is never used. Pre- and post-processing (scaling, line detection, CTC
+  decoding) are the engine's own arithmetic. The CLI spreads pages over worker
+  threads, each a whole reader, and a page's words depend on that page alone.
 - Arbitration (correcting the text layer from OCR) iterates only in geometric
   order and uses fixed thresholds, so identical inputs give identical output.
 
@@ -53,9 +62,14 @@ Two caches, both pure optimizations. Deleting either and re-running produces
 identical output (cold vs. warm is proven equal by gate G1/G1b).
 
 ```
-ocr page key  = sha256( sha256(pdf) | renderer id | ocr engine id )[:32]
-read-doc key  = sha256( sha256(pdf) | "eng:" ENGINE_VERSION | "ir:" IR_VERSION | "ocr:" renderer id | ocr engine id )[:32]
+ocr page key  = sha256( sha256(pdf) | renderer id | pass id )[:32]
+read-doc key  = sha256( sha256(pdf) | "eng:" ENGINE_VERSION | "ir:" IR_VERSION | "ocr:" renderer id
+                        | ocr engine id | sparse id | cell id | scan reader id )[:32]
 ```
+
+Each recognition pass (the engine's automatic, sparse and cell modes, the
+binarized and inverted variants, the scan reader) stores its pages under its
+own id; the grid-cell pass's id also carries a hash of the cells it read.
 
 The CLI keeps them under `--cache-dir` (default `.tmp/cache` in the working
 directory, gitignored — kept on disk, since a temp directory may be held in memory):

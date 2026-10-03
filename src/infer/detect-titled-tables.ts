@@ -104,14 +104,24 @@ function inRunningText(ir: IR, run: IRTextRun): boolean {
     );
 }
 
+/** On a page read from its image, a caption is set at least this many times the body text's size. */
+const CAPTION_SIZE_RATIO = 1.2;
+
 /**
  * Captions are set apart from running text: in bold, or in a face other than
- * the body text's. A table named inside prose is set in the body face.
+ * the body text's. A table named inside prose is set in the body face. A page
+ * read from its image has one face and measured weights, so there a caption
+ * set clearly larger than the body text is set apart too.
  */
 function findTableTitles(ir: IR): TitleHit[] {
-    const [bodyFont, , bodyWeight] = bodyStyle(ir).style.split("|");
+    const body = bodyStyle(ir);
+    const [bodyFont, , bodyWeight] = body.style.split("|");
+    const measured = new Set(ir.pages.filter((p) => !p.hasTextLayer).map((p) => p.pageIndex));
     const captionFace = (r: IRTextRun): boolean =>
-        r.weight === "bold" || r.font !== bodyFont || r.weight !== bodyWeight;
+        r.weight === "bold" ||
+        r.font !== bodyFont ||
+        r.weight !== bodyWeight ||
+        (measured.has(r.pageIndex) && r.size >= CAPTION_SIZE_RATIO * body.size);
     const hits: TitleHit[] = [];
     for (const run of ir.runs) {
         // A caption may be set in several runs ("Table" · "6-1:" in a larger

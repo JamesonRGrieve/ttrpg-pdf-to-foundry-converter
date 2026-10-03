@@ -18,7 +18,12 @@ import {
     valueUnfinished,
     withoutFigures,
 } from "../../src/infer/detect-entries.ts";
-import { detectNumericGrids, panelBlocks, splitBannerText } from "../../src/infer/detect-grids.ts";
+import {
+    detectNumericGrids,
+    panelBlocks,
+    splitBannerText,
+    trimToCapitals,
+} from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
 import {
     entryItem,
@@ -75,6 +80,7 @@ function irOf(pageIndexes: number[], runs: IRTextRun[]): IR {
             rotation: 0,
             columns: 1,
             edgeText: [],
+            hasTextLayer: true,
         })),
         runs,
         sizeBuckets: [],
@@ -634,6 +640,45 @@ describe("npc statblocks", () => {
             ],
         );
         expect(detectNumericGrids(ir).map((g) => g.name)).toEqual(["LAMP WARDEN"]);
+    });
+
+    it("reads a grid on a page with no text layer from its lattice, whatever the measured weights", () => {
+        const read = (text: string, x: number, y: number, size: number): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: 6 * text.length,
+            height: size,
+            size,
+        });
+        const values = [
+            ["47", "—", "40"],
+            ["40", "41", "16"],
+            ["41", "20", "05"],
+        ];
+        const grid = values.flatMap((row, r) => row.map((v, c) => read(v, 200 + 30 * c, 480 - 25 * r, 11)));
+        const base = irOf(
+            [0],
+            [
+                ...grid,
+                // A stray value beside the grid (a wounds box) and art read as words around the banner.
+                read("16", 290, 512, 9),
+                read("i", 60, 540, 11),
+                read("WARDEN SENTRY (ELITE)", 110, 540, 11),
+                read("Va", 260, 540, 11),
+            ],
+        );
+        const ir = { ...base, pages: base.pages.map((p) => ({ ...p, hasTextLayer: false })) };
+        const [found] = detectNumericGrids(ir);
+        expect(found?.name).toBe("WARDEN SENTRY (ELITE)");
+        expect(found?.values).toEqual([47, 0, 40, 40, 41, 16, 41, 20, 5]);
+        // With a text layer the same unbolded values are no grid.
+        expect(detectNumericGrids(base)).toEqual([]);
+    });
+
+    it("trims a scanned banner's short mixed-case end words, never a small-caps word", () => {
+        expect(trimToCapitals("Sr WARDEN SENTRY Ps)")).toBe("WARDEN SENTRY");
+        expect(trimToCapitals("LaNTERN HOUND (TROOP)")).toBe("LaNTERN HOUND (TROOP)");
+        expect(trimToCapitals("Lamp warden")).toBe("Lamp warden");
     });
 
     it("follows statblock text that runs on through the next column onto the next page", () => {

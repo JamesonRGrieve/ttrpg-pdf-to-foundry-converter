@@ -42,7 +42,8 @@ export function makeConfig(overrides: ConfigOverrides = {}): EngineConfig {
     return {
         modulesDir: resolve(overrides.modulesDir ?? join(DEFAULT_ROOT, "modules")),
         cacheDir: resolve(overrides.cacheDir ?? DEFAULT_CACHE_DIR),
-        ocrWorkers: overrides.ocrWorkers ?? Math.max(1, Math.floor(availableParallelism() / 2)),
+        // Every core: recognition is the run's parallel part, and a shorter run holds its memory less long.
+        ocrWorkers: overrides.ocrWorkers ?? availableParallelism(),
         logLevel: overrides.logLevel ?? "info",
     };
 }

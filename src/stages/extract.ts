@@ -382,6 +382,7 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
                 rotation: page.rotate,
                 viewBox: [x0, y0, x1, y1],
                 edgeText,
+                hasTextLayer: false,
             });
             // Force font objects into commonObjs before reading text styles.
             await page.getOperatorList();
@@ -427,7 +428,16 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
             }
             closeEdgeLabel();
         }
-        return { encrypted: false, extractor: EXTRACTOR_ID, pages, textRuns, images, placements, meta };
+        const withText = new Set(textRuns.map((r) => r.pageIndex));
+        return {
+            encrypted: false,
+            extractor: EXTRACTOR_ID,
+            pages: pages.map((page) => ({ ...page, hasTextLayer: withText.has(page.pageIndex) })),
+            textRuns,
+            images,
+            placements,
+            meta,
+        };
     } finally {
         await doc.destroy();
     }

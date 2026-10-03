@@ -14,6 +14,10 @@
             "pdfs": ["fixtures/rendered/field-manual.pdf", "fixtures/rendered/images.pdf"]
         },
         {
+            "name": "scanned",
+            "pdfs": ["fixtures/rendered/scanned.pdf"]
+        },
+        {
             "name": "cross-line",
             "pdfs": ["fixtures/rendered/field-manual.pdf", "fixtures/rendered/field-manual.pdf"],
             "targets": ["dh2", "rt"]

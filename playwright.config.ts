@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { availableParallelism } from "node:os";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -7,14 +8,21 @@ import { defineConfig, devices } from "@playwright/test";
  */
 
 const PORT = 4173;
+/**
+ * Tests run side by side, a page each. A page's engine recognizes on half the
+ * machine's cores, so a quarter of the core count keeps them all busy without
+ * crowding each other out.
+ */
+const E2E_WORKERS = Math.max(1, Math.floor(availableParallelism() / 4));
 /** A cold in-browser run renders + OCRs every page; allow for slow CI machines. */
 const CONVERSION_TIMEOUT_MS = 300_000;
 
 export default defineConfig({
     testDir: "e2e",
     timeout: CONVERSION_TIMEOUT_MS,
-    fullyParallel: false,
-    workers: 1,
+    // Each test converts in its own page; they share only the preview server.
+    fullyParallel: true,
+    workers: E2E_WORKERS,
     reporter: [["list"]],
     use: {
         baseURL: `http://127.0.0.1:${PORT}/`,

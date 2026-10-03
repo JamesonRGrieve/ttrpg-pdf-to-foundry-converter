@@ -407,6 +407,7 @@ export function normalize(raw: RawDoc): IR {
             rotation: page.rotation,
             columns,
             edgeText: page.edgeText.map((label) => canonicalizeText(label)),
+            hasTextLayer: page.hasTextLayer,
         });
         docMargin.left = Math.min(docMargin.left, geom.marginLeft);
         docMargin.right = Math.max(docMargin.right, geom.marginRight);

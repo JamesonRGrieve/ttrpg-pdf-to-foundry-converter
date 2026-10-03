@@ -14,6 +14,8 @@ export const PINS = {
     "tesseract.js": "7.0.0",
     "tesseract.js-core": "7.0.0",
     "@tesseract.js-data/eng": "1.0.0",
+    "onnxruntime-web": "1.30.0",
+    "@gutenye/ocr-models": "1.4.2",
     "@noble/hashes": "2.4.0",
     fflate: "0.8.3",
 } as const;

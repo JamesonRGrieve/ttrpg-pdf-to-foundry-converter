@@ -49,10 +49,12 @@
         "prepare": "husky || true"
     },
     "dependencies": {
+        "@gutenye/ocr-models": "1.4.2",
         "@noble/hashes": "2.4.0",
         "@tesseract.js-data/eng": "1.0.0",
         "fflate": "0.8.3",
         "mupdf": "1.28.1",
+        "onnxruntime-web": "1.30.0",
         "pdf-lib": "1.17.1",
         "pdfjs-dist": "4.10.38",
         "tesseract.js": "7.0.0",

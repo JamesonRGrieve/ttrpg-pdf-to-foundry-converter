@@ -4,6 +4,7 @@ import { LINES, type Line } from "./infer/schema.ts";
 import type { TargetSchema } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
+import type { PageReader } from "./ocr/ppocr/reader.ts";
 import { recognizeDocument, type OcrPageStore } from "./ocr/recognize.ts";
 import { RENDERER_ID } from "./ocr/render.ts";
 import type { OcrEngine } from "./ocr/types.ts";
@@ -64,6 +65,8 @@ export interface EngineOptions {
     /** The user's choice of output schema (game line); never inferred from the document. */
     target: TargetSchema;
     ocr: OcrEngine;
+    /** Reads pages with no text layer (scans) first; see `recognizeDocument`. */
+    scanReader: PageReader;
     ocrStore: OcrPageStore;
     /** Pages rendered ahead of recognition (bounds memory). */
     maxInFlight: number;
@@ -74,10 +77,14 @@ export interface EngineOptions {
     onOcrPage?: (done: number, total: number) => void;
 }
 
-/** Cache key for the read document: PDF content + engine/IR versions + OCR identity. */
-export function readCacheKey(pdfBytes: Uint8Array, ocr: OcrEngine): string {
+/**
+ * Cache key for the read document: PDF content + engine/IR versions + OCR
+ * identity (each recognizer mode's id; how the scan passes use them is code,
+ * covered by the IR version).
+ */
+export function readCacheKey(pdfBytes: Uint8Array, ocr: OcrEngine, scanReader: PageReader): string {
     return sha256Hex(
-        `${sha256Hex(pdfBytes)}|eng:${ENGINE_VERSION}|ir:${IR_VERSION}|ocr:${RENDERER_ID}|${ocr.id}`,
+        `${sha256Hex(pdfBytes)}|eng:${ENGINE_VERSION}|ir:${IR_VERSION}|ocr:${RENDERER_ID}|${ocr.id}|${ocr.sparseId}|${ocr.cellId}|${scanReader.id}`,
     ).slice(0, 32);
 }
 
@@ -85,7 +92,7 @@ async function readDocument(
     pdfBytes: Uint8Array,
     opts: EngineOptions,
 ): Promise<(ReadDocument & { cacheHit: boolean }) | null> {
-    const key = readCacheKey(pdfBytes, opts.ocr);
+    const key = readCacheKey(pdfBytes, opts.ocr, opts.scanReader);
     const cached = opts.irCache === undefined ? null : await opts.irCache.read(key);
     if (cached !== null) {
         opts.log.info("using cached IR + image assets");
@@ -95,12 +102,21 @@ async function readDocument(
     if (raw.encrypted) {
         return null;
     }
-    const ocr = await recognizeDocument(pdfBytes, raw.pages, opts.ocr, {
-        store: opts.ocrStore,
-        maxInFlight: opts.maxInFlight,
-        log: opts.log,
-        ...(opts.onOcrPage === undefined ? {} : { onPage: opts.onOcrPage }),
-    });
+    const ocr = await recognizeDocument(
+        pdfBytes,
+        raw.pages,
+        opts.ocr,
+        {
+            store: opts.ocrStore,
+            maxInFlight: opts.maxInFlight,
+            log: opts.log,
+            ...(opts.onOcrPage === undefined ? {} : { onPage: opts.onOcrPage }),
+        },
+        {
+            pages: new Set(raw.pages.filter((p) => !p.hasTextLayer).map((p) => p.pageIndex)),
+            reader: opts.scanReader,
+        },
+    );
     const ir = normalize(arbitrate(raw, ocr));
     const assets = recoverImages(raw, opts.log);
     await opts.irCache?.write(key, { ir, assets });
@@ -218,7 +234,7 @@ export async function runModule(
             irVersion: IR_VERSION,
             extractor: EXTRACTOR_ID,
             renderer: RENDERER_ID,
-            ocr: opts.ocr.id,
+            ocr: `${opts.ocr.id}|${opts.scanReader.id}`,
             // One line reads as before; several list in the system's line order.
             target: LINES.filter((l) => lines.has(l)).join(","),
         },

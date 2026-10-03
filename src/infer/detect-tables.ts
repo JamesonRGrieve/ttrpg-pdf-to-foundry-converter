@@ -131,12 +131,25 @@ function assignRunsToColumns(runs: IRTextRun[], columns: ColumnEdge[]): TableCel
     return cells;
 }
 
-function isSpanningHeader(row: RawRow, columns: ColumnEdge[]): boolean {
+/**
+ * Whether a row reads as a header: set bold. On a page read from its image
+ * (`measured`) weight is measured word by word and some header words read
+ * regular, so there a row mostly bold, or set wholly in capitals, is one.
+ */
+function headerSet(row: RawRow, measured: boolean): boolean {
+    const bold = row.runs.filter((r) => r.weight === "bold").length;
+    if (!measured) {
+        return bold === row.runs.length;
+    }
+    const capitals = row.runs.every((r) => /\p{Lu}/u.test(r.text) && !/\p{Ll}/u.test(r.text));
+    return capitals || bold * 2 > row.runs.length;
+}
+
+function isSpanningHeader(row: RawRow, columns: ColumnEdge[], measured: boolean): boolean {
     if (row.runs.length === 0) {
         return false;
     }
-    const allBold = row.runs.every((r) => r.weight === "bold");
-    if (!allBold) {
+    if (!headerSet(row, measured)) {
         return false;
     }
     const cells = assignRunsToColumns(row.runs, columns);
@@ -158,7 +171,9 @@ export function detectTables(ir: IR): DetectedTable[] {
         pageGroups.set(row.pageIndex, list);
     }
 
+    const measuredPages = new Set(ir.pages.filter((p) => !p.hasTextLayer).map((p) => p.pageIndex));
     for (const [pageIndex, pageRows] of pageGroups) {
+        const measured = measuredPages.has(pageIndex);
         const sorted = [...pageRows].sort((a, b) => b.y - a.y);
         if (sorted.length < MIN_ROWS) {
             continue;
@@ -180,9 +195,8 @@ export function detectTables(ir: IR): DetectedTable[] {
                 if (tableStart === -1) {
                     tableStart = i;
                 }
-                const allBold = row.runs.every((r) => r.weight === "bold");
-                const isHeader = allBold && !headerRow;
-                const spanning = isSpanningHeader(row, columns);
+                const isHeader = headerSet(row, measured) && !headerRow;
+                const spanning = isSpanningHeader(row, columns, measured);
 
                 if (spanning && tableRows.length > 0) {
                     const sectionName = row.runs

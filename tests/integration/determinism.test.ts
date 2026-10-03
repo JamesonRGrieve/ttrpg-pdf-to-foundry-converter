@@ -26,9 +26,13 @@ function mapsEqual(a: Map<string, Uint8Array>, b: Map<string, Uint8Array>): bool
     return true;
 }
 
-describe("determinism (in-memory)", () => {
+/** A case runs the whole engine twice, recognizing a scanned fixture's pages in every pass when cold. */
+const CASE_TIMEOUT_MS = 120_000;
+
+// Cases run side by side: each is its own engine run, sharing nothing.
+describe.concurrent("determinism (in-memory)", () => {
     for (const entry of loadManifest(repoRoot)) {
-        it(`${entry.name} is byte-identical across two cold runs`, async () => {
+        it(`${entry.name} is byte-identical across two cold runs`, { timeout: CASE_TIMEOUT_MS }, async () => {
             const first = await runCase(entry, repoRoot, "det-a");
             const second = await runCase(entry, repoRoot, "det-b");
             expect(mapsEqual(first, second)).toBe(true);
@@ -47,15 +51,33 @@ describe("encrypted refusal", () => {
         let recognized = 0;
         const ocr: OcrEngine = {
             id: "refusal-probe",
+            sparseId: "refusal-probe-sparse",
             recognize: async () => {
+                recognized += 1;
+                return [];
+            },
+            recognizeSparse: async () => {
+                recognized += 1;
+                return [];
+            },
+            cellId: "refusal-probe-cell",
+            recognizeCell: async () => {
                 recognized += 1;
                 return [];
             },
             close: async () => undefined,
         };
+        const scanReader = {
+            id: "refusal-probe-reader",
+            read: async () => {
+                recognized += 1;
+                return [];
+            },
+        };
         const result = await runEngine(bytes, {
             target: DEFAULT_TARGET,
             ocr,
+            scanReader,
             ocrStore: new MemoryOcrPageStore(),
             maxInFlight: 1,
             assetRefPrefix: "x",

@@ -4,6 +4,7 @@
 //   - tesseract.js browser worker script
 //   - the pinned WASM core build (plain SIMD + LSTM, see src/ocr/tesseract-config.ts)
 //   - the pinned English model data
+//   - onnxruntime-web's plain WebAssembly build and the pinned PP-OCR models
 import { copyFileSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +28,15 @@ const files = [
         join(pkgDir("@tesseract.js-data/eng"), MODEL_VARIANT, "eng.traineddata.gz"),
         join(out, "tesseract", "lang", "eng.traineddata.gz"),
     ],
+    ...["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.mjs"].map((file) => [
+        // The package exports no package.json; its entry point sits in dist/ beside the WASM build.
+        join(dirname(require.resolve("onnxruntime-web")), file),
+        join(out, "ppocr", file),
+    ]),
+    ...["ch_PP-OCRv4_det_infer.onnx", "ch_PP-OCRv4_rec_infer.onnx", "ppocr_keys_v1.txt"].map((file) => [
+        join(dirname(require.resolve("@gutenye/ocr-models/node")), "assets", file),
+        join(out, "ppocr", file),
+    ]),
 ];
 
 for (const [from, to] of files) {

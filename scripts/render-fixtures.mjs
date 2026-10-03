@@ -2,7 +2,7 @@
 /**
  * Render the synthetic fixture PDFs from their sources, reproducibly:
  * every `fixtures/src/*.typ` through Typst with a fixed creation timestamp,
- * plus the hand-built encrypted fixture. Same sources + same Typst version =
+ * plus the hand-built encrypted, restricted and scanned (image-only) fixtures. Same sources + same Typst version =
  * byte-identical PDFs. After re-rendering, regenerate goldens with
  * `pnpm golden:update`.
  */
@@ -45,5 +45,6 @@ for (const source of readdirSync(SRC)
     process.stdout.write(`rendered ${target}\n`);
 }
 run(process.execPath, [join(SRC, "gen-encrypted.mjs")]);
-// Needs the rendered field manual above.
+// Need the rendered field manual above.
 run(process.execPath, [join(SRC, "gen-restricted.mjs")]);
+run(process.execPath, [join(SRC, "gen-scanned.mjs")]);

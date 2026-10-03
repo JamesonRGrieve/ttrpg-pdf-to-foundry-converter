@@ -11,6 +11,7 @@ import {
     runModule,
     targetFor,
 } from "../src/index.ts";
+import { createBrowserPpOcrPool, PPOCR_VENDOR_PATH } from "./ppocr-browser.ts";
 import type { PackSummary, RunRequest, WorkerMessage } from "./protocol.ts";
 import { BrowserTesseractEngine } from "./tesseract-browser.ts";
 
@@ -51,9 +52,14 @@ async function run(request: RunRequest): Promise<void> {
     }
     const vendorBase = new URL(`${import.meta.env.BASE_URL}vendor/tesseract/`, self.location.origin).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
+    const ppocr = createBrowserPpOcrPool(
+        ocrWorkers,
+        new URL(`${import.meta.env.BASE_URL}${PPOCR_VENDOR_PATH}`, self.location.origin).href,
+    );
     try {
         const result = await runModule(documents, {
             ocr,
+            scanReader: ppocr,
             ocrStore: new MemoryOcrPageStore(),
             maxInFlight: ocrWorkers * 2,
             log,
@@ -93,6 +99,7 @@ async function run(request: RunRequest): Promise<void> {
         );
     } finally {
         await ocr.close();
+        await ppocr.close();
     }
 }
 

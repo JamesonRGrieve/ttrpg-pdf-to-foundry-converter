@@ -2,7 +2,7 @@
 // Gate G6: an encrypted PDF is refused (exit 3) and nothing is written. Proven
 // by RUNNING the shipped CLI.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +41,8 @@ if (existsSync(outDir) && readdirSync(outDir).length > 0) {
     process.stderr.write("  ✗ output was written despite the refusal\n");
     ok = false;
 }
+// The scratch directory goes whatever the outcome: /tmp may be held in memory.
+rmSync(tmp, { recursive: true, force: true });
 if (!ok) {
     process.stderr.write("G6 refusal gate FAILED\n");
     process.exit(1);

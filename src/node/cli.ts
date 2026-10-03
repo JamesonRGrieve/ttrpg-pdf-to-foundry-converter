@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { LINES } from "../infer/schema.ts";
 import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../infer/targets.ts";
 import { createLogger, type Logger, type LogLevel } from "../logger.ts";
+import type { PageReader } from "../ocr/ppocr/reader.ts";
 import { RENDER_DPI } from "../ocr/render.ts";
 import type { OcrEngine } from "../ocr/types.ts";
 import { runModule } from "../run.ts";
@@ -13,6 +14,7 @@ import type { BuiltModule } from "../stages/module.ts";
 import { EXIT, makeConfig, type ConfigOverrides, type EngineConfig, type ExitCode } from "./config.ts";
 import { FileIrCache } from "./ir-cache.ts";
 import { FileOcrPageStore } from "./ocr-store.ts";
+import { createNodePpOcrPool } from "./ppocr-pool.ts";
 import { danglingTarget, targetedInputs, type TargetedInput } from "./target-args.ts";
 import { NodeTesseractEngine } from "./tesseract-node.ts";
 
@@ -36,7 +38,7 @@ Options:
   --out-dir <dir>          Where the module is written, e.g. Foundry's Data/modules
                            (default: <tmp>/foundry-pdf-parser/modules).
   --cache-dir <dir>        IR/OCR cache (default: .tmp/cache in the working directory).
-  --ocr-workers <n>        OCR threads (default: half the CPU count).
+  --ocr-workers <n>        OCR threads (default: the CPU count).
   --dry-run                Run everything but write nothing.
   --log-level <level>      debug | info | warn | error (default: info).
 `;
@@ -121,6 +123,7 @@ function write(module: BuiltModule, config: EngineConfig, log: Logger): void {
 async function convert(
     pdfs: readonly TargetedPdf[],
     engine: OcrEngine,
+    scanReader: PageReader,
     opts: CliOptions,
     log: Logger,
 ): Promise<ExitCode> {
@@ -128,6 +131,7 @@ async function convert(
         pdfs.map(({ path, target }) => ({ pdf: new Uint8Array(readFileSync(path)), target })),
         {
             ocr: engine,
+            scanReader,
             ocrStore: new FileOcrPageStore(opts.config.cacheDir),
             irCache: new FileIrCache(opts.config.cacheDir),
             maxInFlight: opts.config.ocrWorkers * 2,
@@ -213,10 +217,12 @@ async function main(): Promise<ExitCode> {
     }
 
     const engine = await NodeTesseractEngine.create(opts.config.ocrWorkers, RENDER_DPI);
+    const ppocr = createNodePpOcrPool(opts.config.ocrWorkers);
     try {
-        return await convert(pdfs, engine, opts, log);
+        return await convert(pdfs, engine, ppocr, opts, log);
     } finally {
         await engine.close();
+        await ppocr.close();
     }
 }
 

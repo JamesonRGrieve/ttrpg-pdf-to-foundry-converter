@@ -99,6 +99,10 @@ test("converts a PDF in-browser into a module identical to the CLI golden", asyn
     await convertsLikeCli(page, baseURL, ["fixtures/rendered/field-manual.pdf"], "field-manual");
 });
 
+test("reads an image-only PDF from OCR alone, identically to the CLI", async ({ page, baseURL }) => {
+    await convertsLikeCli(page, baseURL, ["fixtures/rendered/scanned.pdf"], "scanned");
+});
+
 test("converts several PDFs in one run into one module", async ({ page, baseURL }) => {
     await convertsLikeCli(
         page,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
+import { bestLattice, LATTICE_SIDE } from "../util/lattice.ts";
 import { inMarginBand, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import type { DetectedNumericGrid } from "./types.ts";
@@ -34,6 +35,8 @@ interface GridCell {
 interface CharGrid {
     cells: GridCell[];
     pageIndex: number;
+    /** Read from a page image: its text's weights are measured, so a banner or badge need not read bold. */
+    measured: boolean;
     x0: number;
     y0: number;
     x1: number;
@@ -43,6 +46,13 @@ interface CharGrid {
 function isGridNumeric(run: IRTextRun): boolean {
     return /^\d+$/.test(run.text) || run.text === "-";
 }
+
+/** A grid cell read from a page image: a number, or any dash printed for none (a long one read as two). */
+function isMeasuredGridNumeric(run: IRTextRun): boolean {
+    return /^\d{1,2}$/u.test(run.text) || /^[—–-]{1,2}$/u.test(run.text);
+}
+
+const GRID_CELLS = LATTICE_SIDE * LATTICE_SIDE;
 
 /**
  * Discover font roles at runtime by frequency analysis. The body-text font is
@@ -111,10 +121,26 @@ function discoverFontRoles(ir: IR): { bodyFont: string; gridFont: string | null;
     return { bodyFont, gridFont, gridSize };
 }
 
-function findGridsOnPage(ir: IR, pageIndex: number, gridFont: string | null, gridSize: number): CharGrid[] {
+/**
+ * The grids of one page. On a page with a text layer a grid's values are
+ * bold runs in the discovered grid font and size, three to a row. On a page
+ * read from its image (`measured`) weight and face are not declared, so any
+ * small number may be a value: the grid is the full evenly spaced 3×3 lattice
+ * among them, and strays beside it (a wounds box, a label's digit) are left.
+ */
+function findGridsOnPage(
+    ir: IR,
+    pageIndex: number,
+    gridFont: string | null,
+    gridSize: number,
+    measured: boolean,
+): CharGrid[] {
     const candidates = ir.runs.filter((r) => {
         if (r.pageIndex !== pageIndex) {
             return false;
+        }
+        if (measured) {
+            return isMeasuredGridNumeric(r);
         }
         if (!isGridNumeric(r)) {
             return false;
@@ -161,6 +187,9 @@ function findGridsOnPage(ir: IR, pageIndex: number, gridFont: string | null, gri
         groups.set(find(i), g);
     });
 
+    if (measured) {
+        return [...groups.values()].flatMap((g) => measuredGrid(g, pageIndex) ?? []);
+    }
     const grids: CharGrid[] = [];
     for (const g of groups.values()) {
         const rows = groupByBaseline(
@@ -206,6 +235,7 @@ function findGridsOnPage(ir: IR, pageIndex: number, gridFont: string | null, gri
         grids.push({
             cells,
             pageIndex,
+            measured: false,
             x0: Math.min(...flat.map((c) => c.x)),
             y0: Math.min(...flat.map((c) => c.y)),
             x1: Math.max(...flat.map((c) => c.x)),
@@ -213,6 +243,37 @@ function findGridsOnPage(ir: IR, pageIndex: number, gridFont: string | null, gri
         });
     }
     return grids;
+}
+
+/** The full 3×3 grid among a group of runs on a page read from its image, if it holds one. */
+function measuredGrid(group: readonly IRTextRun[], pageIndex: number): CharGrid | null {
+    // Placed by their centres: a read value's box (and so its baseline) can
+    // take in part of its cell's ruled edge, but its middle stays put.
+    const lattice = bestLattice(
+        group,
+        (r) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2, size: r.size }),
+        GRID_CELLS,
+    );
+    const runs = lattice?.cells.map((c) => c[0]).filter((r) => r !== undefined) ?? [];
+    if (runs.length !== GRID_CELLS) {
+        return null;
+    }
+    const cells = runs.map((run) => ({
+        run,
+        value: /^\d+$/u.test(run.text) ? Number.parseInt(run.text, 10) : 0,
+    }));
+    if (new Set(cells.map((c) => c.value)).size < 2) {
+        return null;
+    }
+    return {
+        cells,
+        pageIndex,
+        measured: true,
+        x0: Math.min(...runs.map((c) => c.x)),
+        y0: Math.min(...runs.map((c) => c.y)),
+        x1: Math.max(...runs.map((c) => c.x)),
+        y1: Math.max(...runs.map((c) => c.y)),
+    };
 }
 
 function readLabelsForGrid(ir: IR, grid: CharGrid): string[] {
@@ -288,6 +349,12 @@ function readLabelsForGrid(ir: IR, grid: CharGrid): string[] {
 const BANNER_REACH = 120;
 /** Widest gap between runs of one banner (a wounds value sits apart at the right). */
 const BANNER_GAP = 70;
+/**
+ * On a page read from its image, the widest gap (in letter sizes) between a
+ * banner's words: a word space, or one short word recognition dropped. The headline value is read as a
+ * badge apart, and marks in the art beside a banner read as stray words.
+ */
+const MEASURED_BANNER_GAP = 3;
 
 interface Banner {
     name: string;
@@ -331,13 +398,53 @@ function letterSize(runs: readonly IRTextRun[]): number {
     return Math.max(...runs.filter((r) => /\p{L}/u.test(r.text)).map((r) => r.size), 0);
 }
 
+/** Share of a line's letters that must be capitals for it to read as set in capitals. */
+const CAPITALS_SHARE = 0.6;
+
+function setInCapitals(runs: readonly IRTextRun[]): boolean {
+    const text = runs.map((r) => r.text).join("");
+    const letters = text.match(/\p{L}/gu) ?? [];
+    const capitals = letters.filter((l) => /\p{Lu}/u.test(l)).length;
+    return letters.length > 0 && capitals >= CAPITALS_SHARE * letters.length;
+}
+
+/** Longest stray word (letters) trimmed from a scanned banner's ends. */
+const MAX_STRAY_LETTERS = 2;
+
 /**
- * The unbroken run chain around one column's largest letters on a line: a
- * neighbouring panel's labels can share the baseline across a gap.
+ * A banner read from a page image, without the short mixed-case words at its
+ * ends: marks in the art beside it read as words ("Va", "Ps)"). A longer word
+ * with a lower-case letter is a small-caps word read in part as lower case
+ * ("LaNTERN"), and stays. A line not set in capitals is left as it is.
  */
-function bannerChain(runs: readonly IRTextRun[]): IRTextRun[] {
+export function trimToCapitals(text: string): string {
+    const letters = text.match(/\p{L}/gu) ?? [];
+    if (letters.filter((l) => /\p{Lu}/u.test(l)).length < CAPITALS_SHARE * letters.length) {
+        return text;
+    }
+    const words = text.split(" ");
+    const capitals = (w: string): boolean =>
+        /\p{Lu}/u.test(w) && (!/\p{Ll}/u.test(w) || (w.match(/\p{L}/gu)?.length ?? 0) > MAX_STRAY_LETTERS);
+    const first = words.findIndex(capitals);
+    const last = words.findLastIndex(capitals);
+    return first < 0 ? text : words.slice(first, last + 1).join(" ");
+}
+
+const letterCount = (r: IRTextRun): number => r.text.match(/\p{L}/gu)?.length ?? 0;
+
+/**
+ * The unbroken run chain around one column's largest letters on a line (the
+ * run of them with the most letters, so a stray mark at that size never
+ * leads): a neighbouring panel's labels can share the baseline across a gap.
+ */
+function bannerChain(runs: readonly IRTextRun[], maxGap: number): IRTextRun[] {
     const size = letterSize(runs);
-    const lead = runs.find((r) => /\p{L}/u.test(r.text) && r.size === size);
+    const lead = runs
+        .filter((r) => letterCount(r) > 0 && r.size === size)
+        .reduce<IRTextRun | undefined>(
+            (best, r) => (best === undefined || letterCount(r) > letterCount(best) ? r : best),
+            undefined,
+        );
     if (lead === undefined) {
         return [];
     }
@@ -349,10 +456,10 @@ function bannerChain(runs: readonly IRTextRun[]): IRTextRun[] {
     };
     let lo = sorted.indexOf(lead);
     let hi = lo;
-    while (lo > 0 && gapAfter(lo - 1) <= BANNER_GAP) {
+    while (lo > 0 && gapAfter(lo - 1) <= maxGap) {
         lo--;
     }
-    while (gapAfter(hi) <= BANNER_GAP) {
+    while (gapAfter(hi) <= maxGap) {
         hi++;
     }
     return sorted.slice(lo, hi + 1);
@@ -362,13 +469,16 @@ function bannerChain(runs: readonly IRTextRun[]): IRTextRun[] {
  * The statblock's name banner: of the bold lines just above the grid, the one
  * set in the largest display size (a statblock above may leave its own bold
  * label lines in range, but in smaller type). Numbers on the banner line are
- * values, not part of the name.
+ * values, not part of the name. On a page read from its image, weight and
+ * size are measured too roughly to tell a banner by: there it is the nearest
+ * line above the grid set in capitals (a banner's display caps), or failing
+ * one, the nearest line.
  */
 function readBanner(ir: IR, grid: CharGrid): Banner | null {
     const candidates = ir.runs.filter(
         (r) =>
             r.pageIndex === grid.pageIndex &&
-            r.weight === "bold" &&
+            (grid.measured || r.weight === "bold") &&
             !r.italic &&
             r.text.trim().length > 0 &&
             r.y > grid.y1 + 25 &&
@@ -386,17 +496,25 @@ function readBanner(ir: IR, grid: CharGrid): Banner | null {
         .flatMap((l) =>
             [...new Set(l.runs.map((r) => r.column))].map((column) => ({
                 y: l.y,
-                runs: bannerChain(l.runs.filter((r) => r.column === column)),
+                runs: bannerChain(
+                    l.runs.filter((r) => r.column === column),
+                    grid.measured ? MEASURED_BANNER_GAP * letterSize(l.runs) : BANNER_GAP,
+                ),
             })),
         )
         .filter((c) => c.runs.length > 0 && !joinLine(c.runs).endsWith(":"))
-        .sort((a, b) => letterSize(b.runs) - letterSize(a.runs) || a.y - b.y);
+        .sort((a, b) =>
+            grid.measured
+                ? Number(setInCapitals(b.runs)) - Number(setInCapitals(a.runs)) || a.y - b.y
+                : letterSize(b.runs) - letterSize(a.runs) || a.y - b.y,
+        );
     const nameRuns = chains[0]?.runs;
     const anchorRun = nameRuns?.find((r) => /\p{L}/u.test(r.text) && r.size === letterSize(nameRuns));
     if (nameRuns === undefined || anchorRun === undefined) {
         return null;
     }
-    const { name, number } = splitBannerText(joinLine(nameRuns));
+    const line = joinLine(nameRuns);
+    const { name, number } = splitBannerText(grid.measured ? trimToCapitals(line) : line);
     if (!/\p{L}/u.test(name)) {
         return null;
     }
@@ -404,7 +522,7 @@ function readBanner(ir: IR, grid: CharGrid): Banner | null {
     const x1 = Math.max(...nameRuns.map((r) => r.x + r.width));
     return {
         name,
-        number: number ?? badgeNumber(ir, grid.pageIndex, anchorRun, x1),
+        number: number ?? badgeNumber(ir, grid, anchorRun, x1),
         x0,
         x1,
         y: anchorRun.y,
@@ -432,14 +550,14 @@ const BADGE_REACH = 120;
 /**
  * A headline value set as a badge beside the banner rather than on its
  * baseline: the nearest bold numeric run to the right whose line overlaps the
- * banner's letters vertically.
+ * banner's letters vertically (any weight, on a page read from its image).
  */
-function badgeNumber(ir: IR, pageIndex: number, bannerRun: IRTextRun, bannerRight: number): number | null {
+function badgeNumber(ir: IR, grid: CharGrid, bannerRun: IRTextRun, bannerRight: number): number | null {
     const badge = ir.runs
         .filter(
             (r) =>
-                r.pageIndex === pageIndex &&
-                r.weight === "bold" &&
+                r.pageIndex === grid.pageIndex &&
+                (grid.measured || r.weight === "bold") &&
                 /^\d+$/u.test(r.text.trim()) &&
                 r.x >= bannerRight &&
                 r.x - bannerRight <= BADGE_REACH &&
@@ -682,13 +800,14 @@ export function detectNumericGrids(ir: IR): DetectedNumericGrid[] {
     const { gridFont, gridSize } = discoverFontRoles(ir);
     const results: DetectedNumericGrid[] = [];
     const maxPage = Math.max(...ir.pages.map((p) => p.pageIndex), 0);
+    const measured = new Set(ir.pages.filter((p) => !p.hasTextLayer).map((p) => p.pageIndex));
     const bands = marginBandsOf(ir);
 
     const foundByPage = new Map<number, { grid: CharGrid; banner: Banner }[]>();
     for (let p = 0; p <= maxPage; p++) {
         foundByPage.set(
             p,
-            findGridsOnPage(ir, p, gridFont, gridSize).flatMap((grid) => {
+            findGridsOnPage(ir, p, gridFont, gridSize, measured.has(p)).flatMap((grid) => {
                 const banner = readBanner(ir, grid);
                 return banner === null ? [] : [{ grid, banner }];
             }),

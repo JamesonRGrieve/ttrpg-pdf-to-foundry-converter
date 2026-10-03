@@ -2,15 +2,22 @@
 // Gates G1 + G1b: cold-cache and warm-cache determinism at the CLI level. Run
 // the engine three times over every fixture case — cold (cache wiped), warm
 // (cache retained), cold again — and require byte-identical output trees.
-import { execFileSync } from "node:child_process";
+// Cases run side by side (a case's warm run after its first cold run, which
+// builds the cache it reuses), the machine's cores shared between them.
+import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { read } from "./lib/files.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = JSON.parse(read(repoRoot, "fixtures/manifest.json")).cases;
+/** CLI runs in flight at once: two per case (a cold run beside the cold-then-warm pair). */
+const CONCURRENT_RUNS = 2 * cases.length;
+const OCR_WORKERS = Math.max(1, Math.floor(availableParallelism() / CONCURRENT_RUNS));
+const run = promisify(execFile);
 
 /**
  * The case's PDFs, each preceded by its target when the case gives targets
@@ -26,8 +33,8 @@ function targetedPdfs(entry) {
     return entry.pdfs.flatMap((pdf, i) => ["--target", entry.targets[i], pdf]);
 }
 
-function runCli(outDir, cacheDir, entry) {
-    execFileSync(
+async function runCli(outDir, cacheDir, entry) {
+    const { stderr } = await run(
         "npx",
         [
             "tsx",
@@ -38,11 +45,16 @@ function runCli(outDir, cacheDir, entry) {
             outDir,
             "--cache-dir",
             cacheDir,
+            "--ocr-workers",
+            String(OCR_WORKERS),
             "--log-level",
             "error",
         ],
-        { cwd: repoRoot, stdio: ["ignore", "ignore", "inherit"] },
+        { cwd: repoRoot },
     );
+    if (stderr.length > 0) {
+        process.stderr.write(stderr);
+    }
 }
 
 function tree(dir) {
@@ -74,30 +86,34 @@ function equalTrees(a, b) {
     return true;
 }
 
-const tmp = mkdtempSync(join(tmpdir(), "fpp-det-"));
-let failed = false;
-for (const entry of cases) {
+/** One case's three runs; whether their output trees are identical (and how many files). */
+async function checkCase(tmp, entry) {
     const cold1 = join(tmp, `${entry.name}-cold1`);
     const warm = join(tmp, `${entry.name}-warm`);
     const cold2 = join(tmp, `${entry.name}-cold2`);
     const cache = join(tmp, `${entry.name}-cache`);
-
-    rmSync(cache, { recursive: true, force: true });
-    runCli(cold1, cache, entry); // cold: builds cache
-    runCli(warm, cache, entry); // warm: reuses cache
-    rmSync(cache, { recursive: true, force: true });
-    runCli(cold2, join(tmp, `${entry.name}-cache2`), entry); // cold again, fresh cache
-
+    await Promise.all([
+        // cold: builds the cache, then warm: reuses it
+        runCli(cold1, cache, entry).then(() => runCli(warm, cache, entry)),
+        // cold again, on a cache of its own
+        runCli(cold2, join(tmp, `${entry.name}-cache2`), entry),
+    ]);
     const t1 = tree(cold1);
-    const t2 = tree(warm);
-    const t3 = tree(cold2);
-    if (!equalTrees(t1, t2) || !equalTrees(t1, t3)) {
+    return { same: equalTrees(t1, tree(warm)) && equalTrees(t1, tree(cold2)), files: t1.size };
+}
+
+const tmp = mkdtempSync(join(tmpdir(), "fpp-det-"));
+let failed = false;
+const results = await Promise.all(cases.map((entry) => checkCase(tmp, entry)));
+cases.forEach((entry, i) => {
+    const { same, files } = results[i];
+    if (same) {
+        process.stdout.write(`  ✓ ${entry.name}: cold == warm == cold (${files} files)\n`);
+    } else {
         process.stderr.write(`  ✗ ${entry.name}: cold/warm/cold output differ\n`);
         failed = true;
-    } else {
-        process.stdout.write(`  ✓ ${entry.name}: cold == warm == cold (${t1.size} files)\n`);
     }
-}
+});
 rmSync(tmp, { recursive: true, force: true });
 
 if (failed) {

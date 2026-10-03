@@ -27,7 +27,17 @@ function run(text: string, x: number, y: number, width: number, opts: Partial<IR
 function irOf(runs: IRTextRun[]): IR {
     return {
         irVersion: 0,
-        pages: [{ pageIndex: 0, width: 600, height: 800, rotation: 0, columns: 1, edgeText: [] }],
+        pages: [
+            {
+                pageIndex: 0,
+                width: 600,
+                height: 800,
+                rotation: 0,
+                columns: 1,
+                edgeText: [],
+                hasTextLayer: true,
+            },
+        ],
         runs,
         sizeBuckets: [],
         fonts: [],

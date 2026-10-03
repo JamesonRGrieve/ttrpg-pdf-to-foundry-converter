@@ -4,7 +4,7 @@ import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
 import { readReprints } from "../util/reprints.ts";
 import { stripSubsetPrefix } from "../util/text.ts";
-import { OCR_FONT_NAME, scanPageRuns, scanScale, setSideways } from "./scan-lines.ts";
+import { notPlainlyUpright, OCR_FONT_NAME, scanPageRuns, scanScale } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 
 /**
@@ -802,7 +802,7 @@ function arbitratePage(
 
     let inserted = 0;
     for (const word of lineless) {
-        if (word.confidence < INSERT_CONFIDENCE || !HAS_ALNUM.test(word.text) || setSideways(word)) {
+        if (word.confidence < INSERT_CONFIDENCE || !HAS_ALNUM.test(word.text) || notPlainlyUpright(word)) {
             continue;
         }
         const [x0, y0, x1, y1] = word.box;
@@ -876,14 +876,14 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
     }
     const pages = [...raw.pages].sort((a, b) => numAsc(a.pageIndex, b.pageIndex));
     // A page with no text layer at all is a scan: OCR is its only reading.
-    const scanned = new Map<number, OcrWord[]>();
+    const scanned = new Map<number, OcrPage>();
     for (const page of pages) {
-        const words = ocrByPage.get(page.pageIndex)?.words ?? [];
-        if (!runsByPage.has(page.pageIndex) && words.length > 0) {
-            scanned.set(page.pageIndex, words);
+        const ocrPage = ocrByPage.get(page.pageIndex);
+        if (!page.hasTextLayer && ocrPage !== undefined && ocrPage.words.length + ocrPage.cells.length > 0) {
+            scanned.set(page.pageIndex, ocrPage);
         }
     }
-    const scale = scanScale([...scanned.values()]);
+    const scale = scanScale([...scanned.values()].map((p) => p.words));
     const misEncoded = misEncodedFaces(runsByPage, ocrByPage);
     const textRuns: RawTextRun[] = [];
     for (const page of pages) {
@@ -891,7 +891,9 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
         const ocrPage = ocrByPage.get(page.pageIndex);
         const scan = scanned.get(page.pageIndex);
         if (scan !== undefined) {
-            textRuns.push(...scanPageRuns(scan, page.pageIndex, scale, INSERTED_RENDER_ORDER_BASE));
+            textRuns.push(
+                ...scanPageRuns(scan.words, scan.cells, page.pageIndex, scale, INSERTED_RENDER_ORDER_BASE),
+            );
         } else {
             textRuns.push(
                 ...(ocrPage === undefined

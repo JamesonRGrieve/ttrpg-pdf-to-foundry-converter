@@ -25,6 +25,12 @@ export interface RawPage {
      * read as text runs; it only names the part of the book a page is in.
      */
     edgeText: string[];
+    /**
+     * Whether the page carries text in its text layer. A page without (a scan)
+     * is read from its image alone: its runs' weights and sizes are measured
+     * from the print, not declared by fonts.
+     */
+    hasTextLayer: boolean;
 }
 
 export interface RawTextRun {
@@ -111,6 +117,8 @@ export interface IRPage {
     columns: number;
     /** The page's edge labels (see `RawPage.edgeText`), text canonicalized. */
     edgeText: string[];
+    /** See `RawPage.hasTextLayer`. */
+    hasTextLayer: boolean;
 }
 
 /**

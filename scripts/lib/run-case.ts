@@ -6,6 +6,7 @@ import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../../src/infer/ta
 import { createLogger } from "../../src/logger.ts";
 import { FileIrCache } from "../../src/node/ir-cache.ts";
 import { FileOcrPageStore } from "../../src/node/ocr-store.ts";
+import { createNodePpOcr } from "../../src/node/ppocr-node.ts";
 import { NodeTesseractEngine } from "../../src/node/tesseract-node.ts";
 import { RENDER_DPI } from "../../src/ocr/render.ts";
 import { runModule } from "../../src/run.ts";
@@ -35,8 +36,8 @@ export function caseTarget(entry: FixtureCase, index: number): TargetSchema {
     return target;
 }
 
-/** OCR threads for fixture runs: fixtures are a few pages. */
-const FIXTURE_OCR_WORKERS = 2;
+/** OCR threads for fixture runs: a thread per page of the longest fixture (cases run side by side). */
+const FIXTURE_OCR_WORKERS = 4;
 
 export function loadManifest(repoRoot: string): FixtureCase[] {
     const manifest = JSON.parse(readFileSync(resolve(repoRoot, "fixtures/manifest.json"), "utf8")) as {
@@ -54,6 +55,7 @@ export async function runCase(
     // Transient intermediates go to the OS temp dir, never the working tree.
     const cacheDir = join(tmpdir(), "foundry-pdf-parser-tests", cacheNamespace, entry.name);
     const engine = await NodeTesseractEngine.create(FIXTURE_OCR_WORKERS, RENDER_DPI);
+    const ppocr = await createNodePpOcr();
     try {
         const result = await runModule(
             entry.pdfs.map((pdf, i) => ({
@@ -62,6 +64,7 @@ export async function runCase(
             })),
             {
                 ocr: engine,
+                scanReader: ppocr.reader,
                 ocrStore: new FileOcrPageStore(cacheDir),
                 irCache: new FileIrCache(cacheDir),
                 maxInFlight: FIXTURE_OCR_WORKERS * 2,
@@ -80,5 +83,6 @@ export async function runCase(
         );
     } finally {
         await engine.close();
+        await ppocr.close();
     }
 }

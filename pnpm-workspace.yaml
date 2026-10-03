@@ -4,5 +4,7 @@
 allowBuilds:
     "@biomejs/biome": true
     esbuild: true
+    # (via onnxruntime-web) Its only install script warns about dependents' version ranges.
+    protobufjs: false
     # Its only install script is an opencollective donation banner.
     tesseract.js: false

@@ -74,7 +74,12 @@ title.
    via pinned `pdfjs-dist` and `pdf-lib`.
 2. **OCR**: every page is rendered with pinned `mupdf` at 300 DPI and read by
    Tesseract's LSTM engine (pinned `tesseract.js`, plain-SIMD WASM core, pinned
-   model data). All of it is served locally, never from a CDN.
+   model data). A page with no text layer (a scan) is read first by PP-OCR
+   (pinned PP-OCRv4 detection and recognition networks in onnxruntime-web's
+   plain WebAssembly build), then by further Tesseract passes (sparse,
+   binarized, inverted) that fill what it missed, and the cells of statblock
+   grids read only in part are read again one by one. All of it is served
+   locally, never from a CDN.
 3. **Arbitrate**: the text layer is kept where it is intact. OCR corrects it
    where it demonstrably fails: custom font encodings, letter-spaced display
    text, split drop caps, ligature fragments, small-caps faces (detected per

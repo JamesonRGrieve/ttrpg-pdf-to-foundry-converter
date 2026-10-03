@@ -21,23 +21,34 @@ export const MODEL_PACKAGE = "@tesseract.js-data/eng";
 export const LANGUAGE = "eng";
 /** Tesseract page segmentation: fully automatic. */
 export const PAGE_SEG_MODE = "3";
+/** Tesseract page segmentation for the second pass over scans: sparse text, no layout analysis. */
+export const SPARSE_SEG_MODE = "11";
+/** Tesseract page segmentation for one table cell read on its own: a single line. */
+export const CELL_SEG_MODE = "7";
+/** The characters a numeric cell may hold: digits and the dashes printed for no value. */
+export const CELL_CHARS = "0123456789-–—";
 /** Version of what each recognized word records (its line and ink measures). */
 export const WORD_RECORD = "words2";
 
-export function recognitionParams(dpi: number): Record<string, string> {
+export function recognitionParams(
+    dpi: number,
+    segMode: string = PAGE_SEG_MODE,
+    whitelist = "",
+): Record<string, string> {
     return {
-        tessedit_pageseg_mode: PAGE_SEG_MODE,
+        ...(whitelist === "" ? {} : { tessedit_char_whitelist: whitelist }),
+        tessedit_pageseg_mode: segMode,
         preserve_interword_spaces: "0",
         user_defined_dpi: String(dpi),
     };
 }
 
-export function tesseractEngineId(dpi: number): string {
+export function tesseractEngineId(dpi: number, segMode: string = PAGE_SEG_MODE, whitelist = ""): string {
     return [
         `tesseract.js@${PINS["tesseract.js"]}`,
         `core@${PINS["tesseract.js-core"]}/simd-lstm`,
         `${MODEL_PACKAGE}@${PINS[MODEL_PACKAGE]}/${MODEL_VARIANT}`,
-        `psm${PAGE_SEG_MODE}`,
+        `psm${segMode}${whitelist === "" ? "" : `[${whitelist}]`}`,
         `dpi${dpi}`,
         WORD_RECORD,
     ].join("+");
