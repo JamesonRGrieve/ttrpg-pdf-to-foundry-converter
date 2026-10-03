@@ -2,7 +2,7 @@
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Entry } from "./detect-entries.ts";
 import { caseLost, cleanName } from "./names.ts";
-import { parseAvailability, parseWeight } from "./notation.ts";
+import { parseAvailability, parseAvailabilityByPlace, parseWeight } from "./notation.ts";
 import { toHtml, type ItemType } from "./schema.ts";
 
 /**
@@ -406,9 +406,14 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 system["weight"] = parsedWeight;
             }
             const availability = text("availability");
-            const parsedAvailability = availability === undefined ? null : parseAvailability(availability);
+            const placed = availability === undefined ? null : parseAvailabilityByPlace(availability);
+            const parsedAvailability =
+                placed?.general ?? (availability === undefined ? null : parseAvailability(availability));
             if (parsedAvailability !== null) {
                 system["availability"] = parsedAvailability;
+            }
+            if (placed !== null) {
+                system["availabilityByPlace"] = placed.byPlace;
             }
             const effect = text("effect");
             variantized["effect"] = effect === undefined ? html : toHtml(effect);

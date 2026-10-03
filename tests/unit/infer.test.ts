@@ -63,8 +63,11 @@ import {
     nameKey,
     siblingKinds,
     singularKey,
+    type TableRecord,
+    withSubProfiles,
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
+import { mapRow, type RowCells } from "../../src/infer/rows.ts";
 import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
 import { TARGETS } from "../../src/infer/targets.ts";
 import type { DetectedTable } from "../../src/infer/types.ts";
@@ -135,6 +138,71 @@ describe("splitNumberFromText", () => {
         expect(splitNumberFromText("Head, Body", ["locations", "armourPoints"])).toBeNull();
         expect(splitNumberFromText("4 6", ["clip", "penetration"])).toBeNull();
         expect(splitNumberFromText("Head 4", ["locations"])).toBeNull();
+    });
+});
+
+describe("withSubProfiles", () => {
+    const record = (name: string, cells: RowCells): TableRecord => ({
+        name,
+        itemType: "weapon",
+        cells,
+        mapped: mapRow("weapon", cells),
+    });
+
+    it("folds a weapon's labelled sub-rows into its modes, the first giving its own profile", () => {
+        const out = withSubProfiles([
+            record("Lamp Rifle", {
+                name: "Lamp Rifle",
+                class: "Basic",
+                range: "110m",
+                damage: "†",
+                penetration: "†",
+            }),
+            record("Lamp Rifle (Ember Round)", {
+                name: "Lamp Rifle (Ember Round)",
+                rof: "S/2/–",
+                damage: "1d10+5 E",
+                penetration: "1",
+                clip: "6",
+                reload: "2 Full",
+            }),
+            record("Lamp Rifle (Wick Round)", {
+                name: "Lamp Rifle (Wick Round)",
+                damage: "1d10+7 R",
+                penetration: "5",
+            }),
+            record("Wick Gun", { name: "Wick Gun", class: "Basic", damage: "1d10 I" }),
+        ]);
+        expect(out.map((r) => r.name)).toEqual(["Lamp Rifle", "Wick Gun"]);
+        const system = out[0]?.mapped.system ?? {};
+        expect(system["damage"]).toMatchObject({ formula: "1d10", bonus: 5, type: "energy", penetration: 1 });
+        expect(system["reload"]).toBe("2-full");
+        expect(system).toMatchObject({
+            modes: [
+                {
+                    label: "Ember Round",
+                    damage: "1d10",
+                    damageBonus: 5,
+                    penetration: 1,
+                    clipMax: 6,
+                    reload: "2-full",
+                },
+                { label: "Wick Round", damage: "1d10", damageBonus: 7, penetration: 5 },
+            ],
+        });
+    });
+
+    it("leaves a qualified row alone when its weapon prints its own profile", () => {
+        const out = withSubProfiles([
+            record("Lamp Hammer (light)", { name: "Lamp Hammer (light)", class: "Melee", damage: "1d10 I" }),
+            record("Lamp Hammer", { name: "Lamp Hammer", class: "Melee", damage: "2d10 I" }),
+            record("Lamp Hammer (heavy)", {
+                name: "Lamp Hammer (heavy)",
+                class: "Melee",
+                damage: "2d10+2 I",
+            }),
+        ]);
+        expect(out.map((r) => r.name)).toEqual(["Lamp Hammer (light)", "Lamp Hammer", "Lamp Hammer (heavy)"]);
     });
 });
 

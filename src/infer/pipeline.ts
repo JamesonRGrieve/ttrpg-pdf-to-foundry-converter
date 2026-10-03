@@ -3,7 +3,7 @@ import type { Logger } from "../logger.ts";
 import type { Entity, EntityGraph, FoundryDocumentType, JsonObject, JsonValue } from "../types/entity.ts";
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { byteCompare } from "../util/ordered.ts";
-import { escapeHtml } from "../util/text.ts";
+import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
 import { inferBookSlug } from "./book.ts";
 import { classifyTable } from "./classify.ts";
 import {
@@ -43,7 +43,7 @@ import {
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
 import { buildRollTable, rollResults } from "./roll-tables.ts";
-import { mapRow, type RowCells, rowType } from "./rows.ts";
+import { mapRow, NO_DAMAGE, type RowCells, type RowMapping, rowType } from "./rows.ts";
 import {
     ACTOR_SEGMENT,
     buildActor,
@@ -443,6 +443,7 @@ function extractTables(
         // A section row groups the records under it; in a ship weapon table it
         // names their weapon type ("Lances").
         let section: string | null = null;
+        const records: TableRecord[] = [];
         for (const row of table.rows) {
             if (row.isSectionHeader) {
                 section = row.sectionName;
@@ -480,6 +481,9 @@ function extractTables(
             for (const u of mapped.unparsed) {
                 out.warnings.push(`p${out.page(table.pageIndex)} ${name}: unparsed ${u}`);
             }
+            records.push({ name, itemType, cells, mapped });
+        }
+        for (const { name, itemType, mapped } of withSubProfiles(records)) {
             out.add(
                 "Item",
                 itemSegment(itemType),
@@ -500,6 +504,94 @@ function extractTables(
     }
     log.info(`tables: ${tables.length} detected, ${unclassified} unclassified`);
     return { tables: tables.length, unclassified, tableRuns: new Set(titled.flatMap((t) => t.runs)) };
+}
+
+/** One table row read as an item. */
+export interface TableRecord {
+    name: string;
+    itemType: ItemType;
+    cells: RowCells;
+    mapped: RowMapping;
+}
+
+/** A sub-row's name: its weapon's name, then the profile's label in brackets. */
+const SUB_ROW_NAME = /^(?<base>.+?)\s*\((?<label>[^()]+)\)$/u;
+
+/** Whether a cell prints only a note marker ("†"): its value lies elsewhere. */
+function defers(text: string | undefined): boolean {
+    return text !== undefined && text.trim().length > 0 && text.replace(NOTE_MARKERS, "").trim() === "";
+}
+
+/** A weapon mode (the system's `modes[]` entry) from a sub-row's reading; blank fields inherit the weapon's. */
+function modeOf(label: string, system: JsonObject): JsonObject {
+    const damage = isJsonObject(system["damage"]) ? system["damage"] : {};
+    const clip = isJsonObject(system["clip"]) ? system["clip"] : {};
+    const attack = isJsonObject(system["attack"]) ? system["attack"] : {};
+    const special = Array.isArray(system["special"]) ? system["special"] : [];
+    return {
+        label,
+        damage:
+            typeof damage["formula"] === "string" && damage["formula"] !== NO_DAMAGE ? damage["formula"] : "",
+        damageType: typeof damage["type"] === "string" ? damage["type"] : "",
+        damageBonus: typeof damage["bonus"] === "number" ? damage["bonus"] : null,
+        penetration: typeof damage["penetration"] === "number" ? damage["penetration"] : null,
+        range: null,
+        addedQualities: special,
+        removedQualities: [],
+        weaponClass: "",
+        attackType: "",
+        characteristic: "",
+        rateOfFire: isJsonObject(attack["rateOfFire"]) ? attack["rateOfFire"] : null,
+        singleUse: false,
+        clipMax: typeof clip["max"] === "number" ? clip["max"] : 0,
+        reload: typeof system["reload"] === "string" && system["reload"] !== "-" ? system["reload"] : "",
+    };
+}
+
+/**
+ * A table's rows with each weapon's printed sub-profiles folded into it. A
+ * weapon whose row defers its profile to the rows under it (its damage
+ * cell prints only a note marker) takes those rows, named for it with a
+ * label in brackets ("Lamp Rifle (Ember Round)"), as its modes; the first of
+ * them is its own profile. Other rows pass through unchanged.
+ */
+export function withSubProfiles(records: readonly TableRecord[]): TableRecord[] {
+    const out: TableRecord[] = [];
+    for (const record of records) {
+        const sub = SUB_ROW_NAME.exec(record.name)?.groups;
+        const base = sub === undefined ? undefined : out.find((r) => r.name === sub["base"]);
+        if (
+            sub === undefined ||
+            base === undefined ||
+            base.itemType !== "weapon" ||
+            record.itemType !== "weapon" ||
+            !defers(base.cells.damage)
+        ) {
+            out.push(record);
+            continue;
+        }
+        const system = base.mapped.system;
+        const modes = Array.isArray(system["modes"]) ? system["modes"] : [];
+        const mode = modeOf(sub["label"] ?? "", record.mapped.system);
+        if (modes.length === 0) {
+            // The first printed profile is the weapon's own.
+            for (const field of ["damage", "clip", "reload"] as const) {
+                const value = record.mapped.system[field];
+                if (value !== undefined) {
+                    system[field] = value;
+                }
+            }
+            const attack = system["attack"];
+            const rof = isJsonObject(record.mapped.system["attack"])
+                ? record.mapped.system["attack"]["rateOfFire"]
+                : undefined;
+            if (isJsonObject(attack) && rof !== undefined) {
+                attack["rateOfFire"] = rof;
+            }
+        }
+        system["modes"] = [...modes, mode];
+    }
+    return out;
 }
 
 /** Heading-size difference (points) that sets a sub-heading apart from its siblings. */

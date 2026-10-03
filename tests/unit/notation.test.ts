@@ -4,6 +4,7 @@ import {
     isEmptyCell,
     parseArmourPoints,
     parseAvailability,
+    parseAvailabilityByPlace,
     parseCoverage,
     parseDamage,
     parseHullTypes,
@@ -194,6 +195,19 @@ describe("parseAvailability", () => {
         expect(parseAvailability("Uncommon")).toBe("uncommon");
         expect(parseAvailability("Unc")).toBe("uncommon");
         expect(parseAvailability("Un")).toBe("unique");
+    });
+
+    it("reads an availability printed per place, the one for elsewhere being general", () => {
+        expect(parseAvailabilityByPlace("Scarce (Lantern Reach) or Very Rare (elsewhere)")).toEqual({
+            general: "very-rare",
+            byPlace: [{ place: "Lantern Reach", availability: "scarce" }],
+        });
+        expect(parseAvailabilityByPlace("Common (Wick), Very Rare (elsewhere)")).toEqual({
+            general: "very-rare",
+            byPlace: [{ place: "Wick", availability: "common" }],
+        });
+        expect(parseAvailabilityByPlace("Very Rare")).toBeNull();
+        expect(parseAvailabilityByPlace("Scarce (Wick) or Rare (Lantern)")).toBeNull();
     });
 
     it("reads renown ranks", () => {

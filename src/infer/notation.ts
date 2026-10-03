@@ -343,6 +343,47 @@ export function parseAvailability(raw: string): string | null {
     return null;
 }
 
+export interface PlacedAvailability {
+    /** The general availability: the one printed for everywhere else. */
+    general: string;
+    byPlace: { place: string; availability: string }[];
+}
+
+/** A place word meaning everywhere not named. */
+const EVERYWHERE_ELSE = /^(?:elsewhere|everywhere else|other(?:s|wise)?)$/iu;
+
+/**
+ * An availability cell printed per place — "Scarce (Volg) or Very Rare
+ * (elsewhere)", "Common (Volg), Very Rare (elsewhere)" — → the general
+ * availability (the one for everywhere else) and each named place's. Null
+ * when the cell is not that notation.
+ */
+export function parseAvailabilityByPlace(raw: string): PlacedAvailability | null {
+    const parts = clean(raw)
+        .split(/,(?![^(]*\))|\bor\b(?![^(]*\))/iu)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+    if (parts.length < 2) {
+        return null;
+    }
+    let general: string | null = null;
+    const byPlace: { place: string; availability: string }[] = [];
+    for (const part of parts) {
+        const m = /^(?<level>[^()]+?)\s*\((?<place>[^()]+)\)$/u.exec(part)?.groups;
+        const availability = parseAvailability(m?.["level"] ?? "");
+        const place = (m?.["place"] ?? "").trim();
+        if (availability === null || place === "") {
+            return null;
+        }
+        if (EVERYWHERE_ELSE.test(place)) {
+            general = availability;
+        } else {
+            byPlace.push({ place, availability });
+        }
+    }
+    return general === null || byPlace.length === 0 ? null : { general, byPlace };
+}
+
 /** Hit locations in the system's armour schema. */
 export const BODY_LOCATIONS = ["head", "body", "leftArm", "rightArm", "leftLeg", "rightLeg"] as const;
 export type BodyLocation = (typeof BODY_LOCATIONS)[number];

@@ -5,6 +5,7 @@ import {
     isEmptyCell,
     parseArmourPoints,
     parseAvailability,
+    parseAvailabilityByPlace,
     parseCoverage,
     parseDamage,
     parseHullTypes,
@@ -41,7 +42,7 @@ export interface RowMapping {
 const RANGED_CHARACTERISTIC = "ballisticSkill";
 const MELEE_CHARACTERISTIC = "weaponSkill";
 /** The damage formula for a weapon whose damage cell prints a dash. */
-const NO_DAMAGE = "-";
+export const NO_DAMAGE = "-";
 /** The schema's initial damage type, for a profile that prints none. */
 const INITIAL_DAMAGE_TYPE = "impact";
 
@@ -73,9 +74,14 @@ function commonPhysical(out: RowMapping, cells: RowCells): void {
     if (weight !== null) {
         out.system["weight"] = weight;
     }
-    const availability = read(out, cells, "availability", parseAvailability);
+    const placed = cells.availability === undefined ? null : parseAvailabilityByPlace(cells.availability);
+    const availability =
+        placed === null ? read(out, cells, "availability", parseAvailability) : placed.general;
     if (availability !== null) {
         out.system["availability"] = availability;
+    }
+    if (placed !== null) {
+        out.system["availabilityByPlace"] = placed.byPlace;
     }
     const renown = read(out, cells, "renown", parseRenown);
     if (renown !== null) {
