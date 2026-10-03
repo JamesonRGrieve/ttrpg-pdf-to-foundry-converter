@@ -50,6 +50,7 @@ import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts
 import {
     citeFirstPage,
     fitModifications,
+    givenNames,
     infer,
     introducingEntry,
     keyedByBands,
@@ -117,6 +118,16 @@ function irRun(text: string, pageIndex: number, y: number): IRTextRun {
     };
 }
 
+describe("givenNames", () => {
+    it("keys each name, and each without a closing qualifier", () => {
+        const names = givenNames(["Lamp Hammer (light)", "Lamp Hammer (heavy)", "Wick Gun"]);
+        expect(names.has(nameKey("Lamp Hammer"))).toBe(true);
+        expect(names.has(nameKey("Lamp Hammer (light)"))).toBe(true);
+        expect(names.has(nameKey("Wick Gun"))).toBe(true);
+        expect(names.has(nameKey("Lamp"))).toBe(false);
+    });
+});
+
 describe("columns", () => {
     it("maps schema field headers, including letter-spaced display text", () => {
         expect(headerRole("DAM")).toBe("damage");
@@ -128,6 +139,10 @@ describe("columns", () => {
         expect(headerRole("Talent Name")).toBe("name");
         expect(headerRole("Names")).toBe("name");
         expect(headerRole("Type")).toBe("type");
+        expect(headerRole("Special + Bound Attributes")).toBe("special");
+        expect(headerRole("Special Rules")).toBe("special");
+        expect(headerRole("Covered")).toBe("locations");
+        expect(headerRole("Availabiity")).toBe("availability");
         expect(headerRole("Mystery")).toBeNull();
         expect(normalizeHeader("  Max  Ag ")).toBe("max ag");
     });

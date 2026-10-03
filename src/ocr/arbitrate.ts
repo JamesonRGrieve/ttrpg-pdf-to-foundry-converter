@@ -419,6 +419,33 @@ export function lostLigature(layer: string, ocr: string): boolean {
     return false;
 }
 
+const CORRUPT_GLYPHS = new RegExp(CORRUPTION.source, "gu");
+
+/**
+ * OCR's read of a number with the point it missed put back. When OCR's text
+ * is the text layer's with only its unreadable glyphs left out, OCR passed
+ * over glyphs the layer shows are printed there; one set just before a digit
+ * is a number's point: a thousands comma when three digits follow it within
+ * the number ("1�500"), a decimal point otherwise ("�5kg", "2�5kg"). Null
+ * when OCR's text is not that one word, or a missed glyph is not before a digit.
+ */
+export function withMissedPoints(layer: string, ocrText: string): string | null {
+    if (/\s/u.test(ocrText) || layer.replace(CORRUPT_GLYPHS, "") !== ocrText) {
+        return null;
+    }
+    let ok = true;
+    const restored = layer.replace(CORRUPT_GLYPHS, (glyph: string, at: number, whole: string) => {
+        const after = whole.slice(at + glyph.length);
+        if (!/^\d/u.test(after)) {
+            ok = false;
+            return "";
+        }
+        const thousands = /^\d/u.test(whole.slice(at - 1, at)) && /^\d{3}(?!\d)/u.test(after);
+        return thousands ? "," : ".";
+    });
+    return ok ? restored : null;
+}
+
 /**
  * The corrected text for an aligned group, or null to keep the text layer.
  * `spansRuns` forces a rewrite (to the text layer's own letters) when a word is
@@ -445,7 +472,7 @@ export function resolveGroup(
     }
     const confidence = Math.min(...ocr.map((w) => w.confidence));
     if (textLayer.some((t) => CORRUPTION.test(t)) && confidence >= REPLACE_CONFIDENCE) {
-        return ocrText;
+        return withMissedPoints(joined, ocrText) ?? ocrText;
     }
     if (confidence >= REPLACE_CONFIDENCE && lostLigature(joined, ocrText)) {
         return ocrText;

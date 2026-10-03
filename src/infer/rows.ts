@@ -3,6 +3,7 @@ import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Role } from "./columns.ts";
 import {
     isEmptyCell,
+    parseArmourPoints,
     parseAvailability,
     parseCoverage,
     parseDamage,
@@ -120,13 +121,13 @@ function weapon(cells: RowCells): RowMapping {
 
 function armour(cells: RowCells): RowMapping {
     const out = mapping();
-    const ap = read(out, cells, "armourPoints", parseInteger);
+    const ap = read(out, cells, "armourPoints", parseArmourPoints);
     const covered =
         read(out, cells, "locations", parseCoverage) ?? (ap === null ? null : [...BODY_LOCATIONS]);
     if (ap !== null && covered !== null) {
         const points: JsonObject = {};
         for (const loc of BODY_LOCATIONS) {
-            points[loc] = covered.includes(loc) ? ap : 0;
+            points[loc] = covered.includes(loc) ? (ap.exceptions[loc] ?? ap.base) : 0;
         }
         out.variantized["armourPoints"] = points;
         out.variantized["coverage"] = covered;
@@ -312,7 +313,7 @@ const WEAPON_PROFILE: readonly [Role, (s: string) => unknown][] = [
 
 /** A protective item's profile columns, each with the notation its values are printed in. */
 const ARMOUR_PROFILE: readonly [Role, (s: string) => unknown][] = [
-    ["armourPoints", parseInteger],
+    ["armourPoints", parseArmourPoints],
     ["locations", parseCoverage],
     ["maxAgility", parseInteger],
     ["protection", parseInteger],

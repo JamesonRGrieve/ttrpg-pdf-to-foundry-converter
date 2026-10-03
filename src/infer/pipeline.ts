@@ -493,15 +493,60 @@ function entryText(entry: Entry): string {
     return [...entry.fields.map(([label, value]) => `${label}: ${value}`), entry.body].join("\n");
 }
 
+/** A heading or label naming a craft's weapons. */
+const WEAPONS_LABEL = /^weapons?$/iu;
+/** Pages after a vehicle's heading its parts may be printed on. */
+const PART_PAGE_REACH = 1;
+
+/**
+ * The entries printed as parts of the entry at `index`: those after it, all in
+ * one heading style other than its own, within a page — up to the next heading
+ * in its style, the next profile, an entry typed as an item by its own fields,
+ * or a heading in another style.
+ */
+function vehicleParts(entries: readonly Entry[], index: number, claimed: ReadonlySet<Entry>): Entry[] {
+    const head = entries[index];
+    if (head === undefined) {
+        return [];
+    }
+    const parts: Entry[] = [];
+    for (const entry of entries.slice(index + 1)) {
+        const style = parts[0]?.heading.style;
+        if (
+            claimed.has(entry) ||
+            entry.heading.style === head.heading.style ||
+            (style !== undefined && entry.heading.style !== style) ||
+            entry.heading.pageIndex - head.heading.pageIndex > PART_PAGE_REACH ||
+            entryType(entry) !== null ||
+            isVehicleProfile(panelPairs(entryText(entry)))
+        ) {
+            break;
+        }
+        parts.push(entry);
+    }
+    return parts;
+}
+
 /**
  * An entry carrying a vehicle profile is a land craft: its profile panel gives
  * the stat block, its prose the description, its other labelled rules the
- * special rules. Returns false when the entry is no vehicle.
+ * special rules. `parts` are entries printed under it with headings of their
+ * own (its weapons, its special rules): their labelled lines add the profile
+ * fields its panel lacks, and their text joins its weapons and rules. Returns
+ * false when the entry is no vehicle.
  */
-function addVehicle(out: EntityCollector, entry: Entry): boolean {
+function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[]): boolean {
     const pairs = panelPairs(entryText(entry));
     if (!isVehicleProfile(pairs)) {
         return false;
+    }
+    const headsWeapons = (part: Entry): boolean => WEAPONS_LABEL.test(part.heading.text.trim());
+    for (const part of parts.filter((p) => !headsWeapons(p))) {
+        for (const [label, value] of panelPairs(entryText(part))) {
+            if (!pairs.has(label)) {
+                pairs.set(label, value);
+            }
+        }
     }
     const name = cleanName(entry.heading.text);
     // A profile under a prose fragment (an errata line quoting a rule) names no vehicle.
@@ -516,8 +561,23 @@ function addVehicle(out: EntityCollector, entry: Entry): boolean {
         .split(PARAGRAPH_SPLIT)
         .filter((p) => /\p{Ll}/u.test(p) && panelPairs(p).size === 0)
         .join("\n\n");
-    const rules = entry.fields.filter(([label]) => /\p{Ll}/u.test(label));
-    const isWeapons = ([label]: [string, string]): boolean => /^weapons?$/iu.test(label);
+    const isProse = (text: string): boolean => /\p{Ll}/u.test(text);
+    const rules: [string, string][] = [
+        ...entry.fields,
+        ...parts.flatMap((part): [string, string][] =>
+            headsWeapons(part)
+                ? [[part.heading.text.trim(), part.body.trim()]]
+                : [
+                      ...part.fields,
+                      // A rule broken across columns runs on in the part's body.
+                      ...part.body
+                          .split(PARAGRAPH_SPLIT)
+                          .filter(isProse)
+                          .map((p): [string, string] => [part.heading.text.trim(), p.trim()]),
+                  ],
+        ),
+    ].filter(([label]) => isProse(label));
+    const isWeapons = ([label]: [string, string]): boolean => WEAPONS_LABEL.test(label);
     out.add(
         "Actor",
         CRAFT_SEGMENT[kind],
@@ -717,7 +777,19 @@ function extractEntries(
     descriptions: Map<string, string>,
 ): number {
     const ships = addShips(out, entries);
-    const vehicles = new Set(entries.filter((entry) => !ships.has(entry) && addVehicle(out, entry)));
+    const vehicles = new Set<Entry>();
+    entries.forEach((entry, i) => {
+        if (ships.has(entry) || vehicles.has(entry)) {
+            return;
+        }
+        const parts = vehicleParts(entries, i, ships);
+        if (addVehicle(out, entry, parts)) {
+            vehicles.add(entry);
+            for (const part of parts) {
+                vehicles.add(part);
+            }
+        }
+    });
     const kinds = siblingKinds(
         entries.filter((entry) => !vehicles.has(entry) && !ships.has(entry)),
         entryType,
@@ -798,16 +870,25 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
 
 /** The reading that names an item from a profile printed inline (see `inline-weapons.ts`). */
 const INLINE_READING = "inline:";
+/** A parenthesized qualifier closing a name ("Hammer (heavy)"). */
+const QUALIFIER = /\s*\([^()]*\)\s*$/u;
+
+/** Name keys of items already read: each name, and each without a closing qualifier. */
+export function givenNames(names: readonly string[]): Set<string> {
+    return new Set(names.flatMap((name) => [nameKey(name), nameKey(name.replace(QUALIFIER, ""))]));
+}
 
 /**
  * Weapons whose profile is printed only inline — in a statblock's weapon
  * list or running text — and that no table or entry gives: each is read from
  * its bracketed profile, cited at the entry printing it. A weapon some other
- * reading gives keeps that reading and its citation.
+ * reading gives keeps that reading and its citation — and so does one some
+ * other reading gives only as qualified variants ("Hammer (light)",
+ * "Hammer (heavy)"): a statblock's "hammer" is one of those, not another.
  */
 function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): number {
-    const named = new Set(
-        out.entities.filter((e) => e.documentType === "Item").map((e) => nameKey(String(e.fields["name"]))),
+    const named = givenNames(
+        out.entities.filter((e) => e.documentType === "Item").map((e) => String(e.fields["name"])),
     );
     let count = 0;
     for (const entry of entries) {

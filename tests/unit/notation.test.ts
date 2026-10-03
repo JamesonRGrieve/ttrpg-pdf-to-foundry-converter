@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
     isEmptyCell,
+    parseArmourPoints,
     parseAvailability,
     parseCoverage,
     parseDamage,
@@ -30,6 +31,12 @@ describe("parseDamage", () => {
 
     it("rejects non-damage text", () => {
         expect(parseDamage("Basic")).toBeNull();
+        expect(parseDamage("12")).toBeNull();
+    });
+
+    it("reads a bonus printed after the type letter, and a flat damage with a type", () => {
+        expect(parseDamage("1d10 I+1")).toEqual({ formula: "1d10", bonus: 1, type: "impact" });
+        expect(parseDamage("0 I")).toEqual({ formula: "0", bonus: 0, type: "impact" });
     });
 });
 
@@ -39,6 +46,11 @@ describe("parseRange", () => {
         expect(parseRange("2 km")).toEqual({ value: 2, units: "km", special: "" });
         expect(parseRange("SBx3")).toEqual({ value: 0, units: "m", special: "SBx3" });
         expect(parseRange("3xSB")).toEqual({ value: 0, units: "m", special: "SBx3" });
+    });
+
+    it("reads thousands grouped with commas", () => {
+        expect(parseRange("3,500m")).toEqual({ value: 3500, units: "m", special: "" });
+        expect(parseRange("1,20m")).toBeNull();
     });
 
     it("rejects non-range text", () => {
@@ -69,6 +81,7 @@ describe("parseReload", () => {
         expect(parseReload("Half")).toBe("half");
         expect(parseReload("—")).toBe("-");
         expect(parseReload("Sometimes")).toBeNull();
+        expect(parseReload("Rld 5 Full")).toBe("5-full");
     });
 });
 
@@ -77,6 +90,8 @@ describe("parseWeight / parseInteger", () => {
         expect(parseWeight("4.5kg")).toBe(4.5);
         expect(parseWeight("15 kg")).toBe(15);
         expect(parseWeight("-")).toBe(0);
+        expect(parseWeight(".5kg")).toBe(0.5);
+        expect(parseWeight(".02 kg")).toBe(0.02);
         expect(parseWeight("heavy")).toBeNull();
     });
 
@@ -102,11 +117,42 @@ describe("parseDamage reading a misread type letter", () => {
     });
 });
 
+describe("parseArmourPoints", () => {
+    it("reads plain points and locations printed apart in parentheses", () => {
+        expect(parseArmourPoints("4")).toEqual({ base: 4, exceptions: {} });
+        expect(parseArmourPoints("8 (Body 10)")).toEqual({ base: 8, exceptions: { body: 10 } });
+        expect(parseArmourPoints("5 (4 on Head)")).toEqual({ base: 5, exceptions: { head: 4 } });
+        expect(parseArmourPoints("6 (Arms 4, Legs 5)")).toEqual({
+            base: 6,
+            exceptions: { leftArm: 4, rightArm: 4, leftLeg: 5, rightLeg: 5 },
+        });
+    });
+
+    it("leaves a bare conditional value to the text, and rejects other notation", () => {
+        expect(parseArmourPoints("3 (6)")).toEqual({ base: 3, exceptions: {} });
+        expect(parseArmourPoints("4 (vs fire)")).toBeNull();
+        expect(parseArmourPoints("Body")).toBeNull();
+    });
+});
+
 describe("parseQualities", () => {
     it("slugs qualities, folds ratings, sorts, and keeps commas inside parentheses", () => {
         expect(parseQualities("Sturdy, Spread (3), Quiet")).toEqual(["quiet", "spread-3", "sturdy"]);
         expect(parseQualities("Graded (2, 3)")).toEqual(["graded-2,3"]);
         expect(parseQualities("—")).toEqual([]);
+    });
+
+    it("drops a 'Special' entry that points to the weapon's text", () => {
+        expect(parseQualities("Balanced, Special")).toEqual(["balanced"]);
+        expect(parseQualities("Special")).toEqual([]);
+    });
+
+    it("leaves out a further list joined on with a plus, but not a plus inside a rating", () => {
+        expect(parseQualities("Balanced, Felling (4) + Accursed, Rampage")).toEqual([
+            "balanced",
+            "felling-4",
+        ]);
+        expect(parseQualities("Blast (1d5 + 2)")).toEqual(["blast-1d5+2"]);
     });
 
     it("folds a rating printed in square brackets, and mends a word broken at its hyphen", () => {
@@ -144,8 +190,20 @@ describe("parseCoverage", () => {
         expect(parseCoverage("Head")).toEqual(["head"]);
     });
 
+    it("reads a list whose separator was lost word by word", () => {
+        expect(parseCoverage("Body Arms, Legs")).toEqual([
+            "body",
+            "leftArm",
+            "rightArm",
+            "leftLeg",
+            "rightLeg",
+        ]);
+        expect(parseCoverage("Head Left Arm")).toEqual(["head", "leftArm"]);
+    });
+
     it("rejects unknown location words", () => {
         expect(parseCoverage("Tail")).toBeNull();
+        expect(parseCoverage("Body Tail")).toBeNull();
     });
 });
 

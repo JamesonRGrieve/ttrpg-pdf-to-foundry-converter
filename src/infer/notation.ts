@@ -36,7 +36,11 @@ export interface Damage {
     type: string;
 }
 
-/** `2d10+3 I`, `1d10 (E)`, `1d5+SB R` → dice formula, flat bonus, damage type. */
+/**
+ * `2d10+3 I`, `1d10 (E)`, `1d5+SB R` → dice formula, flat bonus, damage type.
+ * A bonus may follow the type letter (`1d10 I+1`), and a flat number with a
+ * type letter (`0 I`) is a damage of that number with no dice.
+ */
 export function parseDamage(raw: string): Damage | null {
     // A misread "1" in the die size ("1dl0") is a recognition artifact, not
     // notation; so is a type letter I read as "1", "l" or "|" when it stands
@@ -45,17 +49,19 @@ export function parseDamage(raw: string): Damage | null {
         .replace(/(\d*)d[lI](\d)/gu, "$1d1$2")
         .replace(/\s+[1l|]\s*$/u, " I");
     const m =
-        /^(?<formula>\d*d\d+)\s*(?:(?<sign>[+-])\s*(?<bonus>\d+))?\s*(?:\+?\s*SB)?\s*\(?(?<type>[EXIR])?\)?$/iu.exec(
+        /^(?<formula>\d*d\d+)\s*(?:(?<sign>[+-])\s*(?<bonus>\d+))?\s*(?:\+?\s*SB)?\s*\(?(?<type>[EXIR])?\)?(?:\s*(?<lateSign>[+-])\s*(?<lateBonus>\d+))?$/iu.exec(
             text,
-        );
+        ) ?? /^(?<formula>\d+)\s*\(?(?<type>[EXIR])\)?$/iu.exec(text);
     const formula = m?.groups?.["formula"];
     if (formula === undefined) {
         return null;
     }
-    const { sign, bonus, type } = m?.groups ?? {};
+    const { sign, bonus, type, lateSign, lateBonus } = m?.groups ?? {};
+    const signed = (s: string | undefined, n: string | undefined): number =>
+        n === undefined ? 0 : (s === "-" ? -1 : 1) * Number(n);
     return {
         formula: formula.toLowerCase(),
-        bonus: bonus === undefined ? 0 : (sign === "-" ? -1 : 1) * Number(bonus),
+        bonus: signed(sign, bonus) + signed(lateSign, lateBonus),
         type: DAMAGE_TYPES[(type ?? "").toLowerCase()] ?? "",
     };
 }
@@ -74,12 +80,13 @@ export function parseRange(raw: string): Range | null {
     if (multiple !== undefined) {
         return { value: 0, units: "m", special: `SBx${multiple}` };
     }
-    const m = /^(\d+(?:\.\d+)?)\s*(m|km|metres?|meters?|kilometres?)?$/iu.exec(text);
+    // Thousands may be grouped with commas ("3,500m").
+    const m = /^(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(m|km|metres?|meters?|kilometres?)?$/iu.exec(text);
     if (m === null) {
         return null;
     }
     const units = (m[2] ?? "m").toLowerCase().startsWith("k") ? "km" : "m";
-    return { value: Number(m[1]), units, special: "" };
+    return { value: Number((m[1] ?? "").replace(/,/gu, "")), units, special: "" };
 }
 
 export interface RateOfFire {
@@ -114,9 +121,13 @@ export function parseRateOfFire(raw: string): RateOfFire | null {
     return { single: singleMode.toLowerCase() === "s", semi, full };
 }
 
-/** `Full`, `2 Full`, `Half`, `3Full` → the system's reload keys (`full`, `2-full`, `half`, `-`). */
+/**
+ * `Full`, `2 Full`, `Half`, `3Full` → the system's reload keys (`full`,
+ * `2-full`, `half`, `-`). The column's own label set before the value
+ * (`Rld 5 Full`) is not part of it.
+ */
 export function parseReload(raw: string): string | null {
-    const text = clean(raw);
+    const text = clean(raw).replace(/^(?:rld|reload)\b:?\s*/iu, "");
     if (isEmptyCell(text)) {
         return "-";
     }
@@ -129,13 +140,13 @@ export function parseReload(raw: string): string | null {
     return count === "" || count === "1" ? unit : `${count}-${unit}`;
 }
 
-/** `15kg`, `1.5 kg`, `-` → kilograms (0 for none). */
+/** `15kg`, `1.5 kg`, `.5kg`, `-` → kilograms (0 for none). */
 export function parseWeight(raw: string): number | null {
     const text = clean(raw);
     if (isEmptyCell(text)) {
         return 0;
     }
-    const m = /^\+?(\d+(?:\.\d+)?)\s*(?:kg)?$/iu.exec(text);
+    const m = /^\+?(\d+(?:\.\d+)?|\.\d+)\s*(?:kg)?$/iu.exec(text);
     return m === null ? null : Number(m[1]);
 }
 
@@ -208,14 +219,19 @@ export function parseHullType(raw: string): string | null {
     return type !== undefined && type !== ALL_HULLS && rest.length === 0 ? type : null;
 }
 
+/** A qualities-list entry pointing to the weapon's text, not naming a quality. */
+const SEE_TEXT = "special";
+
 /**
  * A weapon's special-qualities cell → quality identifiers: lowercased,
  * hyphenated, with a rating folded in (`Spread (3)`, `Toxic [4]` →
  * `spread-3`, `toxic-4`), sorted. A word broken at its hyphen across lines
- * ("Twin- Linked") keeps one hyphen.
+ * ("Twin- Linked") keeps one hyphen. "Special" in the list is a pointer to the
+ * weapon's text, not a quality, and is dropped. A further list joined on with
+ * a plus ("Balanced + Accursed, Rampage") is not qualities and is left out.
  */
 export function parseQualities(raw: string): string[] {
-    const text = clean(raw);
+    const text = clean(raw).split(/\s\+\s(?![^([]*[)\]])/u)[0] ?? "";
     if (isEmptyCell(text)) {
         return [];
     }
@@ -230,6 +246,7 @@ export function parseQualities(raw: string): string[] {
                 .replace(/\s+/gu, "-")
                 .replace(/-{2,}/gu, "-"),
         )
+        .filter((q) => q !== SEE_TEXT)
         .sort();
 }
 
@@ -320,7 +337,11 @@ const LOCATION_WORDS: Readonly<Record<string, readonly BodyLocation[]>> = {
     "right leg": ["rightLeg"],
 };
 
-/** `Body, Arms`, `All`, `Head` → covered locations, in schema order. */
+/**
+ * `Body, Arms`, `All`, `Head` → covered locations, in schema order. A list
+ * whose separator was lost ("Body Arms, Legs") reads word by word, a side
+ * word ("left") joining the location after it.
+ */
 export function parseCoverage(raw: string): BodyLocation[] | null {
     const parts = clean(raw)
         .toLowerCase()
@@ -332,8 +353,8 @@ export function parseCoverage(raw: string): BodyLocation[] | null {
     }
     const covered = new Set<BodyLocation>();
     for (const part of parts) {
-        const hit = LOCATION_WORDS[part];
-        if (hit === undefined) {
+        const hit = LOCATION_WORDS[part] ?? locationsByWord(part);
+        if (hit === null) {
             return null;
         }
         for (const loc of hit) {
@@ -341,6 +362,63 @@ export function parseCoverage(raw: string): BodyLocation[] | null {
         }
     }
     return BODY_LOCATIONS.filter((l) => covered.has(l));
+}
+
+/** Locations named word by word in one list item, or null when a word names none. */
+function locationsByWord(part: string): BodyLocation[] | null {
+    const words = part.split(/\s+/u);
+    const found: BodyLocation[] = [];
+    for (let i = 0; i < words.length; i++) {
+        const pair = `${words[i]} ${words[i + 1] ?? ""}`;
+        const hit = LOCATION_WORDS[pair] ?? LOCATION_WORDS[words[i] ?? ""];
+        if (hit === undefined) {
+            return null;
+        }
+        if (LOCATION_WORDS[pair] !== undefined) {
+            i += 1;
+        }
+        found.push(...hit);
+    }
+    return found;
+}
+
+export interface ArmourPoints {
+    /** Points on every covered location. */
+    base: number;
+    /** Locations printed with their own points ("8 (Body 10)"). */
+    exceptions: Partial<Record<BodyLocation, number>>;
+}
+
+/**
+ * An armour-points cell → its points, with any location printed apart in
+ * parentheses: `8`, `8 (Body 10)`, `5 (4 on Head)`. A bare parenthesized
+ * number (`3 (6)`) is a points value under some condition the text gives and
+ * is left to it. Null when the cell is not that notation.
+ */
+export function parseArmourPoints(raw: string): ArmourPoints | null {
+    const m = /^(\d+)\s*(?:\((.*)\))?$/u.exec(clean(raw));
+    if (m === null) {
+        return null;
+    }
+    const exceptions: Partial<Record<BodyLocation, number>> = {};
+    const inner = (m[2] ?? "").trim();
+    if (inner !== "" && !/^\d+$/u.test(inner)) {
+        for (const part of inner.split(/[,;]/u)) {
+            const point =
+                /^(?:(?<before>\d+)\s+(?:on\s+)?(?<after>[a-z ]+?)|(?<loc>[a-z ]+?)\s+(?<n>\d+))$/iu.exec(
+                    part.trim(),
+                )?.groups;
+            const where = LOCATION_WORDS[(point?.["after"] ?? point?.["loc"] ?? "").toLowerCase()];
+            const value = point?.["before"] ?? point?.["n"];
+            if (where === undefined || value === undefined) {
+                return null;
+            }
+            for (const loc of where) {
+                exceptions[loc] = Number(value);
+            }
+        }
+    }
+    return { base: Number(m[1]), exceptions };
 }
 
 /** The system's `weaponClasses` keys. */

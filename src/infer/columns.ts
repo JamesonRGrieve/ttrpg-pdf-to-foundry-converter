@@ -54,12 +54,15 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(pen|penetration)$/u, "penetration"],
     [/^(clip|mag|magazine)$/u, "clip"],
     [/^(rld|reload)$/u, "reload"],
-    [/^(special|special rules|qualities)$/u, "special"],
+    // A special column may name a further list it holds ("Special + Attributes").
+    [/^(special( .+)?|qualities)$/u, "special"],
     [/^(wt|weight|kg)$/u, "weight"],
-    [/^(avl|avail|availability)$/u, "availability"],
+    // By its stem, so a misread letter later in the word ("Availabiity") still names it.
+    [/^(avl|avail[a-z]*)$/u, "availability"],
     [/^(cost|price)$/u, "cost"],
     [/^(ap|armou?r points?)$/u, "armourPoints"],
-    [/^(locations?( covered)?|location s covered|coverage)$/u, "locations"],
+    // A two-line header may reach us as its second line alone ("Covered").
+    [/^(locations?( covered)?|location s covered|covered|coverage)$/u, "locations"],
     [/^(max ag|max agility|maxag)$/u, "maxAgility"],
     [/^(aptitudes?|aptitude \d)$/u, "aptitudes"],
     [/^(prerequisites?|requirements?)$/u, "prerequisites"],

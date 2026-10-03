@@ -6,6 +6,7 @@ import {
     normalizedDistance,
     resolveGroup,
     smallCapsFonts,
+    withMissedPoints,
 } from "../../src/ocr/arbitrate.ts";
 import type { OcrWord } from "../../src/ocr/types.ts";
 import type { RawDoc, RawTextRun } from "../../src/types/ir.ts";
@@ -86,7 +87,25 @@ describe("align", () => {
     });
 });
 
+describe("withMissedPoints", () => {
+    it("puts back a number's point that OCR passed over", () => {
+        expect(withMissedPoints("�75kg", "75kg")).toBe(".75kg");
+        expect(withMissedPoints("2�5kg", "25kg")).toBe("2.5kg");
+        expect(withMissedPoints("1�500", "1500")).toBe("1,500");
+    });
+
+    it("leaves OCR's read alone when it read the glyph, or the glyph is not a point", () => {
+        expect(withMissedPoints("2�5kg", "2.5kg")).toBeNull();
+        expect(withMissedPoints("Ab�c", "Abc")).toBeNull();
+        expect(withMissedPoints("�5 kg", "5 kg")).toBeNull();
+    });
+});
+
 describe("resolveGroup", () => {
+    it("restores a point OCR missed in a number the text layer mis-encodes", () => {
+        expect(resolveGroup(["�75kg"], [word("75kg")], false)).toBe(".75kg");
+    });
+
     it("keeps an intact single word untouched", () => {
         expect(resolveGroup(["hello"], [word("hello")], false)).toBeNull();
         expect(resolveGroup(["hello"], [word("hallo")], false)).toBeNull();

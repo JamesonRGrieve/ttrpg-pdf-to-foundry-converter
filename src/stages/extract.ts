@@ -294,6 +294,142 @@ export function readsAcross(matrix: readonly number[]): boolean {
     return Math.abs(b) <= Math.abs(a);
 }
 
+/** Baselines within this many points are one line. */
+const SAME_BASELINE = 0.5;
+/** Share of the repeated letters' width a run must start back over them to repeat them. */
+const OVERPRINT_SHARE = 0.5;
+
+/**
+ * Runs with text set again over text already on the line merged into one. A
+ * page may draw a stretch of text in overlapping pieces ("Accurate, Fe",
+ * "Fe", "Fell", "llin", "ng"), each piece set back over letters already
+ * drawn; read as runs, every letter drawn twice reads twice ("FeFelling").
+ * A run starting inside the run before it on its baseline, at its size, is
+ * placed at the letter its start falls on there: when its letters repeat the
+ * ones set from that letter it adds only those after them, and none when it
+ * ends within them. A run merely kerned into the one before it overlaps it by
+ * a sliver, far less than the letters it would repeat, and stays its own; so
+ * does one whose letters differ from those it lies over. A blank run inside
+ * the one before it adds nothing.
+ *
+ * A line's pieces merge only when every piece on it agrees with the letters
+ * it lies over. Pieces that disagree ("Asta", "tart", "r es") do not spell
+ * the text at all, and a line drawn so is not to be trusted anywhere: merging
+ * the pieces that agree would make a plausible misreading of it, so the whole
+ * line stays as drawn and the page's OCR read decides it.
+ */
+export function withoutOverprint(runs: readonly RawTextRun[]): RawTextRun[] {
+    const out: RawTextRun[] = [];
+    for (const line of drawnLines(runs)) {
+        const chains = overprintChains(line);
+        const merged = chains.flatMap((c) => (c.merged === null ? [] : [c.merged]));
+        out.push(...(merged.length === chains.length ? merged : line));
+    }
+    return out;
+}
+
+/** Consecutive runs on one baseline at one size. */
+function drawnLines(runs: readonly RawTextRun[]): RawTextRun[][] {
+    const lines: RawTextRun[][] = [];
+    for (const run of runs) {
+        const line = lines.at(-1);
+        const first = line?.[0];
+        if (
+            line !== undefined &&
+            first !== undefined &&
+            first.pageIndex === run.pageIndex &&
+            Math.abs(first.y - run.y) <= SAME_BASELINE &&
+            first.fontSize === run.fontSize
+        ) {
+            line.push(run);
+        } else {
+            lines.push([run]);
+        }
+    }
+    return lines;
+}
+
+/**
+ * A line's runs in chains, each run set over the chain before it: per chain,
+ * its runs merged, or null when a piece disagrees with the letters it lies over.
+ */
+function overprintChains(line: readonly RawTextRun[]): { merged: RawTextRun | null }[] {
+    const chains: { merged: RawTextRun | null; reach: RawTextRun }[] = [];
+    for (const run of line) {
+        const chain = chains.at(-1);
+        if (chain !== undefined && setOver(chain.reach, run)) {
+            const next = chain.merged === null ? null : overprinted(chain.merged, run);
+            chain.merged = next;
+            chain.reach = next ?? chain.reach;
+            continue;
+        }
+        chains.push({ merged: run, reach: run });
+    }
+    return chains;
+}
+
+/** Whether `run` is set over `last`: on its line, at its size, starting back inside it by more than a sliver. */
+function setOver(last: RawTextRun, run: RawTextRun): boolean {
+    const letter = last.text.length === 0 ? 0 : last.width / last.text.length;
+    return (
+        last.pageIndex === run.pageIndex &&
+        Math.abs(last.y - run.y) <= SAME_BASELINE &&
+        last.fontSize === run.fontSize &&
+        run.x >= last.x - SAME_BASELINE &&
+        last.x + last.width - run.x >= OVERPRINT_SHARE * letter
+    );
+}
+
+/** Letters either side of a run's estimated start its repeat may begin at. */
+const PLACEMENT_SLACK = 1;
+
+/** `last` with `run` set over it merged in, or null when `run` stands apart. */
+function overprinted(last: RawTextRun, run: RawTextRun): RawTextRun | null {
+    const end = last.x + last.width;
+    if (
+        last.pageIndex !== run.pageIndex ||
+        Math.abs(last.y - run.y) > SAME_BASELINE ||
+        last.fontSize !== run.fontSize ||
+        last.text.length === 0 ||
+        run.text.length === 0 ||
+        run.x < last.x - SAME_BASELINE ||
+        run.x >= end
+    ) {
+        return null;
+    }
+    if (run.text.trim() === "") {
+        return run.x + run.width <= end + SAME_BASELINE ? last : null;
+    }
+    const letter = last.width / last.text.length;
+    const estimate = (run.x - last.x) / letter;
+    const starts = [];
+    for (let p = Math.floor(estimate) - PLACEMENT_SLACK; p <= Math.ceil(estimate) + PLACEMENT_SLACK; p++) {
+        if (p >= 0 && p < last.text.length) {
+            starts.push(p);
+        }
+    }
+    // The earliest letter that agrees repeats the most: a doubled letter ("ll")
+    // is set once, not once more.
+    for (const p of starts) {
+        const tail = last.text.slice(p);
+        const repeated = Math.min(tail.length, run.text.length);
+        if (end - run.x < OVERPRINT_SHARE * repeated * letter) {
+            continue;
+        }
+        if (tail.startsWith(run.text)) {
+            return last;
+        }
+        if (run.text.startsWith(tail)) {
+            return {
+                ...last,
+                text: last.text + run.text.slice(tail.length),
+                width: Math.max(end, run.x + run.width) - last.x,
+            };
+        }
+    }
+    return null;
+}
+
 export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
     const empty = (encrypted: boolean): RawDoc => ({
         encrypted,
@@ -433,7 +569,7 @@ export async function extract(pdfBytes: Uint8Array): Promise<RawDoc> {
             encrypted: false,
             extractor: EXTRACTOR_ID,
             pages: pages.map((page) => ({ ...page, hasTextLayer: withText.has(page.pageIndex) })),
-            textRuns,
+            textRuns: withoutOverprint(textRuns),
             images,
             placements,
             meta,
