@@ -37,6 +37,7 @@ describe("parseDamage", () => {
     it("reads a bonus printed after the type letter, and a flat damage with a type", () => {
         expect(parseDamage("1d10 I+1")).toEqual({ formula: "1d10", bonus: 1, type: "impact" });
         expect(parseDamage("0 I")).toEqual({ formula: "0", bonus: 0, type: "impact" });
+        expect(parseDamage("1d5-2\bE")).toEqual({ formula: "1d5", bonus: -2, type: "energy" });
     });
 });
 
@@ -92,6 +93,8 @@ describe("parseWeight / parseInteger", () => {
         expect(parseWeight("-")).toBe(0);
         expect(parseWeight(".5kg")).toBe(0.5);
         expect(parseWeight(".02 kg")).toBe(0.02);
+        expect(parseWeight("�75kg")).toBe(0.75);
+        expect(parseWeight("2�5kg")).toBe(2.5);
         expect(parseWeight("heavy")).toBeNull();
     });
 
@@ -199,6 +202,13 @@ describe("parseCoverage", () => {
             "rightLeg",
         ]);
         expect(parseCoverage("Head Left Arm")).toEqual(["head", "leftArm"]);
+        expect(parseCoverage("A rms, Body, Legs")).toEqual([
+            "body",
+            "leftArm",
+            "rightArm",
+            "leftLeg",
+            "rightLeg",
+        ]);
     });
 
     it("rejects unknown location words", () => {

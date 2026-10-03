@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { NOTE_MARKERS } from "../util/text.ts";
+import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
 import { ALL_HULLS, HULL_TYPES, SHIP_WEAPON_TYPES } from "./schema.ts";
 
 /**
@@ -14,8 +14,28 @@ const DASHES = /[–—−]/gu;
 /** Cell text meaning "no value". */
 const EMPTY = /^(?:[-–—]|n\/?a|none)?$/iu;
 
+/** Control characters a text layer can leave between a cell's glyphs. */
+const CONTROLS = new RegExp(`[${CONTROL_RANGES}]`, "gu");
+/** A glyph the text layer could not encode, set just before a digit. */
+const UNREADABLE_BEFORE_DIGIT = /�(?=\d)/gu;
+
+/**
+ * A cell's notation as plain text: note markers dropped, dashes unified,
+ * control characters read as spaces, and an unreadable glyph just before a
+ * digit read as the number's point (see `numberPoint`).
+ */
 function clean(raw: string): string {
-    return raw.replace(NOTE_MARKERS, "").replace(DASHES, "-").replace(/\s+/gu, " ").trim();
+    return raw
+        .replace(NOTE_MARKERS, "")
+        .replace(DASHES, "-")
+        .replace(CONTROLS, " ")
+        .replace(
+            UNREADABLE_BEFORE_DIGIT,
+            (_glyph, offset: number, whole: string) =>
+                numberPoint(whole.slice(0, offset), whole.slice(offset + 1)) ?? "",
+        )
+        .replace(/\s+/gu, " ")
+        .trim();
 }
 
 export function isEmptyCell(raw: string): boolean {
@@ -364,17 +384,23 @@ export function parseCoverage(raw: string): BodyLocation[] | null {
     return BODY_LOCATIONS.filter((l) => covered.has(l));
 }
 
-/** Locations named word by word in one list item, or null when a word names none. */
+/**
+ * Locations named word by word in one list item, or null when a word names
+ * none. A word may run on into the next: a letter set apart by spacing
+ * ("A rms") or a side word ("left arm").
+ */
 function locationsByWord(part: string): BodyLocation[] | null {
     const words = part.split(/\s+/u);
     const found: BodyLocation[] = [];
     for (let i = 0; i < words.length; i++) {
-        const pair = `${words[i]} ${words[i + 1] ?? ""}`;
-        const hit = LOCATION_WORDS[pair] ?? LOCATION_WORDS[words[i] ?? ""];
+        const word = words[i] ?? "";
+        const next = words[i + 1] ?? "";
+        const joined = LOCATION_WORDS[`${word} ${next}`] ?? LOCATION_WORDS[`${word}${next}`];
+        const hit = joined ?? LOCATION_WORDS[word];
         if (hit === undefined) {
             return null;
         }
-        if (LOCATION_WORDS[pair] !== undefined) {
+        if (joined !== undefined) {
             i += 1;
         }
         found.push(...hit);

@@ -62,7 +62,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(cost|price)$/u, "cost"],
     [/^(ap|armou?r points?)$/u, "armourPoints"],
     // A two-line header may reach us as its second line alone ("Covered").
-    [/^(locations?( covered)?|location s covered|covered|coverage)$/u, "locations"],
+    [/^(locations?( ?covered)?|covered|coverage)$/u, "locations"],
     [/^(max ag|max agility|maxag)$/u, "maxAgility"],
     [/^(aptitudes?|aptitude \d)$/u, "aptitudes"],
     [/^(prerequisites?|requirements?)$/u, "prerequisites"],
@@ -130,6 +130,8 @@ export function normalizeHeader(header: string): string {
         header
             // Letter-spaced display text ("D AM") collapses to the word it spells.
             .replace(/\b(\p{Lu}) (?=\p{Lu}\b|\p{Lu}{2,})/gu, "$1")
+            // An optional plural ("Location(s)") is the plural.
+            .replace(/\(s\)/giu, "s")
             .toLowerCase()
             .replace(/[^a-z0-9 ]+/gu, " ")
             .replace(/\s+/gu, " ")

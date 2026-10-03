@@ -219,9 +219,56 @@ function rowCells(row: TableRow, roles: readonly (Role[] | null)[]): RowCells {
                     cells[r] = part;
                 }
             });
+            continue;
+        }
+        const split = splitNumberFromText(text, cellRoles);
+        if (split !== null) {
+            cells[split.numberRole] = split.number;
+            cells[split.textRole] = split.text;
         }
     }
     return cells;
+}
+
+/** Roles whose values are a bare count or rating. */
+const NUMBER_ROLES: ReadonlySet<Role> = new Set([
+    "armourPoints",
+    "maxAgility",
+    "penetration",
+    "clip",
+    "protection",
+]);
+
+/**
+ * A merged cell of one counted role and one worded role ("Location(s) AP"),
+ * whose wrapped text set the number among the words ("Head, Arms, 8 Body,
+ * Legs"): its one bare number is the count, the rest the words. Null when the
+ * roles are not one of each or the text holds no single bare number.
+ */
+export function splitNumberFromText(
+    text: string,
+    roles: readonly Role[],
+): { numberRole: Role; number: string; textRole: Role; text: string } | null {
+    const [first, second] = roles;
+    if (roles.length !== 2 || first === undefined || second === undefined) {
+        return null;
+    }
+    const numberRole = NUMBER_ROLES.has(first) ? first : NUMBER_ROLES.has(second) ? second : null;
+    const textRole = numberRole === first ? second : first;
+    if (numberRole === null || NUMBER_ROLES.has(textRole)) {
+        return null;
+    }
+    const words = text.split(/\s+/u);
+    const numbers = words.filter((w) => /^\d+$/u.test(w));
+    if (numbers.length !== 1 || numbers[0] === undefined) {
+        return null;
+    }
+    return {
+        numberRole,
+        number: numbers[0],
+        textRole,
+        text: words.filter((w) => w !== numbers[0]).join(" "),
+    };
 }
 
 /** The name column: the explicitly named one, else the first column most rows fill. */

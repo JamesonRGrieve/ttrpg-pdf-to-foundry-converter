@@ -1,5 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { canonicalizeText, stripSubsetPrefix, wordBreakBetween, wordSpace } from "../../src/util/text.ts";
+import {
+    canonicalizeText,
+    numberPoint,
+    stripSubsetPrefix,
+    wordBreakBetween,
+    wordSpace,
+} from "../../src/util/text.ts";
+
+describe("numberPoint", () => {
+    it("reads a glyph before a digit as a thousands comma or a decimal point", () => {
+        expect(numberPoint("1", "500")).toBe(",");
+        expect(numberPoint("1", "5kg")).toBe(".");
+        expect(numberPoint("", "75kg")).toBe(".");
+        expect(numberPoint("2", "5000")).toBe(".");
+    });
+
+    it("reads nothing when no digit follows", () => {
+        expect(numberPoint("1", "kg")).toBeNull();
+    });
+});
 
 // All non-ASCII / invisible characters are written as \u escape sequences so
 // the exact codepoint under test is unambiguous in the source.

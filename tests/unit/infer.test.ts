@@ -52,6 +52,7 @@ import {
     fitModifications,
     givenNames,
     infer,
+    splitNumberFromText,
     introducingEntry,
     keyedByBands,
     namingEntry,
@@ -118,6 +119,24 @@ function irRun(text: string, pageIndex: number, y: number): IRTextRun {
     };
 }
 
+describe("splitNumberFromText", () => {
+    it("takes the one bare number of a merged words-and-count cell as the count", () => {
+        expect(splitNumberFromText("Head, Arms, 8 Body, Legs", ["locations", "armourPoints"])).toEqual({
+            numberRole: "armourPoints",
+            number: "8",
+            textRole: "locations",
+            text: "Head, Arms, Body, Legs",
+        });
+    });
+
+    it("declines two counts, no count, or roles that are not one of each", () => {
+        expect(splitNumberFromText("Head 4 Body 6", ["locations", "armourPoints"])).toBeNull();
+        expect(splitNumberFromText("Head, Body", ["locations", "armourPoints"])).toBeNull();
+        expect(splitNumberFromText("4 6", ["clip", "penetration"])).toBeNull();
+        expect(splitNumberFromText("Head 4", ["locations"])).toBeNull();
+    });
+});
+
 describe("givenNames", () => {
     it("keys each name, and each without a closing qualifier", () => {
         const names = givenNames(["Lamp Hammer (light)", "Lamp Hammer (heavy)", "Wick Gun"]);
@@ -142,6 +161,8 @@ describe("columns", () => {
         expect(headerRole("Special + Bound Attributes")).toBe("special");
         expect(headerRole("Special Rules")).toBe("special");
         expect(headerRole("Covered")).toBe("locations");
+        expect(headerRole("LocationsCovered")).toBe("locations");
+        expect(mergedHeaderRoles("Location(s) AP")).toEqual(["locations", "armourPoints"]);
         expect(headerRole("Availabiity")).toBe("availability");
         expect(headerRole("Mystery")).toBeNull();
         expect(normalizeHeader("  Max  Ag ")).toBe("max ag");

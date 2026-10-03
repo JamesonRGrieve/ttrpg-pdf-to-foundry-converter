@@ -71,8 +71,24 @@ export function wordSpace(leftSize: number, rightSize: number): number {
     return WORD_SPACE_EM * Math.max(leftSize, rightSize);
 }
 
+/** Control characters other than tab and newline, as a character-class range. */
+export const CONTROL_RANGES = String.raw`\u0000-\u0008\u000B-\u001F\u007F`;
+
 /** Printed note markers (footnote daggers etc.) that annotate a value, never part of it. */
 export const NOTE_MARKERS = /[†‡*§¶]+/gu;
+
+/**
+ * The point an unreadable glyph set just before a digit stands for in a
+ * number: a thousands comma when it follows a digit and three digits follow
+ * it within the number ("1�500"), a decimal point otherwise ("�5kg",
+ * "2�5kg"). Null when no digit follows it.
+ */
+export function numberPoint(before: string, after: string): "," | "." | null {
+    if (!/^\d/u.test(after)) {
+        return null;
+    }
+    return /\d$/u.test(before) && /^\d{3}(?!\d)/u.test(after) ? "," : ".";
+}
 
 export function escapeHtml(text: string): string {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

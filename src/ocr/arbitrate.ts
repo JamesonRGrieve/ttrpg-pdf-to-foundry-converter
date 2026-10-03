@@ -3,7 +3,7 @@ import type { RawDoc, RawTextRun } from "../types/ir.ts";
 import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
 import { readReprints } from "../util/reprints.ts";
-import { stripSubsetPrefix } from "../util/text.ts";
+import { CONTROL_RANGES, numberPoint, stripSubsetPrefix } from "../util/text.ts";
 import { notPlainlyUpright, OCR_FONT_NAME, scanPageRuns, scanScale } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 
@@ -94,7 +94,6 @@ const GARBLED_ALNUM_SHARE = 0.5;
 // Code points that indicate a broken or custom font encoding: control
 // characters, private-use glyphs, the replacement character, or anything
 // outside the scripts and symbol blocks ordinary body text uses.
-const CONTROL_RANGES = String.raw`\u0000-\u0008\u000B-\u001F\u007F`;
 const PRIVATE_USE_RANGE = String.raw`\uE000-\uF8FF`;
 const REPLACEMENT_CHAR = String.raw`\uFFFD`;
 const EXPECTED_RANGES = String.raw`\u0000-\u024F\u02B0-\u02FF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\u2190-\u23FF\u2500-\u27BF`;
@@ -434,14 +433,10 @@ export function withMissedPoints(layer: string, ocrText: string): string | null 
         return null;
     }
     let ok = true;
-    const restored = layer.replace(CORRUPT_GLYPHS, (glyph: string, at: number, whole: string) => {
-        const after = whole.slice(at + glyph.length);
-        if (!/^\d/u.test(after)) {
-            ok = false;
-            return "";
-        }
-        const thousands = /^\d/u.test(whole.slice(at - 1, at)) && /^\d{3}(?!\d)/u.test(after);
-        return thousands ? "," : ".";
+    const restored = layer.replace(CORRUPT_GLYPHS, (glyph: string, offset: number, whole: string) => {
+        const point = numberPoint(whole.slice(0, offset), whole.slice(offset + glyph.length));
+        ok &&= point !== null;
+        return point ?? "";
     });
     return ok ? restored : null;
 }
