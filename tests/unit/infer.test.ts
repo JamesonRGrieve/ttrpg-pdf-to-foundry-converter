@@ -62,6 +62,7 @@ import {
     modalHeadingSizes,
     nameKey,
     siblingKinds,
+    singularKey,
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
 import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
@@ -134,6 +135,14 @@ describe("splitNumberFromText", () => {
         expect(splitNumberFromText("Head, Body", ["locations", "armourPoints"])).toBeNull();
         expect(splitNumberFromText("4 6", ["clip", "penetration"])).toBeNull();
         expect(splitNumberFromText("Head 4", ["locations"])).toBeNull();
+    });
+});
+
+describe("singularKey", () => {
+    it("gives singular and plural forms of a name one key", () => {
+        expect(singularKey("Wick Rockets")).toBe(singularKey("Wick Rocket"));
+        expect(singularKey("Glass")).toBe("glass");
+        expect(singularKey("Lamp (heavy)")).not.toBe(singularKey("Lamp"));
     });
 });
 

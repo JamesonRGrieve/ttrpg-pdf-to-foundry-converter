@@ -141,6 +141,11 @@ const MAX_NAME_LENGTH = 60;
 const LEVEL_PLACEHOLDER = /\s*\(\p{Lu}\)\s*$/u;
 
 /** Identity of a name for merging readings: case, punctuation and a level placeholder ignored. */
+/** A name's key with a closing plural "s" dropped, so singular and plural forms share it. */
+export function singularKey(name: string): string {
+    return nameKey(name).replace(/(?<=[^s])s$/u, "");
+}
+
 export function nameKey(name: string): string {
     return name
         .replace(LEVEL_PLACEHOLDER, "")
@@ -1275,8 +1280,10 @@ export function citeFirstPage(head: Entity, readings: readonly Entity[], line: L
  * One document per (pack, name). A book often prints an entity twice — its
  * stat line in a table, its rules prose in an entry block — so same-named
  * readings are merged field-wise, the richest reading taking precedence.
- * Catalogue-entry prose is also attached to a same-named item in any pack
- * that has no description of its own.
+ * A name printed singular in one reading and plural in another (a table row
+ * "Wick Rocket", its entry "Wick Rockets") is the same name. Catalogue-entry
+ * prose is also attached to a same-named item in any pack that has no
+ * description of its own.
  */
 function consolidate(
     entities: readonly Entity[],
@@ -1286,7 +1293,7 @@ function consolidate(
     const richness = (e: Entity): number => JSON.stringify(e.fields).length;
     const groups = new Map<string, Entity[]>();
     for (const e of entities) {
-        const key = `${e.pack}\u0000${nameKey(String(e.fields["name"]))}`;
+        const key = `${e.pack}\u0000${singularKey(String(e.fields["name"]))}`;
         groups.set(key, [...(groups.get(key) ?? []), e]);
     }
     const merged: Entity[] = [];
