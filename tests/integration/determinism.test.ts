@@ -40,7 +40,8 @@ describe.concurrent("determinism (in-memory)", () => {
     }
 });
 
-describe("encrypted refusal", () => {
+// These extract real PDFs, so they share the suite's load with the concurrent cases above.
+describe("encrypted refusal", { timeout: CASE_TIMEOUT_MS }, () => {
     it("refuses an encrypted PDF without decrypting or recognizing anything", async () => {
         const bytes = new Uint8Array(readFileSync(resolve(repoRoot, "fixtures/rendered/encrypted.pdf")));
         const raw = await extract(bytes);
