@@ -13,7 +13,7 @@
             "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
             "irVersion": 41,
             "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
-            "release": "2026-10-06-18-30",
+            "release": "2026-10-06-20-11",
             "renderer": "mupdf@1.28.1/300dpi/gray",
             "target": "dh2,rt"
         }
@@ -42,7 +42,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Actors Bestiary",
@@ -58,7 +58,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Armour",
@@ -74,7 +74,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Mutations",
@@ -90,7 +90,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Talents",
@@ -106,7 +106,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Weapons",
@@ -122,7 +122,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Rolltables",
@@ -138,7 +138,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Actors Bestiary",
@@ -154,7 +154,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Armour",
@@ -170,7 +170,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Mutations",
@@ -186,7 +186,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Talents",
@@ -202,7 +202,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Items Weapons",
@@ -218,7 +218,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
+                    "release": "2026-10-06-20-11"
                 }
             },
             "label": "Wayfarers Field Manual Rolltables",
@@ -240,6 +240,6 @@
             }
         ]
     },
-    "title": "PDF Compendium: wayfarers-field-manual (2026-10-06-18-30)",
-    "version": "2026-10-06-18-30"
+    "title": "PDF Compendium: wayfarers-field-manual (2026-10-06-20-11)",
+    "version": "2026-10-06-20-11"
 }
