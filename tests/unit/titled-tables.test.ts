@@ -85,6 +85,35 @@ describe("cells in one run", () => {
 });
 
 describe("titled tables", () => {
+    it("reads rows set across the page under a header set in one text column", () => {
+        const across = { column: 2 };
+        const row = (y: number, key: string, name: string, text: string): IRTextRun[] => [
+            run(key, 48, y, across),
+            run(name, 101, y, across),
+            run(text, 167, y, across),
+        ];
+        const ir = irOf([
+            run("Table 2-1: Lamps", 46, 416, { ...bold, column: 0 }),
+            run("Roll", 48, 389, { ...bold, column: 0 }),
+            run("Lamp", 101, 389, { ...bold, column: 0 }),
+            run("Description", 167, 389, { ...bold, column: 0 }),
+            // The neighbouring column's prose ends above the table.
+            run("Prose of the right-hand column.", 285, 430, { column: 1 }),
+            ...row(372, "1", "Rushlight", "A reed dipped in fat."),
+            ...row(343, "2", "Glim", "A small, steady flame."),
+            ...row(309, "3", "Hush Lamp", "Burns without a sound."),
+            ...row(280, "4", "Wick Lantern", "Shuttered, for the road."),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["Roll", "Lamp", "Description"]);
+        expect(table?.rows.map((r) => r.cells.find((c) => c.colIndex === 1)?.text)).toEqual([
+            "Rushlight",
+            "Glim",
+            "Hush Lamp",
+            "Wick Lantern",
+        ]);
+    });
+
     it("reads a two-line name whose values sit between its lines, past a superscript marker", () => {
         const ir = irOf([
             run("Table 1-1: Lamps", 60, 700, bold),

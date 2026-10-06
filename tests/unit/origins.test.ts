@@ -8,8 +8,10 @@ import {
     originCellName,
     originStepNamedBy,
     readFieldedOrigins,
+    readInlineOrigins,
     readOriginPaths,
     readOriginTable,
+    signedCharacteristicChanges,
     splitTopLevel,
 } from "../../src/infer/origin-paths.ts";
 import { DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
@@ -55,6 +57,15 @@ describe("origin list parsing", () => {
             toughness: -3,
         });
         expect(characteristicChanges("Increase his Agility or Intelligence by 3.")).toEqual({});
+        expect(
+            signedCharacteristicChanges("+5 Fellowship, –5 Toughness, +2 Wounds, -3 Ballistic Skill."),
+        ).toEqual({
+            fellowship: 5,
+            toughness: -5,
+            ballisticSkill: -3,
+        });
+        // An abbreviation after a number is no characteristic name ("+2 S" is not read).
+        expect(signedCharacteristicChanges("+2 S, +10 to the test")).toEqual({});
     });
 
     it("recognises a caption naming a creation step", () => {
@@ -239,6 +250,25 @@ describe("origin tables", () => {
         expect(origins.every((o) => o.fromTable === true && o.pageIndex === 7)).toBe(true);
     });
 
+    it("reads signed characteristic changes in a row's effect", () => {
+        const pride = TARGETS.bc.originSteps.find((s) => s.key === "pride");
+        if (pride === undefined) {
+            throw new Error("the target has a pride step");
+        }
+        const [origin] = readOriginTable(
+            pride,
+            [
+                [
+                    "3",
+                    "Lanterncraft",
+                    "Fine work. Characteristic modifier: +1 Renown, +3 Agility, –3 Weapon Skill.",
+                ],
+            ],
+            70,
+        );
+        expect(origin?.modifiers).toEqual({ agility: 3, weaponSkill: -3 });
+    });
+
     it("names an origin by the quotation or the lead before a colon that opens its cell", () => {
         expect(originCellName("“The reeds remember.” Increase Perception by 5.")).toEqual({
             name: "“The reeds remember.”",
@@ -326,5 +356,102 @@ describe("origins with inline fields", () => {
             ),
         ).toEqual([]);
         expect(readFieldedOrigins([fielded("LAMP", fields, ["IV: Lamps"])], dh1)).toEqual([]);
+    });
+});
+
+describe("origins granted by inline fields", () => {
+    const bc = TARGETS.bc.originSteps;
+    const at = (
+        text: string,
+        style: string,
+        sections: string[],
+        fields: [string, string][] = [],
+        body = "",
+    ): Entry => ({ heading: { text, size: 10, style, pageIndex: 48 }, sections, fields, body });
+
+    it("names an origin by its heading's words before its field labels, under a section naming the step", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 1: CHOOSE A RACE", "chapter", ["Lamps"], [], "Pick one."),
+                at("LAMPWRIGHTS", "section", ["Lamps", "Stage 1: Choose a Race"], [], "Makers of lamps."),
+                at(
+                    "LAMPWRIGHT STARTING ABILITIES",
+                    "sub",
+                    ["Stage 1: Choose a Race", "LAMPWRIGHTS"],
+                    [
+                        ["Starting Skills", "Glow Lore (Wicks), Hush, Wading."],
+                        ["Starting Traits", "Dim Sight, Lantern Bearer (+2)."],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins.map((o) => [o.name, o.step.key, o.description])).toEqual([
+            ["Lampwright", "race", "Makers of lamps."],
+        ]);
+        expect(origins[0]?.grants["skills"]).toEqual([
+            { name: "Glow Lore", specialization: "Wicks", level: "known" },
+            { name: "Hush", specialization: "", level: "known" },
+            { name: "Wading", specialization: "", level: "known" },
+        ]);
+        expect(origins[0]?.grants["traits"]).toEqual([
+            { name: "Dim Sight" },
+            { name: "Lantern Bearer (+2)" },
+        ]);
+    });
+
+    it("names an origin by its section when the heading is all labels, its step by a sibling heading", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 3: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at(
+                    "W ickkeeper",
+                    "display",
+                    ["Lamps"],
+                    [],
+                    "Keepers of the wick. A Wickkeeper never sleeps.",
+                ),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "W ickkeeper"],
+                    [
+                        ["Characteristic Bonus", "Wickkeepers gain +5 Perception."],
+                        ["Starting Talents", "Steady Hand or Keen Eye"],
+                        ["Starting Gear", "Lantern, wick shears"],
+                        ["Wounds", "12+1d5"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins.map((o) => [o.name, o.step.key, o.modifiers])).toEqual([
+            ["Wickkeeper", "archetype", { perception: 5 }],
+        ]);
+        expect(origins[0]?.grants["woundsFormula"]).toBe("12+1d5");
+        expect(origins[0]?.grants["equipment"]).toEqual([
+            { name: "Lantern", quantity: 1 },
+            { name: "Wick Shears", quantity: 1 },
+        ]);
+    });
+
+    it("reads nothing from a single grant, a priced block, or a section naming no step", () => {
+        const sections = ["Lamps", "Stage 1: Choose a Race"];
+        const single = at("GLOW", "sub", sections, [["Starting Skills", "Hush"]]);
+        const priced = at("GLOW", "sub", sections, [
+            ["Cost", "100 xp"],
+            ["Starting Skills", "Hush"],
+            ["Starting Talents", "Keen Eye"],
+        ]);
+        const elsewhere = at(
+            "GLOW",
+            "sub",
+            ["Lamps", "Lantern Upkeep"],
+            [
+                ["Starting Skills", "Hush"],
+                ["Starting Talents", "Keen Eye"],
+            ],
+        );
+        expect(readInlineOrigins([single, priced, elsewhere], bc)).toEqual([]);
     });
 });

@@ -2,6 +2,7 @@
 import type { Logger } from "../logger.ts";
 import type { Entity, EntityGraph, FoundryDocumentType, JsonObject, JsonValue } from "../types/entity.ts";
 import type { IR, IRTextRun } from "../types/ir.ts";
+import { id16 } from "../util/hash.ts";
 import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
 import { inferBookSlug } from "./book.ts";
@@ -34,11 +35,12 @@ import {
     wordsOf,
 } from "./names.ts";
 import { captionWeaponClass } from "./notation.ts";
-import { parseNpc } from "./npc.ts";
+import { listedBase, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
     originStepNamedBy,
     readFieldedOrigins,
+    readInlineOrigins,
     readOriginPaths,
     readOriginTable,
 } from "./origin-paths.ts";
@@ -383,6 +385,9 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
     return found > 0;
 }
 
+/** A column header citing pages ("Page", "Pg."): its rows point to where each entry is printed. */
+const PAGE_HEADER = /^(?:pages?|pgs?\.?)$/iu;
+
 function extractTables(
     ir: IR,
     out: EntityCollector,
@@ -396,8 +401,14 @@ function extractTables(
         // A captioned roll table is a RollTable, whatever items its rows also define.
         addRollTable(table, out);
         // A caption naming a creation step ("Random Home World", "Divinations")
-        // lists origins of that step.
+        // lists origins of that step — unless a page column makes it an index
+        // of origins described elsewhere, each read where it is printed.
         const originStep = originStepNamedBy(table.tableTitle ?? "", out.target.originSteps);
+        const index = table.headers.some((h) => PAGE_HEADER.test(h.trim()));
+        if (originStep !== null && index) {
+            unclassified += 1;
+            continue;
+        }
         if (originStep !== null) {
             const rows = table.rows
                 .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
@@ -1077,10 +1088,19 @@ function extractOriginPaths(
     heads: ReadonlyMap<number, readonly string[]>,
     out: EntityCollector,
 ): void {
-    for (const origin of [
+    const structured = [
         ...readOriginPaths(entries, out.target.originSteps, heads),
         ...readFieldedOrigins(entries, out.target.originSteps),
-    ]) {
+    ];
+    // A step the document lays out as rules blocks or a table is read from
+    // those; inline grant fields elsewhere in it (a sample, a summary of what
+    // an origin lists) are not origins of that step.
+    const read = new Set([
+        ...structured.map((o) => o.step.key),
+        ...out.entities.map((e) => /^(?:table:)?origin:(.+)$/u.exec(e.blockId)?.[1]),
+    ]);
+    const inline = readInlineOrigins(entries, out.target.originSteps).filter((o) => !read.has(o.step.key));
+    for (const origin of [...structured, ...inline]) {
         addOrigin(out, origin);
     }
 }
@@ -1091,17 +1111,22 @@ const BANDED_SHARE = 2 / 3;
 /** A cell opening with a number or band ("01–30", "1-2 Degrees …", "5+ …"): a result key. */
 const BAND_LEAD = /^\d+(?:\s*[-–]\s*\d+)?\+?(?!\d)(?:\s|$)/u;
 
+/** A cell closing on a signed test modifier ("Hard –20"): a difficulty key. */
+const MODIFIER_CLOSE = /\s[+\-–−]\d+$/u;
+
 /**
  * A table whose name column mostly opens with number bands keys results by a
- * roll or a margin ("1-2 Degrees of Success"); its rows are outcomes, not
- * catalogue items.
+ * roll or a margin ("1-2 Degrees of Success"), and one whose names close on a
+ * test modifier keys them by difficulty; its rows are outcomes, not catalogue
+ * items.
  */
 export function keyedByBands(table: DetectedTable, nameCol: number): boolean {
     const names = table.rows
         .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
         .map((r) => r.cells.find((c) => c.colIndex === nameCol)?.text.trim() ?? "")
         .filter((t) => t.length > 0);
-    return names.length > 0 && names.filter((t) => BAND_LEAD.test(t)).length >= BANDED_SHARE * names.length;
+    const keyed = names.filter((t) => BAND_LEAD.test(t) || MODIFIER_CLOSE.test(t));
+    return names.length > 0 && keyed.length >= BANDED_SHARE * names.length;
 }
 
 /** Pack segment roll tables are emitted into. */
@@ -1247,23 +1272,26 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
             fromHeading !== null && fromHeading.tier !== null && npc.system["tier"] === undefined
                 ? { ...npc.system, tier: fromHeading.tier }
                 : npc.system;
-        out.add(
-            "Actor",
-            ACTOR_SEGMENT,
-            buildActor({
-                name,
-                actorType: out.target.actorTypes.npc,
-                line: out.line,
-                book: out.book,
-                // Cited where its statblock is printed; its introduction may
-                // begin a page earlier.
-                page: out.page(grid.pageIndex),
-                description: intro === null ? "" : toHtml(intro.body),
-                system,
-            }),
-            grid.pageIndex,
-            "grid:npc",
-        );
+        const actor = buildActor({
+            name,
+            actorType: out.target.actorTypes.npc,
+            line: out.line,
+            book: out.book,
+            // Cited where its statblock is printed; its introduction may
+            // begin a page earlier.
+            page: out.page(grid.pageIndex),
+            description: intro === null ? "" : toHtml(intro.body),
+            system,
+        });
+        // Bare until `embedNpcItems` finds the document's own copy of each.
+        actor["items"] = npc.items.map(({ name: itemName, type, specialization }) => ({
+            name: cleanName(itemName),
+            type,
+            system: specialization === undefined ? {} : { specialization },
+            effects: [],
+            flags: {},
+        }));
+        out.add("Actor", ACTOR_SEGMENT, actor, grid.pageIndex, "grid:npc");
         // A statblock's named rules are traits of their own.
         for (const ability of npc.abilities) {
             out.add(
@@ -1284,6 +1312,61 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
         }
     }
     return grids.length;
+}
+
+/** The Item types a statblock's gear list may name: physical items other than weapons. */
+const GEAR_TYPES: ReadonlySet<string> = new Set(["armour", "gear", "ammunition", "forceField", "cybernetic"]);
+
+/** Whether an Item of `type` can be what a statblock lists as `listed`. */
+const listedAs = (listed: JsonValue | undefined, type: JsonValue | undefined): boolean =>
+    listed === "gear" ? typeof type === "string" && GEAR_TYPES.has(type) : listed === type;
+
+/**
+ * Resolve each NPC's listed Items against the document's own: a listed name
+ * whose full name, or name without its parenthetical, is an Item of its kind
+ * becomes a copy of that Item (the actor stands alone, whatever pack the Item
+ * is homologated into), keeping a talent's printed specialisation. A name the
+ * document defines nowhere stays a bare Item of its kind. Every embedded Item
+ * gets a content-derived id; an NPC carrying weapons as Items shows them so.
+ */
+export function embedNpcItems(entities: readonly Entity[]): void {
+    const items = entities.filter((e) => e.documentType === "Item");
+    const find = (key: string, listed: JsonValue | undefined): Entity | undefined =>
+        items.find((e) => listedAs(listed, e.fields["type"]) && nameKey(String(e.fields["name"])) === key);
+    for (const actor of entities) {
+        const embedded = actor.fields["items"];
+        if (actor.documentType !== "Actor" || !Array.isArray(embedded) || embedded.length === 0) {
+            continue;
+        }
+        const actorName = String(actor.fields["name"]);
+        const resolved = embedded.filter(isJsonObject).map((bare, i) => {
+            const printed = String(bare["name"]);
+            const exact = find(nameKey(printed), bare["type"]);
+            const own = exact ?? find(nameKey(listedBase(printed)), bare["type"]);
+            // The Item's own spelling where the whole name is its; a listed
+            // specialisation or rating stays as printed.
+            const name = exact === undefined ? printed : String(exact.fields["name"]);
+            const doc: JsonObject =
+                own === undefined
+                    ? { ...bare }
+                    : {
+                          ...structuredClone(own.fields),
+                          name,
+                          system: {
+                              ...(isJsonObject(own.fields["system"])
+                                  ? structuredClone(own.fields["system"])
+                                  : {}),
+                              ...(isJsonObject(bare["system"]) ? bare["system"] : {}),
+                          },
+                      };
+            doc["_id"] = id16(`${actorName}\x00${i}\x00${name}`);
+            return doc;
+        });
+        actor.fields["items"] = resolved;
+        if (resolved.some((d) => d["type"] === "weapon") && isJsonObject(actor.fields["system"])) {
+            actor.fields["system"]["weapons"] = { mode: "embedded", simple: [] };
+        }
+    }
 }
 
 function isJsonObject(v: JsonValue | undefined): v is JsonObject {
@@ -1443,6 +1526,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
     const entities = consolidate(out.entities, descriptions, line);
+    embedNpcItems(entities);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );

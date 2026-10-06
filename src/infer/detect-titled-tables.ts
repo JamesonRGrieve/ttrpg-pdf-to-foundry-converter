@@ -975,7 +975,21 @@ function headerColumns(header: RawRow, band: readonly IRTextRun[]): Set<number> 
             columns.add(r.column);
         }
     }
-    return columns;
+    // A header set inside one text column may head rows set across the page:
+    // a column whose lines below the header start cells under several of its
+    // labels holds the table's body.
+    const body = new Set<number>();
+    const labelEdges = header.runs.filter((r) => r.text.trim().length > 0).map((r) => r.x);
+    for (const column of new Set(band.map((r) => r.column))) {
+        const lines = groupIntoRows(band.filter((r) => r.column === column && r.y < header.y - Y_TOL));
+        const under = cellEdges(lines).filter((x) =>
+            labelEdges.some((edge) => Math.abs(edge - x) <= COLUMN_EDGE_TOLERANCE),
+        );
+        if (under.length >= MIN_COLUMNS) {
+            body.add(column);
+        }
+    }
+    return new Set([...columns, ...body]);
 }
 
 function inColumns(columns: ReadonlySet<number>): (r: IRTextRun) => boolean {

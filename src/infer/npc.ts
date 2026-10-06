@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject } from "../types/entity.ts";
 import { splitTier } from "./names.ts";
+import { splitTopLevel } from "./origin-paths.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 import { isVehicleLabel } from "./vehicle.ts";
 
@@ -43,11 +44,18 @@ type StatField =
     | "psyRating"
     | "fate";
 
+/** An Item a statblock lists, before it is resolved against the document's own Items. */
+export interface NpcItem {
+    name: string;
+    type: "talent" | "trait" | "weapon" | "gear";
+    specialization?: string;
+}
+
 export interface ParsedNpc {
     name: string;
     system: JsonObject;
-    /** Prose lists to resolve against extracted items (talents, traits, weapons, gear). */
-    lists: Partial<Record<"talents" | "traits" | "weapons" | "gear", string>>;
+    /** The talents, traits, weapons and gear the statblock lists. */
+    items: NpcItem[];
     /** Named rules printed in the statblock under their own bold label, with the page each is on. */
     abilities: { name: string; text: string; pageIndex: number }[];
     unparsed: string[];
@@ -144,6 +152,94 @@ export function rejoinSmallCaps(text: string): string {
     return text.replace(/\b(\p{Lu}) (?=\p{Lu}{2,}\b)/gu, "$1");
 }
 
+type HitLocation = "head" | "body" | "leftArm" | "rightArm" | "leftLeg" | "rightLeg";
+
+const HIT_LOCATIONS: readonly HitLocation[] = ["head", "body", "leftArm", "rightArm", "leftLeg", "rightLeg"];
+
+/** A printed location word → the hit locations it covers ("Arms" both, "Chest" the body). */
+const LOCATION_WORDS: readonly [RegExp, readonly HitLocation[]][] = [
+    [/^all(?:\s+locations)?$/iu, HIT_LOCATIONS],
+    [/^head$/iu, ["head"]],
+    [/^(?:body|chest)$/iu, ["body"]],
+    [/^arms?$/iu, ["leftArm", "rightArm"]],
+    [/^legs?$/iu, ["leftLeg", "rightLeg"]],
+    [/^left\s+arm$/iu, ["leftArm"]],
+    [/^right\s+arm$/iu, ["rightArm"]],
+    [/^left\s+leg$/iu, ["leftLeg"]],
+    [/^right\s+leg$/iu, ["rightLeg"]],
+];
+
+/** The tokens an armour line is read from: points, location words, and an exclusion. */
+const ARMOUR_TOKEN =
+    /(?<points>\d+)|\b(?<except>except|but)\b|\b(?<where>all(?:\s+locations)?|head|body|chest|(?:left\s+|right\s+)?(?:arms?|legs?))\b/giu;
+
+const locationsOf = (phrase: string): readonly HitLocation[] =>
+    LOCATION_WORDS.find(([re]) => re.test(phrase.trim().replace(/\s+/gu, " ")))?.[1] ?? [];
+
+/**
+ * A statblock's armour line → the schema's per-location armour. Points are
+ * printed before their locations ("4 All, 6 Head", "3 Body, Arms, Legs") or
+ * after them ("Head 8, Body 10", "Flak (All 3)"); whichever comes first sets
+ * the order for the line. A blanket value is applied before the locations
+ * printed apart from it, "except Head" leaves a location bare, a lone number
+ * covers every location, and "None" none. Whatever follows the line on the
+ * panel ("Total TB: 4") is no part of it. Null when the line gives no points
+ * at a hit location (a vehicle's facings).
+ */
+export function armourOf(text: string): JsonObject | null {
+    const line = text.replace(/\btotal\s+tb\b.*$/isu, "").trim();
+    const points: Record<HitLocation, number> = {
+        head: 0,
+        body: 0,
+        leftArm: 0,
+        rightArm: 0,
+        leftLeg: 0,
+        rightLeg: 0,
+    };
+    const tokens = [...line.matchAll(ARMOUR_TOKEN)].map((m) => m.groups ?? {});
+    const firstPoints = tokens.findIndex((t) => t["points"] !== undefined);
+    const firstWhere = tokens.findIndex((t) => t["where"] !== undefined);
+    const lone = /^\d+\W*$/u.exec(line);
+    if (lone !== null || (firstWhere < 0 && /^none\b/iu.test(line))) {
+        const value = lone === null ? 0 : Number.parseInt(line, 10);
+        const all = Object.fromEntries(HIT_LOCATIONS.map((loc) => [loc, value]));
+        return { mode: "locations", total: value, authored: true, locations: all };
+    }
+    if (firstPoints < 0 || firstWhere < 0) {
+        return null;
+    }
+    const pointsFirst = firstPoints < firstWhere;
+    const assigned: { locations: readonly HitLocation[]; value: number }[] = [];
+    const bare: HitLocation[] = [];
+    tokens.forEach((t, i) => {
+        const where = t["where"];
+        if (where === undefined) {
+            return;
+        }
+        if (tokens[i - 1]?.["except"] !== undefined) {
+            bare.push(...locationsOf(where));
+            return;
+        }
+        const near = pointsFirst
+            ? tokens.slice(0, i).findLast((p) => p["points"] !== undefined)
+            : tokens.slice(i + 1).find((p) => p["points"] !== undefined);
+        if (near?.["points"] !== undefined) {
+            assigned.push({ locations: locationsOf(where), value: Number(near["points"]) });
+        }
+    });
+    for (const { locations, value } of [...assigned].sort(
+        (a, b) => b.locations.length - a.locations.length,
+    )) {
+        for (const loc of locations) {
+            points[loc] = value;
+        }
+    }
+    for (const loc of bare) {
+        points[loc] = 0;
+    }
+    return { mode: "locations", total: points.body, authored: true, locations: points };
+}
+
 export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     const { name, tier } = splitTier(grid.name);
     const system: JsonObject = {};
@@ -212,20 +308,56 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     } else if (fields.movement !== undefined) {
         unparsed.push(`movement: ${fields.movement}`);
     }
-    // The printed armour and skills lines are kept verbatim as the statblock's
-    // citation (the schema's structured forms are resolved from them later).
+    // The printed skills line is kept verbatim (the system keys it into its
+    // trained skills); the armour line is read into the schema's locations.
     if (fields.armour !== undefined) {
-        system["armourPoints"] = fields.armour;
+        const armour = armourOf(fields.armour);
+        if (armour === null) {
+            unparsed.push(`armour: ${fields.armour}`);
+        } else {
+            system["armour"] = armour;
+        }
     }
     if (fields.skills !== undefined) {
         system["skills"] = fields.skills;
     }
 
-    const lists: ParsedNpc["lists"] = {};
-    for (const key of ["talents", "traits", "weapons", "gear"] as const) {
-        if (fields[key] !== undefined) {
-            lists[key] = fields[key];
-        }
-    }
-    return { name, system, lists, abilities: specialAbilities(grid.blocks), unparsed };
+    const items = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
+        listedItems(fields[key] ?? "", LIST_ITEM_TYPE[key]),
+    );
+    return { name, system, items, abilities: specialAbilities(grid.blocks), unparsed };
+}
+
+/** The Item type each statblock list names. */
+const LIST_ITEM_TYPE = { talents: "talent", traits: "trait", weapons: "weapon", gear: "gear" } as const;
+
+/** A parenthetical closing a listed name: a talent's specialisation, a weapon's profile. */
+const CLOSING_PARENTHETICAL = /^(?<base>[^(]+?)\s*\((?<inner>.*)\)\s*$/su;
+
+/** A list entry recording that the statblock has none of the kind. */
+const NO_ENTRY = /^\s*(?:none|n\/a|[-–—]+)\s*$/iu;
+
+/** A listed name without its closing parenthetical. */
+export function listedBase(name: string): string {
+    return CLOSING_PARENTHETICAL.exec(name)?.groups?.["base"]?.trim() ?? name.trim();
+}
+
+/**
+ * A statblock list as bare embedded Items of `type`, one per top-level entry.
+ * A talent keeps its parenthetical as its specialisation; a weapon's is its
+ * printed profile, no part of its name.
+ */
+export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
+    return splitTopLevel(text.replace(/\.\s*$/u, ""), /^[,;]\s*/u)
+        .filter((entry) => /\p{L}/u.test(entry) && !NO_ENTRY.test(entry))
+        .map((entry) => {
+            const inner = CLOSING_PARENTHETICAL.exec(entry)?.groups?.["inner"]?.trim() ?? "";
+            if (type === "weapon") {
+                // The name ends where its profile opens, however the line runs on.
+                return { name: /^[^(:]+/u.exec(entry)?.[0].trim() ?? entry, type };
+            }
+            return type === "talent" && inner.length > 0
+                ? { name: entry, type, specialization: inner }
+                : { name: entry, type };
+        });
 }

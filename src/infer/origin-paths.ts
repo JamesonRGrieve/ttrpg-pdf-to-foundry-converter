@@ -2,7 +2,7 @@
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import { type Entry, PARAGRAPH_BREAK } from "./detect-entries.ts";
 import { CHARACTERISTICS } from "./entry-types.ts";
-import { FUNCTION_WORDS, readsAsProse } from "./names.ts";
+import { FUNCTION_WORDS, readsAsProse, rejoinSplitWords, wordsOf } from "./names.ts";
 import type { OriginStepDef } from "./targets.ts";
 
 /**
@@ -61,7 +61,7 @@ const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
     [/\bbonus\b/iu, "bonus"],
     [/\bskills?\b/iu, "skills"],
     [/\btalents?\b/iu, "talents"],
-    [/\bequipment\b/iu, "equipment"],
+    [/\b(?:equipment|gear)\b/iu, "equipment"],
     [/\btraits?\b/iu, "traits"],
 ];
 
@@ -143,6 +143,32 @@ export function characteristicChanges(effect: string): Record<string, number> {
     return out;
 }
 
+/** Shortest characteristic name read after a signed value: full names, never abbreviations. */
+const MIN_SIGNED_NAME = 4;
+
+/**
+ * "+5 Fellowship, –3 Weapon Skill" → characteristic key → points. Signed
+ * values naming anything else ("+2 Wounds") are left out.
+ */
+export function signedCharacteristicChanges(text: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const m of text.matchAll(
+        /(?<sign>[+\-–−])\s*(?<points>\d+)\s+(?<first>\p{L}+)(?:\s+(?<second>\p{L}+))?/gu,
+    )) {
+        const first = m.groups?.["first"]?.toLowerCase() ?? "";
+        const both = `${first} ${m.groups?.["second"]?.toLowerCase() ?? ""}`;
+        const name = [both, first].find(
+            (n) => n.length >= MIN_SIGNED_NAME && CHARACTERISTICS[n] !== undefined,
+        );
+        const key = name === undefined ? undefined : CHARACTERISTICS[name];
+        if (key !== undefined) {
+            const sign = m.groups?.["sign"] === "+" ? 1 : -1;
+            out[key] = (out[key] ?? 0) + sign * Number(m.groups?.["points"] ?? "0");
+        }
+    }
+    return out;
+}
+
 /** Longest name set before a colon in an origin table's cell ("Feral World: …"). */
 const MAX_LEAD_NAME_LENGTH = 40;
 
@@ -192,7 +218,7 @@ export function readOriginTable(
             pageIndex,
             description: effect,
             grants: {},
-            modifiers: characteristicChanges(effect),
+            modifiers: { ...signedCharacteristicChanges(effect), ...characteristicChanges(effect) },
             effect,
             fromTable: true,
         });
@@ -290,7 +316,9 @@ function listGrants(
     // capitalised names) a fragment of running text.
     const named = (i: string): boolean =>
         type === "skill" || type === "talent" ? /^\s*[\p{Lu}\p{N}]/u.test(i) : /\p{L}/u.test(i);
-    for (const item of splitTopLevel(text, LIST_SEPARATOR).filter((i) => !readsAsProse(i) && named(i))) {
+    // The list may close its sentence: the full stop is not part of the last item.
+    const items = splitTopLevel(text.replace(/\.\s*$/u, ""), LIST_SEPARATOR);
+    for (const item of items.filter((i) => !readsAsProse(i) && named(i))) {
         const alternatives = splitTopLevel(item, ALTERNATIVE);
         const specialisation = specialisationChoice(item, type, label);
         if (alternatives.length > 1) {
@@ -448,9 +476,12 @@ function grantsOf(
                 break;
             }
             case "bonus": {
+                // A named ability ("Name: effect"), or a characteristic bonus ("… gain +5 Fellowship").
                 const ability = specialAbility(value);
                 if (ability !== null) {
                     specialAbilities.push(ability);
+                } else {
+                    modifiers = { ...modifiers, ...signedCharacteristicChanges(value) };
                 }
                 break;
             }
@@ -656,6 +687,112 @@ export function readFieldedOrigins(
             ...(required.length === 0
                 ? {}
                 : { requirements: required.map(([label, value]) => `${label}: ${value}`).join(" ") }),
+        });
+    });
+    return out;
+}
+
+/** Fewest kinds of grant an origin's inline fields carry. */
+const MIN_INLINE_GRANTS = 2;
+
+/**
+ * The step a heading's section names: the section itself ("Choose a …"), or
+ * the nearest earlier heading set like the section under the same parent —
+ * a step's own heading may stand beside the origins it introduces rather
+ * than above them.
+ */
+function stepOfSection(
+    entries: readonly Entry[],
+    index: number,
+    steps: readonly OriginStepDef[],
+): OriginStepDef | undefined {
+    const sections = entries[index]?.sections ?? [];
+    for (const section of [...sections].reverse()) {
+        const named = stepNamedIn(section, steps, true, true);
+        if (named !== undefined) {
+            return named;
+        }
+    }
+    const parentText = sections.at(-1);
+    const parent = entries
+        .slice(0, index)
+        .findLast((e) => e.heading.text === parentText && e.sections.length === sections.length - 1);
+    if (parent === undefined) {
+        return undefined;
+    }
+    const siblingOf = (e: Entry): boolean =>
+        e.heading.style === parent.heading.style &&
+        e.sections.length === parent.sections.length &&
+        e.sections.every((s, k) => s === parent.sections[k]);
+    for (const e of entries.slice(0, entries.indexOf(parent)).reverse()) {
+        if (e.sections.length < parent.sections.length) {
+            return undefined;
+        }
+        if (siblingOf(e)) {
+            const named = stepNamedIn(e.heading.text, steps, true, true);
+            if (named !== undefined) {
+                return named;
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Origins printed as a heading whose inline fields grant several kinds of
+ * thing ("…: <skills>", "…: <talents>", "…: <gear>") under a section naming a
+ * creation step, unpriced (a priced one is `readFieldedOrigins`'). The origin
+ * is named by the heading's words before those its field labels use ("<Name>
+ * Starting Abilities") or, when the heading is all label words ("Skills,
+ * Talents & Gear"), by the section it sits in; the section's prose describes
+ * it.
+ */
+export function readInlineOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const out: OriginPathReading[] = [];
+    entries.forEach((entry, i) => {
+        const kinds = new Set(
+            entry.fields
+                .map(([label, value]) => (value.trim().length > 0 ? labelField(label) : undefined))
+                .filter((f) => f !== undefined && !PROSE_FIELDS.has(f)),
+        );
+        if (kinds.has("xpCost") || kinds.size < MIN_INLINE_GRANTS) {
+            return;
+        }
+        const step = stepOfSection(entries, i, steps);
+        if (step === undefined) {
+            return;
+        }
+        const read = grantsOf(fieldEntries(entry), () => []);
+        if (!grantsAnything(read)) {
+            return;
+        }
+        const labelWords = new Set(entry.fields.flatMap(([label]) => label.split(/\s+/u).map(letters)));
+        const words = entry.heading.text.trim().split(/\s+/u);
+        const cut = words.findIndex(
+            (w) => letters(w).length > 0 && (labelWords.has(letters(w)) || labelField(w) !== undefined),
+        );
+        const own = words.slice(0, cut < 0 ? words.length : cut).join(" ");
+        const sectionText = entry.sections.at(-1);
+        const section = entries.slice(0, i).findLast((e) => e.heading.text === sectionText);
+        // A display heading the text layer split ("O perator") is rejoined by
+        // how the section's own text spells its words.
+        const under = entries.filter((e) => e.sections.at(-1) === sectionText);
+        const vocabulary = wordsOf(
+            [section?.body ?? "", ...under.map((e) => `${e.heading.text} ${e.body}`)].join(" "),
+        );
+        const name = rejoinSplitWords(own.length > 0 ? own : headingName(sectionText ?? ""), vocabulary);
+        if (letters(name).length === 0) {
+            return;
+        }
+        out.push({
+            name: capitalizeWords(name.toLowerCase()),
+            step,
+            pageIndex: entry.heading.pageIndex,
+            description: section?.body ?? entry.body,
+            ...read,
         });
     });
     return out;

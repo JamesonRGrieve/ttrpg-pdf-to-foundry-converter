@@ -45,10 +45,18 @@ import {
     titleCase,
     wordsOf,
 } from "../../src/infer/names.ts";
-import { parseNpc, rejoinSmallCaps, specialAbilities, splitFields } from "../../src/infer/npc.ts";
+import {
+    armourOf,
+    listedItems,
+    parseNpc,
+    rejoinSmallCaps,
+    specialAbilities,
+    splitFields,
+} from "../../src/infer/npc.ts";
 import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts";
 import {
     citeFirstPage,
+    embedNpcItems,
     fitModifications,
     givenNames,
     infer,
@@ -72,7 +80,7 @@ import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from 
 import { TARGETS } from "../../src/infer/targets.ts";
 import type { DetectedTable } from "../../src/infer/types.ts";
 import { createLogger } from "../../src/logger.ts";
-import type { Entity } from "../../src/types/entity.ts";
+import type { Entity, JsonObject, JsonValue } from "../../src/types/entity.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 import { inMarginBand, inSideMargin, measureMarginBands } from "../../src/util/page-bands.ts";
 
@@ -616,6 +624,89 @@ describe("npc statblocks", () => {
         expect(npc.system["wounds"]).toEqual({ max: 9, value: 9, critical: 0 });
         expect(npc.system["threatLevel"]).toBe(7);
         expect(npc.system["movement"]).toEqual({ half: 5, full: 10, charge: 15, run: 30 });
+    });
+
+    it("reads armour lines into hit locations", () => {
+        const at = (line: string) => {
+            const armour = armourOf(line);
+            const loc = armour === null ? null : Object(armour["locations"]);
+            return loc === null
+                ? null
+                : [loc.head, loc.body, loc.rightArm, loc.leftArm, loc.rightLeg, loc.leftLeg];
+        };
+        expect(at("Wick Coat (4 All) Total TB: 3")).toEqual([4, 4, 4, 4, 4, 4]);
+        expect(at("Robes (3 All except Head)")).toEqual([0, 3, 3, 3, 3, 3]);
+        expect(at("Lamp Plate (8 All, 10 Body)")).toEqual([8, 10, 8, 8, 8, 8]);
+        expect(at("6 Head, 4 All")).toEqual([6, 4, 4, 4, 4, 4]);
+        expect(at("Glow Vest (3 Chest)")).toEqual([0, 3, 0, 0, 0, 0]);
+        expect(at("Hides (Head 2, Right Arm 3, Left Arm 1, Body 4, Right Leg 2, Left Leg 2)")).toEqual([
+            2, 4, 3, 1, 2, 2,
+        ]);
+        expect(at("Reed Mail (2 Body, Arms, Legs)")).toEqual([0, 2, 2, 2, 2, 2]);
+        expect(at("None (All 5)")).toEqual([5, 5, 5, 5, 5, 5]);
+        expect(at("7")).toEqual([7, 7, 7, 7, 7, 7]);
+        expect(at("None Total TB: 3")).toEqual([0, 0, 0, 0, 0, 0]);
+        expect(at("Front 20, Side 18, Rear 12")).toBeNull();
+    });
+
+    it("lists a statblock's talents, traits, weapons and gear as bare items", () => {
+        expect(listedItems("Keen Eye, Hatred (Moths, Gnats), None.", "talent")).toEqual([
+            { name: "Keen Eye", type: "talent" },
+            { name: "Hatred (Moths, Gnats)", type: "talent", specialization: "Moths, Gnats" },
+        ]);
+        expect(
+            listedItems("Wick Lance (1d10+2 R; Pen 2), Lamp Staff: (1d5 I). Trailing prose.", "weapon"),
+        ).toEqual([
+            { name: "Wick Lance", type: "weapon" },
+            { name: "Lamp Staff", type: "weapon" },
+        ]);
+        expect(listedItems("Dim Sight (+2); lantern", "trait")).toEqual([
+            { name: "Dim Sight (+2)", type: "trait" },
+            { name: "lantern", type: "trait" },
+        ]);
+    });
+
+    it("embeds a statblock's items as copies of the document's own, else bare", () => {
+        const entity = (documentType: "Item" | "Actor", fields: Record<string, JsonValue>): Entity => ({
+            blockId: "b",
+            documentType,
+            group: "dh2",
+            pack: "p",
+            ordinal: 0,
+            fields,
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const talent = entity("Item", {
+            name: "Hatred",
+            type: "talent",
+            system: { tier: 1, specialization: "" },
+        });
+        const coat = entity("Item", { name: "Wick Coat", type: "armour", system: { maxAgility: 40 } });
+        const lance = entity("Item", { name: "Wick Lance", type: "gear", system: {} });
+        const actor = entity("Actor", {
+            name: "Lamp Warden",
+            type: "npc",
+            system: {},
+            items: [
+                { name: "Hatred (Moths)", type: "talent", system: { specialization: "Moths" } },
+                { name: "Wick Coat", type: "gear", system: {} },
+                { name: "Wick Lance", type: "weapon", system: {} },
+            ],
+        });
+        embedNpcItems([talent, coat, lance, actor]);
+        const embedded = actor.fields["items"];
+        const items = (Array.isArray(embedded) ? embedded : []).filter(
+            (i): i is JsonObject => typeof i === "object" && i !== null && !Array.isArray(i),
+        );
+        expect(items.map((i) => [i["name"], i["type"], i["system"]])).toEqual([
+            ["Hatred (Moths)", "talent", { tier: 1, specialization: "Moths" }],
+            ["Wick Coat", "armour", { maxAgility: 40 }],
+            // A gear item is no weapon: the listed weapon stays bare.
+            ["Wick Lance", "weapon", {}],
+        ]);
+        expect(items.every((i) => typeof i["_id"] === "string" && String(i["_id"]).length === 16)).toBe(true);
+        expect(Object(actor.fields["system"])["weapons"]).toEqual({ mode: "embedded", simple: [] });
     });
 
     it("reads printed fate points", () => {
@@ -1178,6 +1269,11 @@ describe("result tables", () => {
         ).toBe(true);
         expect(keyedByBands(tableOf(["Glow Lamp", "Hush Lamp", "10-Wick Lamp"]), 0)).toBe(false);
     });
+
+    it("reads a table keyed by test modifiers as results, not items", () => {
+        expect(keyedByBands(tableOf(["Dim +20", "Murky –10", "Pitch Black -30"]), 0)).toBe(true);
+        expect(keyedByBands(tableOf(["Lamp-30", "Glow Lamp", "Hush Lamp"]), 0)).toBe(false);
+    });
 });
 
 describe("table continuations", () => {
@@ -1664,6 +1760,90 @@ describe("entry detection", () => {
         const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
         expect(entry?.fields).toEqual([["Mass", "6 lamps approx."]]);
         expect(entry?.body).toContain("Some of the old lamps: burn");
+    });
+
+    it("continues a field set in a panel narrower than its column", () => {
+        // Full lines of the panel end 20pt short of the column's measure.
+        const panel = (text: string, y: number): IRTextRun => ({ ...run(text, y, "b", 10), width: 320 });
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                run("WARD GRANTS", 440, "h2", 12),
+                ...[0, 1, 2].map((i) =>
+                    panel("Every warden of the dim begins play with these.", 420 - 12 * i),
+                ),
+                { ...run("Grants:", 384, "b", 10), weight: "bold" },
+                { ...run("Glow Lore, Wick Lore, Lantern", 384, "b", 10), x: 100, width: 280 },
+                panel("Lore (Reeds), Hush.", 372),
+                run(body, 360, "b", 10),
+                run(body, 348, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "WARD GRANTS");
+        expect(entry?.fields).toEqual([["Grants", "Glow Lore, Wick Lore, Lantern Lore (Reeds), Hush."]]);
+    });
+
+    it("reads a label the document sets in bold as a field where its line lost the weight", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                run(body, 700, "b", 10),
+                { ...run("Grants:", 688, "b", 10), weight: "bold" },
+                { ...run("Glow Lore.", 688, "b", 10), x: 100 },
+                run("WICK WARD", 660, "h", 14),
+                run(body, 640, "b", 10),
+                run("Grants: Wick Lore.", 628, "b", 10),
+                run("Unbolded: a sentence, not a field.", 616, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "WICK WARD");
+        expect(entry?.fields).toEqual([["Grants", "Wick Lore."]]);
+        expect(entry?.body).toContain("Unbolded: a sentence");
+    });
+
+    it("reads origins from a captioned step table, but none from an index of them", () => {
+        const cell = (
+            text: string,
+            x: number,
+            y: number,
+            weight: "bold" | "normal" = "normal",
+        ): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: text.length * 5,
+            font: weight === "bold" ? "h" : "b",
+            weight,
+            size: 10,
+        });
+        const table = (headers: string[], extra: (y: number) => IRTextRun[]): IR =>
+            irOf(
+                [0],
+                [
+                    run(body, 760, "b", 10),
+                    cell("Table 2-1: Divinations", 60, 720, "bold"),
+                    ...headers.map((h, i) => cell(h, [60, 200, 460][i] ?? 0, 700, "bold")),
+                    ...[
+                        "The reeds remember.",
+                        "Silence is a lantern.",
+                        "Every wick ends.",
+                        "Dark is a door.",
+                        "Glow outlasts.",
+                    ].flatMap((name, i) => [
+                        cell(name, 60, 680 - 20 * i),
+                        cell("Gain the Hush talent.", 200, 680 - 20 * i),
+                        ...extra(680 - 20 * i),
+                    ]),
+                ],
+            );
+        const origins = (ir: IR): string[] =>
+            infer(ir, createLogger("error"), TARGETS.dh2)
+                .graph.entities.filter((e) => String(e.pack).includes("origins"))
+                .map((e) => String(e.fields["name"]));
+        expect(origins(table(["Divination", "Effect"], () => []))).toHaveLength(5);
+        expect(origins(table(["Divination", "Effect", "Page"], (y) => [cell("44", 460, y)]))).toEqual([]);
     });
 
     it("reads no heading or body from a table's lines", () => {

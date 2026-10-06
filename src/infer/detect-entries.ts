@@ -36,6 +36,14 @@ const WRAP_SLACK = 12;
 // text measure, so the edge is where most full lines end, not the furthest.
 /** A column's right edge: the right end reached by this fraction of its lines. */
 const EDGE_PERCENTILE = 0.9;
+/** Lines either side of a line whose right ends give its block's measure. */
+const WRAP_WINDOW = 3;
+/** Right ends within this many points of each other are one justified measure. */
+const JUSTIFIED_TOLERANCE = 1;
+/** Neighbours ending with a line that make it a full line of a justified block. */
+const MIN_JUSTIFIED_NEIGHBOURS = 2;
+/** Least share of its column's width a panel's measure spans. */
+const PANEL_MEASURE_SHARE = 0.85;
 /** Size step (points) that separates two heading levels. */
 const LEVEL_STEP = 0.4;
 /** A gap inside a line wider than this many font-sizes separates table columns, not words. */
@@ -491,7 +499,7 @@ const MAX_ITALIC_LABEL_WORDS = 2;
  * A `Label: value` line: its label is the lead set apart from the text — in
  * bold, or in italics as a short capitalised label ("Mass: 6 megatonnes").
  */
-function fieldOf(line: TextLine): [string, string] | null {
+function fieldOf(line: TextLine, boldLabels: ReadonlySet<string>): [string, string] | null {
     const runs = visibleRuns(line);
     const first = runs[0];
     if (first === undefined) {
@@ -502,6 +510,11 @@ function fieldOf(line: TextLine): [string, string] | null {
     const value = m?.groups?.["value"]?.trim();
     if (label === undefined || value === undefined) {
         return null;
+    }
+    // A line whose weights were lost (read from the page image) still opens
+    // with a label the document sets in bold elsewhere.
+    if (first.weight !== "bold" && boldLabels.has(label) && value.length > 0) {
+        return [label, value];
     }
     if (first.weight !== "bold") {
         const roman = runs.findIndex((r) => !r.italic);
@@ -598,8 +611,42 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             ([key, rights]) => [key, percentile(rights.sort(numAsc), EDGE_PERCENTILE)] as const,
         ),
     );
+    const columnLefts = new Map<string, number[]>();
+    for (const l of lines) {
+        const key = `${l.pageIndex}:${l.column}`;
+        columnLefts.set(key, [...(columnLefts.get(key) ?? []), visibleRuns(l)[0]?.x ?? l.right]);
+    }
+    const columnLeft = new Map(
+        [...columnLefts].map(
+            ([key, lefts]) => [key, percentile(lefts.sort(numAsc), 1 - EDGE_PERCENTILE)] as const,
+        ),
+    );
+    // A panel inset within a column sets its lines to a narrower measure:
+    // there a line is full when neighbours of its own end where it does
+    // (justified lines end together) at nearly the column's width — not a
+    // few short lines that happen to end alike.
+    const justified = new Set<TextLine>();
+    lines.forEach((l, i) => {
+        const key = `${l.pageIndex}:${l.column}`;
+        const left = columnLeft.get(key) ?? 0;
+        if (l.right - left < PANEL_MEASURE_SHARE * ((columnRight.get(key) ?? 0) - left)) {
+            return;
+        }
+        const together = lines
+            .slice(Math.max(0, i - WRAP_WINDOW), i + WRAP_WINDOW + 1)
+            .filter(
+                (n) =>
+                    n !== l &&
+                    n.pageIndex === l.pageIndex &&
+                    n.column === l.column &&
+                    Math.abs(n.right - l.right) <= JUSTIFIED_TOLERANCE,
+            );
+        if (together.length >= MIN_JUSTIFIED_NEIGHBOURS) {
+            justified.add(l);
+        }
+    });
     const wrapped = (l: TextLine): boolean =>
-        l.right >= (columnRight.get(`${l.pageIndex}:${l.column}`) ?? 0) - WRAP_SLACK;
+        justified.has(l) || l.right >= (columnRight.get(`${l.pageIndex}:${l.column}`) ?? 0) - WRAP_SLACK;
     /** A field value runs on when its line wraps before the value ends a sentence, or it ends mid-list. */
     const continues = (l: TextLine, value: string): boolean =>
         (wrapped(l) && !endsSentence(value)) || valueUnfinished(value);
@@ -633,6 +680,13 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         return lastBody.y - line.y > PARAGRAPH_GAP_FACTOR * size;
     };
 
+    const noLabels = new Set<string>();
+    const boldLabels = new Set(
+        lines
+            .filter((l) => visibleRuns(l)[0]?.weight === "bold")
+            .map((l) => fieldOf(l, noLabels)?.[0])
+            .filter((label) => label !== undefined),
+    );
     const captions = captionLines(lines);
     let previous: TextLine | null = null;
     for (const line of lines) {
@@ -674,7 +728,7 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             continue;
         }
         const entry: Entry = current;
-        const field = fieldOf(line);
+        const field = fieldOf(line, boldLabels);
         if (field !== null) {
             entry.fields.push(field);
             lastFieldWrapped = continues(line, field[1]);
