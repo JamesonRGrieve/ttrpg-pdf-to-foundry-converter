@@ -4,13 +4,20 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>PDF to Compendium</title>
+        <title>PDF to Compendium %RELEASE%</title>
         <link rel="stylesheet" href="./style.css" />
         <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     </head>
     <body>
         <main>
             <h1>PDF to Compendium</h1>
+            <p class="meta">
+                Release %RELEASE% (UTC) ·
+                <a href="https://github.com/JamesonRGrieve/ttrpg-pdf-to-foundry-converter">Source code</a> ·
+                <a href="https://github.com/JamesonRGrieve/ttrpg-pdf-to-foundry-converter/blob/main/LICENSE"
+                    >License (GNU AGPL-3.0)</a
+                >
+            </p>
             <p class="lede">
                 Converts PDFs into a Foundry VTT module of compendium packs for the dnd5e system (5th edition
                 character options, 2014 or 2024 rules) or the wh40k-rpg system. Everything runs in this
@@ -106,7 +113,6 @@
             <p>
                 Free software under the
                 <a href="https://github.com/JamesonRGrieve/ttrpg-pdf-to-foundry-converter">GNU AGPL-3.0</a>.
-                Release <span id="release"></span> (UTC).
             </p>
         </footer>
         <script type="module" src="./main.ts"></script>

@@ -2,10 +2,17 @@
 import { defineConfig, type Plugin } from "vite";
 import { RELEASE } from "./src/version.ts";
 
-/** Publishes the converter's release beside the page, where converted modules look for newer ones. */
+/**
+ * The converter's release on the page (its title and header, `%RELEASE%` in
+ * index.html) and beside it as release.json, where converted modules look
+ * for newer ones.
+ */
 function releaseFeed(): Plugin {
     return {
         name: "release-feed",
+        transformIndexHtml(html) {
+            return html.replaceAll("%RELEASE%", RELEASE);
+        },
         generateBundle() {
             this.emitFile({
                 type: "asset",

@@ -72,11 +72,13 @@ describe("module packaging", () => {
     it("versions the module by the converter release, on the manifest and every pack", () => {
         const module = buildModule(input());
         const manifest = JSON.parse(text(module.files[1]?.contents ?? "")) as {
+            title: string;
             version: string;
             esmodules: string[];
             packs: { flags: Record<string, { release: string }> }[];
         };
         expect(manifest.version).toBe("2000-01-02-03-04");
+        expect(manifest.title).toBe("PDF Compendium: lamps (2000-01-02-03-04)");
         expect(manifest.packs.map((p) => p.flags["foundry-pdf-parser"]?.release)).toEqual([
             "2000-01-02-03-04",
             "2000-01-02-03-04",

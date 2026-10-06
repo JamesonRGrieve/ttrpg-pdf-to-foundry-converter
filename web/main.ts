@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { DEFAULT_TARGET, TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
-import { RELEASE } from "../src/version.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
 import { estimateMemoryMb, looksOutOfMemory, planResources } from "./resources.ts";
 
@@ -51,7 +50,6 @@ const memoryBudget = (): number | null => (memory.value === "" ? null : Number(m
 
 const estimate = element("estimate", HTMLParagraphElement);
 const outOfMemory = element("oom", HTMLParagraphElement);
-element("release", HTMLSpanElement).textContent = RELEASE;
 
 const MB_PER_GB = 1024;
 

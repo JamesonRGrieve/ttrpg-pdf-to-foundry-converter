@@ -141,7 +141,7 @@ export function buildModule(input: ModuleInput): BuiltModule {
 
     const manifest = {
         id,
-        title: `PDF Compendium: ${sources.join(", ")}`,
+        title: `PDF Compendium: ${sources.join(", ")} (${input.provenance.release})`,
         description: `Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the ${input.system} system.`,
         version: input.provenance.release,
         compatibility: COMPATIBILITY[input.system],
