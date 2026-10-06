@@ -21,8 +21,8 @@
             <p class="lede">
                 Converts PDFs into a Foundry VTT module of compendium packs for the dnd5e system (5th edition
                 character options, 2014 or 2024 rules) or the wh40k-rpg system. Everything runs in this
-                browser tab: the files are never uploaded anywhere. Unzip the module into Foundry's
-                <code>Data/modules</code> folder; several can be installed side by side.
+                browser tab: the files are never uploaded anywhere. Install the module as described in
+                <a href="#install-heading">Install in Foundry</a>; several can be installed side by side.
             </p>
 
             <section aria-labelledby="choose-heading">
@@ -89,6 +89,45 @@
                     <tbody></tbody>
                 </table>
                 <a id="download" class="button" hidden download="module.zip">Download module (.zip)</a>
+            </section>
+
+            <section aria-labelledby="install-heading">
+                <h2 id="install-heading">4. Install in Foundry</h2>
+                <ol class="steps">
+                    <li>
+                        Install the game system the module is for, if you have not:
+                        <strong>dnd5e</strong> (Foundry v14 or later) or <strong>wh40k-rpg</strong> (Foundry
+                        v13 or later). The module only appears in worlds that use that system.
+                    </li>
+                    <li>
+                        Unzip the downloaded file. It holds one folder, named like
+                        <code>pdf-compendium-1a2b3c4d5e6f</code>.
+                    </li>
+                    <li>
+                        Put that folder in the <code>Data/modules</code> folder of your Foundry user data. On
+                        Foundry's setup screen, the <em>Configuration</em> tab shows where your user data is.
+                        On a hosted server, upload the folder into <code>Data/modules</code> with your host's
+                        file manager.
+                    </li>
+                    <li>
+                        Restart Foundry, or go back to its setup screen. The module is listed under
+                        <em>Add-on Modules</em> as “PDF Compendium: …” with the converter release in its name.
+                    </li>
+                    <li>
+                        Launch your world, open <em>Game Settings → Manage Modules</em>, tick the module and
+                        save.
+                    </li>
+                    <li>
+                        The packs are in the <em>Compendium Packs</em> sidebar tab, in a folder named “PDF
+                        Compendium …”.
+                    </li>
+                </ol>
+                <p>
+                    Each conversion is its own module, so converting again (after a new converter release,
+                    say) gives a new folder beside the old one. Disable or delete the old module so the packs
+                    are not listed twice. When a newer converter release is out, Foundry tells the GM once
+                    when the world loads.
+                </p>
             </section>
         </main>
         <footer class="notice" aria-labelledby="notice-heading">

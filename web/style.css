@@ -48,6 +48,10 @@ main {
     font-size: 0.875rem;
 }
 
+.steps li {
+    margin: 0.4rem 0;
+}
+
 .lede {
     color: var(--muted);
 }
