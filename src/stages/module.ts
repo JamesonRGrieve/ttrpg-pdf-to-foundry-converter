@@ -59,6 +59,8 @@ export interface PackInput {
 export interface ModuleInput {
     /** The game system every pack belongs to. */
     system: SystemId;
+    /** The target ids the run wrote for, in the system's order; they name the module. */
+    targets: readonly string[];
     packs: readonly PackInput[];
     /** Image files, by file name under `assets/`. */
     assets: readonly { relPath: string; bytes: Uint8Array }[];
@@ -122,13 +124,22 @@ function mergePacks(packs: readonly PackInput[]): PackInput[] {
         .sort((a, b) => byteCompare(a.name, b.name));
 }
 
-/** The module id: a hash of what it contains (pack names, document ids, asset names). */
-export function moduleId(packs: readonly PackInput[], assets: readonly { relPath: string }[]): string {
+/**
+ * The module id: the targets it was written for (`dh2`, `dnd5e-2024`, …), so
+ * the folder says what it holds, then a hash of what it contains (pack names,
+ * document ids, asset names).
+ */
+export function moduleId(
+    targets: readonly string[],
+    packs: readonly PackInput[],
+    assets: readonly { relPath: string }[],
+): string {
     const manifest = [
         ...packs.flatMap((p) => p.documents.map((d) => `${p.name}/${String(d["_id"])}`)),
         ...assets.map((a) => `asset/${a.relPath}`),
     ].sort(byteCompare);
-    return `pdf-compendium-${sha256Hex(manifest.join("\n")).slice(0, MODULE_ID_HASH_LENGTH)}`;
+    const hash = sha256Hex(manifest.join("\n")).slice(0, MODULE_ID_HASH_LENGTH);
+    return ["pdf-compendium", ...targets, hash].join("-");
 }
 
 export function buildModule(input: ModuleInput): BuiltModule {
@@ -136,7 +147,7 @@ export function buildModule(input: ModuleInput): BuiltModule {
     const assets = [...new Map(input.assets.map((a) => [a.relPath, a] as const)).values()].sort((a, b) =>
         byteCompare(a.relPath, b.relPath),
     );
-    const id = moduleId(packs, assets);
+    const id = moduleId(input.targets, packs, assets);
     const sources = [...new Set(input.sources)].sort(byteCompare);
 
     const manifest = {

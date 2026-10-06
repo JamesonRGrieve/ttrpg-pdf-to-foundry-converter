@@ -874,6 +874,7 @@ describe("dnd5e documents", () => {
         expect(emitted.warnings).toEqual([]);
         const built = buildModule({
             system: "dnd5e",
+            targets: ["dnd5e-2024"],
             packs: packs.map((p) => ({
                 name: p.pack,
                 label: p.pack,

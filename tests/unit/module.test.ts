@@ -17,6 +17,7 @@ const doc = (id: string, name: string, img?: string) => ({
 function input(over: Partial<ModuleInput> = {}): ModuleInput {
     return {
         system: SYSTEM_ID,
+        targets: ["dh2"],
         packs: [
             {
                 name: "dh2-lamps-items-gear",
@@ -47,7 +48,7 @@ const text = (contents: string | Uint8Array): string =>
 describe("module packaging", () => {
     it("writes a manifest exposing each pack to the system, NeDB packs and the assets", () => {
         const module = buildModule(input());
-        expect(module.id).toMatch(/^pdf-compendium-[0-9a-f]{12}$/);
+        expect(module.id).toMatch(/^pdf-compendium-dh2-[0-9a-f]{12}$/);
         expect(module.files.map((f) => f.relPath)).toEqual([
             `${module.id}/assets/x1.png`,
             `${module.id}/module.json`,
@@ -123,5 +124,14 @@ describe("module packaging", () => {
     it("gives distinct content distinct module ids, so modules install side by side", () => {
         const other = input({ assets: [{ relPath: "x2.png", bytes: new Uint8Array([9]) }] });
         expect(buildModule(other).id).not.toBe(buildModule(input()).id);
+    });
+
+    it("names the module by its targets, several joined in order", () => {
+        expect(buildModule(input({ targets: ["dh2", "rt"] })).id).toMatch(
+            /^pdf-compendium-dh2-rt-[0-9a-f]{12}$/,
+        );
+        expect(buildModule(input({ targets: ["dnd5e-2024"] })).id).toMatch(
+            /^pdf-compendium-dnd5e-2024-[0-9a-f]{12}$/,
+        );
     });
 });

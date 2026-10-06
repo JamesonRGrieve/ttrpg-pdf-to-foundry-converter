@@ -1,9 +1,9 @@
 {
     "compatibility": {
-        "minimum": "14",
+        "minimum": "13",
         "verified": "14"
     },
-    "description": "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the dnd5e system.",
+    "description": "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the wh40k-rpg system.",
     "esmodules": [
         "scripts/update-check.js"
     ],
@@ -15,20 +15,20 @@
             "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
             "release": "2026-10-06-18-30",
             "renderer": "mupdf@1.28.1/300dpi/gray",
-            "target": "dnd5e-2024"
+            "target": "dh2"
         }
     },
-    "id": "pdf-compendium-9693b63f4298",
+    "id": "pdf-compendium-dh2-47f4e0dc1199",
     "packFolders": [
         {
-            "name": "PDF Compendium 9693b63f4298",
+            "name": "PDF Compendium 47f4e0dc1199",
             "packs": [
-                "dnd5e-2024-tinker-compendium-backgrounds",
-                "dnd5e-2024-tinker-compendium-class-features",
-                "dnd5e-2024-tinker-compendium-classes",
-                "dnd5e-2024-tinker-compendium-feats",
-                "dnd5e-2024-tinker-compendium-species",
-                "dnd5e-2024-tinker-compendium-subclasses"
+                "dh2-wayfarers-field-manual-actors-bestiary",
+                "dh2-wayfarers-field-manual-items-armour",
+                "dh2-wayfarers-field-manual-items-mutations",
+                "dh2-wayfarers-field-manual-items-talents",
+                "dh2-wayfarers-field-manual-items-weapons",
+                "dh2-wayfarers-field-manual-rolltables"
             ]
         }
     ],
@@ -39,14 +39,30 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Tinker Compendium Backgrounds",
-            "name": "dnd5e-2024-tinker-compendium-backgrounds",
+            "label": "Wayfarers Field Manual Actors Bestiary",
+            "name": "dh2-wayfarers-field-manual-actors-bestiary",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dnd5e-2024-tinker-compendium-backgrounds",
-            "system": "dnd5e",
+            "path": "packs/dh2-wayfarers-field-manual-actors-bestiary",
+            "system": "wh40k-rpg",
+            "type": "Actor"
+        },
+        {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
+            "label": "Wayfarers Field Manual Items Armour",
+            "name": "dh2-wayfarers-field-manual-items-armour",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dh2-wayfarers-field-manual-items-armour",
+            "system": "wh40k-rpg",
             "type": "Item"
         },
         {
@@ -55,14 +71,14 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Tinker Compendium Class Features",
-            "name": "dnd5e-2024-tinker-compendium-class-features",
+            "label": "Wayfarers Field Manual Items Mutations",
+            "name": "dh2-wayfarers-field-manual-items-mutations",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dnd5e-2024-tinker-compendium-class-features",
-            "system": "dnd5e",
+            "path": "packs/dh2-wayfarers-field-manual-items-mutations",
+            "system": "wh40k-rpg",
             "type": "Item"
         },
         {
@@ -71,14 +87,14 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Tinker Compendium Classes",
-            "name": "dnd5e-2024-tinker-compendium-classes",
+            "label": "Wayfarers Field Manual Items Talents",
+            "name": "dh2-wayfarers-field-manual-items-talents",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dnd5e-2024-tinker-compendium-classes",
-            "system": "dnd5e",
+            "path": "packs/dh2-wayfarers-field-manual-items-talents",
+            "system": "wh40k-rpg",
             "type": "Item"
         },
         {
@@ -87,14 +103,14 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Tinker Compendium Feats",
-            "name": "dnd5e-2024-tinker-compendium-feats",
+            "label": "Wayfarers Field Manual Items Weapons",
+            "name": "dh2-wayfarers-field-manual-items-weapons",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dnd5e-2024-tinker-compendium-feats",
-            "system": "dnd5e",
+            "path": "packs/dh2-wayfarers-field-manual-items-weapons",
+            "system": "wh40k-rpg",
             "type": "Item"
         },
         {
@@ -103,41 +119,25 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Tinker Compendium Species",
-            "name": "dnd5e-2024-tinker-compendium-species",
+            "label": "Wayfarers Field Manual Rolltables",
+            "name": "dh2-wayfarers-field-manual-rolltables",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dnd5e-2024-tinker-compendium-species",
-            "system": "dnd5e",
-            "type": "Item"
-        },
-        {
-            "flags": {
-                "foundry-pdf-parser": {
-                    "release": "2026-10-06-18-30"
-                }
-            },
-            "label": "Tinker Compendium Subclasses",
-            "name": "dnd5e-2024-tinker-compendium-subclasses",
-            "ownership": {
-                "ASSISTANT": "OWNER",
-                "PLAYER": "OBSERVER"
-            },
-            "path": "packs/dnd5e-2024-tinker-compendium-subclasses",
-            "system": "dnd5e",
-            "type": "Item"
+            "path": "packs/dh2-wayfarers-field-manual-rolltables",
+            "system": "wh40k-rpg",
+            "type": "RollTable"
         }
     ],
     "relationships": {
         "systems": [
             {
-                "id": "dnd5e",
+                "id": "wh40k-rpg",
                 "type": "system"
             }
         ]
     },
-    "title": "PDF Compendium: tinker-compendium (2026-10-06-18-30)",
+    "title": "PDF Compendium: wayfarers-field-manual (2026-10-06-18-30)",
     "version": "2026-10-06-18-30"
 }

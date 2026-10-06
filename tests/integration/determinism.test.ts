@@ -113,7 +113,7 @@ describe("image recovery (Tier A)", () => {
         // 5 XObjects (RGB reused across 2 pages, JPEG, RGBA, CMYK) → 4 unique assets.
         expect(assetKeys).toHaveLength(4);
         for (const key of assetKeys) {
-            expect(key).toMatch(/^pdf-compendium-[0-9a-f]{12}\/assets\/[A-Za-z0-9]{16}\.(png|jpg|jpx)$/);
+            expect(key).toMatch(/^pdf-compendium-dh2-[0-9a-f]{12}\/assets\/[A-Za-z0-9]{16}\.(png|jpg|jpx)$/);
         }
     });
 });

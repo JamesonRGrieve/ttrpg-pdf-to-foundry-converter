@@ -242,8 +242,11 @@ export async function runModule(
             ? homologate(wh40k).map(({ line, packs }) => ({ group: line, packs }))
             : results.map((r) => ({ group: targetId(r.target), packs: r.packs }));
     const ids = new Set(results.map((r) => targetId(r.target)));
+    // The run's targets in the system's order: they name the module and read in its flags.
+    const targets = TARGET_IDS.filter((id) => ids.has(id));
     const module = buildModule({
         system,
+        targets,
         packs: grouped.flatMap(({ group, packs }) =>
             packs.map((p) => ({
                 name: p.pack,
@@ -261,8 +264,7 @@ export async function runModule(
             extractor: EXTRACTOR_ID,
             renderer: RENDERER_ID,
             ocr: `${opts.ocr.id}|${opts.scanReader.id}`,
-            // One target reads as its id; several list in the system's order.
-            target: TARGET_IDS.filter((id) => ids.has(id)).join(","),
+            target: targets.join(","),
         },
     });
     return { module, refused, warnings };

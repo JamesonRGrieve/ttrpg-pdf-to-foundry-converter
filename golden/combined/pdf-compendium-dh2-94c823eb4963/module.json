@@ -18,17 +18,17 @@
             "target": "dh2"
         }
     },
-    "id": "pdf-compendium-b3df1b8457ba",
+    "id": "pdf-compendium-dh2-94c823eb4963",
     "packFolders": [
         {
-            "name": "PDF Compendium b3df1b8457ba",
+            "name": "PDF Compendium 94c823eb4963",
             "packs": [
-                "dh2-table-1-l-wayfarer-weapons-actors-bestiary",
-                "dh2-table-1-l-wayfarer-weapons-items-armour",
-                "dh2-table-1-l-wayfarer-weapons-items-mutations",
-                "dh2-table-1-l-wayfarer-weapons-items-talents",
-                "dh2-table-1-l-wayfarer-weapons-items-weapons",
-                "dh2-table-1-l-wayfarer-weapons-rolltables"
+                "dh2-wayfarers-field-manual-actors-bestiary",
+                "dh2-wayfarers-field-manual-items-armour",
+                "dh2-wayfarers-field-manual-items-mutations",
+                "dh2-wayfarers-field-manual-items-talents",
+                "dh2-wayfarers-field-manual-items-weapons",
+                "dh2-wayfarers-field-manual-rolltables"
             ]
         }
     ],
@@ -39,13 +39,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Actors Bestiary",
-            "name": "dh2-table-1-l-wayfarer-weapons-actors-bestiary",
+            "label": "Wayfarers Field Manual Actors Bestiary",
+            "name": "dh2-wayfarers-field-manual-actors-bestiary",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-actors-bestiary",
+            "path": "packs/dh2-wayfarers-field-manual-actors-bestiary",
             "system": "wh40k-rpg",
             "type": "Actor"
         },
@@ -55,13 +55,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Armour",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-armour",
+            "label": "Wayfarers Field Manual Items Armour",
+            "name": "dh2-wayfarers-field-manual-items-armour",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-armour",
+            "path": "packs/dh2-wayfarers-field-manual-items-armour",
             "system": "wh40k-rpg",
             "type": "Item"
         },
@@ -71,13 +71,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Mutations",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-mutations",
+            "label": "Wayfarers Field Manual Items Mutations",
+            "name": "dh2-wayfarers-field-manual-items-mutations",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-mutations",
+            "path": "packs/dh2-wayfarers-field-manual-items-mutations",
             "system": "wh40k-rpg",
             "type": "Item"
         },
@@ -87,13 +87,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Talents",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-talents",
+            "label": "Wayfarers Field Manual Items Talents",
+            "name": "dh2-wayfarers-field-manual-items-talents",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-talents",
+            "path": "packs/dh2-wayfarers-field-manual-items-talents",
             "system": "wh40k-rpg",
             "type": "Item"
         },
@@ -103,13 +103,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Weapons",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-weapons",
+            "label": "Wayfarers Field Manual Items Weapons",
+            "name": "dh2-wayfarers-field-manual-items-weapons",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-weapons",
+            "path": "packs/dh2-wayfarers-field-manual-items-weapons",
             "system": "wh40k-rpg",
             "type": "Item"
         },
@@ -119,13 +119,13 @@
                     "release": "2026-10-06-18-30"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Rolltables",
-            "name": "dh2-table-1-l-wayfarer-weapons-rolltables",
+            "label": "Wayfarers Field Manual Rolltables",
+            "name": "dh2-wayfarers-field-manual-rolltables",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-rolltables",
+            "path": "packs/dh2-wayfarers-field-manual-rolltables",
             "system": "wh40k-rpg",
             "type": "RollTable"
         }
@@ -138,6 +138,6 @@
             }
         ]
     },
-    "title": "PDF Compendium: table-1-l-wayfarer-weapons (2026-10-06-18-30)",
+    "title": "PDF Compendium: image-fixture-plates, wayfarers-field-manual (2026-10-06-18-30)",
     "version": "2026-10-06-18-30"
 }
