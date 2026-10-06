@@ -72,7 +72,9 @@ jobs:
             - run: node scripts/gate-refusals.mjs
 
     # G12: the full suite must pass with the network removed. Dependencies are
-    # installed first, then the default route is dropped before tests run.
+    # installed first; the suite then runs in a network namespace of its own,
+    # which has no network. (Dropping the machine's route instead also cuts the
+    # runner's own link to GitHub, and the job never reports back.)
     no-network:
         runs-on: ubuntu-latest
         steps:
@@ -85,6 +87,5 @@ jobs:
                   node-version: 22
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
-            - name: Drop network connectivity
-              run: sudo ip route del default || true
-            - run: pnpm test
+            - name: Test with no network
+              run: sudo unshare --net -- sudo -E -u "$(id -un)" env "PATH=$PATH" pnpm test
