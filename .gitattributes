@@ -1,0 +1,7 @@
+# Every text file is checked out with LF endings on every platform: the
+# formatter gate and the byte-exact goldens (.db packs) compare LF bytes.
+* text=auto eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
