@@ -3,8 +3,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { LINES } from "../infer/schema.ts";
-import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../infer/targets.ts";
+import { DEFAULT_TARGET, type Target, TARGET_IDS, targetFor } from "../infer/targets.ts";
 import { createLogger, type Logger, type LogLevel } from "../logger.ts";
 import type { PageReader } from "../ocr/ppocr/reader.ts";
 import { RENDER_DPI } from "../ocr/render.ts";
@@ -33,8 +32,9 @@ Commands:
   batch <dir> [dir...]     Convert every PDF under the directories (recursive) into one module.
 
 Options:
-  --target <line>          Output schema of the inputs after it, until the next --target:
-                           ${LINES.join(" | ")} (default: ${DEFAULT_TARGET.line}).
+  --target <id>            Output schema of the inputs after it, until the next --target:
+                           a wh40k-rpg line or a dnd5e ruleset, one system per run:
+                           ${TARGET_IDS.join(" | ")} (default: ${DEFAULT_TARGET.line}).
   --out-dir <dir>          Where the module is written, e.g. Foundry's Data/modules
                            (default: <tmp>/foundry-pdf-parser/modules).
   --cache-dir <dir>        IR/OCR cache (default: .tmp/cache in the working directory).
@@ -57,7 +57,7 @@ interface CliOptions {
 /** An input PDF and the output schema the user chose for it. */
 interface TargetedPdf {
     path: string;
-    target: TargetSchema;
+    target: Target;
 }
 
 function parseOptions(values: Record<string, string | string[] | boolean | undefined>): CliOptions | string {
@@ -94,7 +94,7 @@ function parseOptions(values: Record<string, string | string[] | boolean | undef
 
 interface ResolvedInput {
     input: string;
-    target: TargetSchema;
+    target: Target;
 }
 
 /** Resolve each input's target id to its schema, or report the first unknown id. */
@@ -103,7 +103,7 @@ function resolveTargets(inputs: readonly TargetedInput[]): ResolvedInput[] | str
     for (const { input, targetId } of inputs) {
         const target = targetId === undefined ? DEFAULT_TARGET : targetFor(targetId);
         if (target === null) {
-            return `--target must be one of ${LINES.join(", ")}, got ${JSON.stringify(targetId)}`;
+            return `--target must be one of ${TARGET_IDS.join(", ")}, got ${JSON.stringify(targetId)}`;
         }
         out.push({ input, target });
     }

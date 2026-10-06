@@ -22,7 +22,18 @@ export {
 } from "./run.ts";
 export { MemoryOcrPageStore, type OcrPageStore } from "./ocr/recognize.ts";
 export { LINES, type Line } from "./infer/schema.ts";
-export { DEFAULT_TARGET, TARGETS, targetFor, type TargetSchema } from "./infer/targets.ts";
+export {
+    DEFAULT_TARGET,
+    DND5E_TARGETS,
+    type Dnd5eTarget,
+    type SystemId,
+    type Target,
+    TARGET_IDS,
+    TARGETS,
+    targetFor,
+    targetId,
+    type TargetSchema,
+} from "./infer/targets.ts";
 export { RENDER_DPI, RENDERER_ID } from "./ocr/render.ts";
 export {
     CORE_BUILD,

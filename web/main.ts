@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { DEFAULT_LINE, LINES } from "../src/infer/schema.ts";
+import { DEFAULT_TARGET, TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
 
 /**
@@ -39,17 +39,26 @@ let zipUrl: string | null = null;
 
 const isPdf = (file: File): boolean => file.type === "application/pdf" || /\.pdf$/iu.test(file.name);
 
-/** A game-line picker for one PDF, defaulting to the system's default line. */
+/** A target picker for one PDF (game lines and rulesets grouped by system), defaulting to the default line. */
 function linePicker(file: File, index: number): HTMLSelectElement {
     const select = document.createElement("select");
     select.id = `line-${index}`;
-    select.setAttribute("aria-label", `Game line for ${file.name}`);
-    for (const line of LINES) {
+    select.setAttribute("aria-label", `Target schema for ${file.name}`);
+    const groups = new Map<string, HTMLOptGroupElement>();
+    for (const id of TARGET_IDS) {
+        const system = targetFor(id)?.system ?? "";
+        let group = groups.get(system);
+        if (group === undefined) {
+            group = document.createElement("optgroup");
+            group.label = system;
+            groups.set(system, group);
+            select.append(group);
+        }
         const option = document.createElement("option");
-        option.value = line;
-        option.textContent = line;
-        option.selected = line === DEFAULT_LINE;
-        select.append(option);
+        option.value = id;
+        option.textContent = id;
+        option.selected = id === targetId(DEFAULT_TARGET);
+        group.append(option);
     }
     return select;
 }

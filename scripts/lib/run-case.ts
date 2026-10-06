@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DEFAULT_TARGET, targetFor, type TargetSchema } from "../../src/infer/targets.ts";
+import { DEFAULT_TARGET, type Target, targetFor } from "../../src/infer/targets.ts";
 import { createLogger } from "../../src/logger.ts";
 import { FileIrCache } from "../../src/node/ir-cache.ts";
 import { FileOcrPageStore } from "../../src/node/ocr-store.ts";
@@ -22,12 +22,12 @@ export interface FixtureCase {
     name: string;
     /** The PDFs converted together into one module. */
     pdfs: string[];
-    /** Each PDF's target line, by position; absent or short → the default line. */
+    /** Each PDF's target id, by position; absent or short → the default line. */
     targets?: string[];
 }
 
 /** The target schema a case chooses for its `index`-th PDF. */
-export function caseTarget(entry: FixtureCase, index: number): TargetSchema {
+export function caseTarget(entry: FixtureCase, index: number): Target {
     const id = entry.targets?.[index];
     const target = id === undefined ? DEFAULT_TARGET : targetFor(id);
     if (target === null) {

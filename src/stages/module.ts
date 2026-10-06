@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { SystemId } from "../infer/targets.ts";
 import type { FoundryDocumentType, JsonObject, JsonValue } from "../types/entity.ts";
 import { sha256Hex } from "../util/hash.ts";
 import { byteCompare, sortKeysDeep } from "../util/ordered.ts";
 
 /**
  * Stage 8 — Package. Turns one run's documents (from one or more PDFs) into a
- * Foundry VTT module that exposes them as compendiums of the wh40k-rpg system:
+ * Foundry VTT module that exposes them as compendiums of one game system (the
+ * system the run's targets write for):
  *
  *   <id>/module.json
  *   <id>/packs/<pack>.db       NeDB: one JSON document per line
@@ -24,11 +26,17 @@ import { byteCompare, sortKeysDeep } from "../util/ordered.ts";
 /** Documents are emitted with image paths under this prefix; packaging points them at the module. */
 export const MODULE_ASSET_PLACEHOLDER = "modules/{module}/assets";
 
-/** The game system the packs belong to. */
-export const SYSTEM_ID = "wh40k-rpg";
+/** Documents reference each other as `Compendium.{module}.<pack>…`; packaging names the module. */
+export const COMPENDIUM_PLACEHOLDER = "Compendium.{module}.";
 
-/** Foundry core generations the module declares support for (the system's own range). */
-const COMPATIBILITY = { minimum: "13", verified: "14" };
+/** The default game system the packs belong to. */
+export const SYSTEM_ID: SystemId = "wh40k-rpg";
+
+/** Foundry core generations the module declares support for: each system's own range. */
+const COMPATIBILITY: Readonly<Record<SystemId, { minimum: string; verified: string }>> = {
+    "wh40k-rpg": { minimum: "13", verified: "14" },
+    dnd5e: { minimum: "14", verified: "14" },
+};
 
 /** Leading characters of the content hash that form the module id. */
 const MODULE_ID_HASH_LENGTH = 12;
@@ -44,6 +52,8 @@ export interface PackInput {
 }
 
 export interface ModuleInput {
+    /** The game system every pack belongs to. */
+    system: SystemId;
     packs: readonly PackInput[];
     /** Image files, by file name under `assets/`. */
     assets: readonly { relPath: string; bytes: Uint8Array }[];
@@ -67,18 +77,19 @@ export interface BuiltModule {
     files: ModuleFile[];
 }
 
-/** Replace the placeholder asset prefix in every string of a document. */
-function pointAssets(value: JsonValue, prefix: string): JsonValue {
+/** Point every string of a document into the module: its asset prefix and its compendium references. */
+function pointAssets(value: JsonValue, id: string): JsonValue {
     if (typeof value === "string") {
-        return value.startsWith(`${MODULE_ASSET_PLACEHOLDER}/`)
-            ? `${prefix}${value.slice(MODULE_ASSET_PLACEHOLDER.length)}`
+        const pointed = value.startsWith(`${MODULE_ASSET_PLACEHOLDER}/`)
+            ? `modules/${id}/assets${value.slice(MODULE_ASSET_PLACEHOLDER.length)}`
             : value;
+        return pointed.replaceAll(COMPENDIUM_PLACEHOLDER, `Compendium.${id}.`);
     }
     if (Array.isArray(value)) {
-        return value.map((v) => pointAssets(v, prefix));
+        return value.map((v) => pointAssets(v, id));
     }
     if (value !== null && typeof value === "object") {
-        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, pointAssets(v, prefix)]));
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, pointAssets(v, id)]));
     }
     return value;
 }
@@ -120,24 +131,22 @@ export function buildModule(input: ModuleInput): BuiltModule {
         byteCompare(a.relPath, b.relPath),
     );
     const id = moduleId(packs, assets);
-    const assetPrefix = `modules/${id}/assets`;
     const sources = [...new Set(input.sources)].sort(byteCompare);
 
     const manifest = {
         id,
         title: `PDF Compendium: ${sources.join(", ")}`,
-        description:
-            "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the wh40k-rpg system.",
+        description: `Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the ${input.system} system.`,
         version: input.provenance.engineVersion,
-        compatibility: COMPATIBILITY,
+        compatibility: COMPATIBILITY[input.system],
         flags: { [FLAG_SCOPE]: input.provenance },
-        relationships: { systems: [{ id: SYSTEM_ID, type: "system" }] },
+        relationships: { systems: [{ id: input.system, type: "system" }] },
         packs: packs.map((p) => ({
             name: p.name,
             label: p.label,
             path: `packs/${p.name}`,
             type: p.documentType,
-            system: SYSTEM_ID,
+            system: input.system,
             ownership: { PLAYER: "OBSERVER", ASSISTANT: "OWNER" },
         })),
         packFolders: [
@@ -150,7 +159,7 @@ export function buildModule(input: ModuleInput): BuiltModule {
         ...packs.map((p) => ({
             relPath: `${id}/packs/${p.name}.db`,
             contents: p.documents
-                .map((d) => `${JSON.stringify(sortKeysDeep(pointAssets(d, assetPrefix)))}\n`)
+                .map((d) => `${JSON.stringify(sortKeysDeep(pointAssets(d, id)))}\n`)
                 .join(""),
         })),
         ...assets.map((a) => ({ relPath: `${id}/assets/${a.relPath}`, contents: a.bytes })),

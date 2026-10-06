@@ -4,7 +4,7 @@
 
 A **generic, self-inferring PDF → Foundry VTT compendium** utility. It takes
 **only official PDFs** as input, plus the user's choice of target schema (which
-game line's mechanical structure to write). No profiles, no other user-supplied
+game line's or ruleset's mechanical structure to write). No profiles, no other user-supplied
 configuration, no document-specific identification systems. The engine looks at
 the PDF, figures out what's in it by analyzing layout and content structure, and
 produces Foundry VTT compendium JSON in the chosen schema.
@@ -109,6 +109,14 @@ PDF; they get compendium JSON.
   `penetration`, `clip`, `reload`, `tier`, `prerequisite`, `aptitude`, etc. These
   are the tool's **output format vocabulary** — like knowing field names in a file
   format spec. They may appear in classifiers, extractors, and output mappers.
+  The same holds for the dnd5e Foundry system's data model: its item types
+  (`class`, `subclass`, `race`, `background`, `feat`), advancement types and the
+  keys of its fixed configuration enums — abilities, skills, armor and weapon
+  categories, sizes, creature types, feat categories — with the labels the
+  system shows for them (`src/infer/dnd5e/vocab.ts`). Those keys are fields
+  every dnd5e actor carries (`system.skills.ath`), i.e. structure; the
+  system's compendium content (its classes, spells, items) is not, and never
+  appears.
 
 - **Runtime font analysis.** The engine MAY detect, log, and cross-reference font
   names at runtime. Fonts are structural metadata embedded in the PDF — using them
@@ -171,7 +179,7 @@ analysis**, not from knowing what book it's reading:
 ## Foundry Output Schema
 
 The engine classifies and maps extracted content using the **Foundry VTT system
-schema** (wh40k-rpg). This is output-format knowledge — the tool knows what
+schema** of the target's system (wh40k-rpg or dnd5e). This is output-format knowledge — the tool knows what
 fields a Foundry weapon Item or Actor document expects, the same way a word
 processor knows what .docx fields look like.
 
@@ -183,9 +191,10 @@ from our own open-source Foundry system, not from any copyrighted publication.
 
 A run takes one or more PDFs (the browser page: any number, with one progress
 bar across them) and writes **one Foundry VTT module** that exposes their
-packs as compendiums of the wh40k-rpg system: `module.json`, NeDB
+packs as compendiums of the targets' one system (a run's targets are all
+wh40k-rpg lines or all dnd5e rulesets): `module.json`, NeDB
 `packs/<pack>.db` files (Foundry builds LevelDB from them on first open) and
-`assets/`. Document types are the target line's own registered types.
+`assets/`. Document types are the target's own registered types.
 
 Modules must **coexist**: any number can be installed together, and none may
 compete with another or with the system. The module id is a hash of the
@@ -196,9 +205,11 @@ state — no scripts, no settings, no overrides.
 ## Target Schema Selection
 
 The user picks the **target schema** the output is written in: one of the
-wh40k-rpg system's game lines (`dh2`, `dh1`, `rt`, `dw`, `ow`, `bc`, `im`).
-The default is the system's default line, `dh2`. The choice selects which
-**mechanical structure** the extracted values are mapped into — the line's
+wh40k-rpg system's game lines (`dh2`, `dh1`, `rt`, `dw`, `ow`, `bc`, `im`) or
+one of the dnd5e system's rulesets (`dnd5e-2014`, `dnd5e-2024`, its
+`system.source.rules` values). The default is the wh40k-rpg system's default
+line, `dh2`. The choice selects which
+**mechanical structure** the extracted values are mapped into — the target's
 document types, field paths, value types and bounds — the same
 uncopyrightable system/method-of-operation structure the Foundry system itself
 ships. It is an output-format choice, like choosing .docx or .odt.
@@ -214,8 +225,8 @@ ships. It is an output-format choice, like choosing .docx or .odt.
   publication names. The test: if a schema file could be reconstructed into
   a book's content, it is not a schema — it is the compendium with the prose
   stripped, and it does not ship. The user's PDF supplies every value.
-- **Line identifiers are descriptive target labels** (`dh2`, `rt`), the system's
-  own pack-line keys — never product branding.
+- **Target identifiers are descriptive labels** (`dh2`, `rt`, `dnd5e-2024`), the
+  systems' own line keys and rules values — never product branding.
 
 Same PDF + same target schema + same engine version = deterministic output.
 

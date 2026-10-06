@@ -2,12 +2,16 @@
 import { DEFAULT_LINE, LINES, type Line, type OriginStep } from "./schema.ts";
 
 /**
- * Target schemas: the mechanical structure of each of the system's game lines
- * that the user can choose to write. A target is empty structure — the line's
- * id and its character-creation steps (the system's step keys, sequence,
- * labels and pack segments). It holds no entries and no values; the PDF
- * supplies every one. The engine never picks a target from the document.
+ * Target schemas: the mechanical structure the user can choose to write. Each
+ * belongs to one Foundry game system: a wh40k-rpg game line (the line's id and
+ * its character-creation steps — the system's step keys, sequence, labels and
+ * pack segments) or a dnd5e ruleset. A target is empty structure. It holds no
+ * entries and no values; the PDF supplies every one. The engine never picks a
+ * target from the document.
  */
+
+/** The Foundry game systems a target can write for, by system id. */
+export type SystemId = "wh40k-rpg" | "dnd5e";
 
 /** One character-creation step of a line's origin path. */
 export interface OriginStepDef extends OriginStep {
@@ -27,11 +31,33 @@ export interface ActorTypes {
     voidcraft: string;
 }
 
+/** A wh40k-rpg game line's schema. */
 export interface TargetSchema {
+    system: "wh40k-rpg";
     line: Line;
     actorTypes: ActorTypes;
     originSteps: readonly OriginStepDef[];
 }
+
+/** The dnd5e system's rulesets (its `system.source.rules` values). */
+export const DND5E_RULES = ["2014", "2024"] as const;
+export type Dnd5eRules = (typeof DND5E_RULES)[number];
+
+/** A dnd5e ruleset's schema: which rules version its documents are marked as. */
+export interface Dnd5eTarget {
+    system: "dnd5e";
+    /** Target id: `dnd5e-<rules>`. */
+    id: `dnd5e-${Dnd5eRules}`;
+    rules: Dnd5eRules;
+    /**
+     * How a background's listed ability scores advance, where the ruleset's
+     * backgrounds carry them (the system's AbilityScoreImprovement shape):
+     * points to spend, and the most any one score takes.
+     */
+    backgroundAbilityScores: { points: number; cap: number } | null;
+}
+
+export type Target = TargetSchema | Dnd5eTarget;
 
 /** Lines the system registers a line-specific aircraft type for; the rest use the shared one. */
 const LINE_AIRCRAFT: ReadonlySet<Line> = new Set(["dh2", "dw", "ow", "rt"]);
@@ -62,6 +88,7 @@ const HOME_WORLD = (index: number, segment = "origins-homeworlds"): OriginStepDe
 
 export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
     dh2: {
+        system: "wh40k-rpg",
         line: "dh2",
         actorTypes: actorTypes("dh2"),
         originSteps: [
@@ -73,6 +100,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     dh1: {
+        system: "wh40k-rpg",
         line: "dh1",
         actorTypes: actorTypes("dh1"),
         originSteps: [
@@ -84,6 +112,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     rt: {
+        system: "wh40k-rpg",
         line: "rt",
         actorTypes: actorTypes("rt"),
         originSteps: [
@@ -98,6 +127,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     dw: {
+        system: "wh40k-rpg",
         line: "dw",
         actorTypes: actorTypes("dw"),
         originSteps: [
@@ -106,6 +136,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     ow: {
+        system: "wh40k-rpg",
         line: "ow",
         actorTypes: actorTypes("ow"),
         originSteps: [
@@ -129,6 +160,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     bc: {
+        system: "wh40k-rpg",
         line: "bc",
         actorTypes: actorTypes("bc"),
         originSteps: [
@@ -140,6 +172,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         ],
     },
     im: {
+        system: "wh40k-rpg",
         line: "im",
         actorTypes: actorTypes("im"),
         originSteps: [
@@ -152,8 +185,33 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
 
 export const DEFAULT_TARGET: TargetSchema = TARGETS[DEFAULT_LINE];
 
-/** The target schema a line id names, or null for an unknown id. */
-export function targetFor(id: string): TargetSchema | null {
+export const DND5E_TARGETS: Readonly<Record<Dnd5eRules, Dnd5eTarget>> = {
+    "2014": { system: "dnd5e", id: "dnd5e-2014", rules: "2014", backgroundAbilityScores: null },
+    "2024": {
+        system: "dnd5e",
+        id: "dnd5e-2024",
+        rules: "2024",
+        backgroundAbilityScores: { points: 3, cap: 2 },
+    },
+};
+
+/** A target's id: the line id for a wh40k-rpg line, `dnd5e-<rules>` for a dnd5e ruleset. */
+export function targetId(target: Target): string {
+    return target.system === "dnd5e" ? target.id : target.line;
+}
+
+/** Every target id the user can choose, the wh40k-rpg lines first. */
+export const TARGET_IDS: readonly string[] = [
+    ...LINES,
+    ...DND5E_RULES.map((rules) => DND5E_TARGETS[rules].id),
+];
+
+/** The target schema an id names, or null for an unknown id. */
+export function targetFor(id: string): Target | null {
     const line = LINES.find((l) => l === id);
-    return line === undefined ? null : TARGETS[line];
+    if (line !== undefined) {
+        return TARGETS[line];
+    }
+    const rules = DND5E_RULES.find((r) => DND5E_TARGETS[r].id === id);
+    return rules === undefined ? null : DND5E_TARGETS[rules];
 }

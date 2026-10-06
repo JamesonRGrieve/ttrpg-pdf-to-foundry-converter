@@ -1,25 +1,29 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Run the wh40k-rpg system's own pack validators against the engine's output
- * modules.
+ * Check the engine's output modules against the game system they are for.
  *
- * The system is the schema authority, so this imports its validators rather than
- * restating their rules:
+ * Every module is checked (fail-loud): every pack is declared for the
+ * modules' one system with a `.db` file, and every document's type is one the
+ * system registers for the pack's document type (from the system's own
+ * `system.json`).
+ *
+ * For wh40k-rpg modules the system's own pack validators run as well — the
+ * system is the schema authority, so this imports them rather than restating
+ * their rules:
  *   - src/packs/validate-schema.cjs   canonical item schema + reference graph (warn-only)
  *   - src/packs/validate-actors.cjs   actor completeness (warn-only)
  *   - scripts/validate-pack-schema.mjs Zod content gate (fail-loud)
  * Those read the system's authoring layout (`<group>/<pack>/_source/*.json`), so
  * each module's packs are expanded into that layout in a temp directory first.
- * The modules themselves are checked too (fail-loud): every pack is declared
- * for the system with a `.db` file, and every document's type is one the
- * system registers for the pack's document type.
  *
  * Usage:
  *   node scripts/validate-output.mjs <modules-dir> [--system <foundry-system-dir>] [--verbose] [--json <file>]
  *
- * Exits 1 when the Zod gate or the module check reports any failure; the
- * warn-only validators are summarized (per-rule counts) for ratcheting.
+ * `--system` is a checkout of the modules' system (default: the wh40k-rpg
+ * system beside this repository). Exits 1 when the Zod gate or the module
+ * check reports any failure; the warn-only validators are summarized
+ * (per-rule counts) for ratcheting.
  */
 import {
     existsSync,
@@ -55,30 +59,43 @@ if (outputRoot === undefined) {
 }
 const root = resolve(outputRoot);
 const systemDir = resolve(values.system ?? join(import.meta.dirname, "..", "..", ".foundry-system"));
-if (!existsSync(join(systemDir, "src", "packs", "validate-schema.cjs"))) {
+
+// The modules' one system: what their packs declare.
+const declared = [
+    ...new Set(moduleManifests(root).flatMap(({ manifest }) => (manifest.packs ?? []).map((p) => p.system))),
+];
+if (declared.length !== 1) {
+    process.stderr.write(
+        `modules must all be for one system; their packs declare ${JSON.stringify(declared)}\n`,
+    );
+    process.exit(2);
+}
+const [systemId] = declared;
+const WH40K = "wh40k-rpg";
+// A system checkout keeps its manifest at the root, or (the wh40k-rpg system) under src/.
+const systemJson = [join(systemDir, "src", "system.json"), join(systemDir, "system.json")].find(
+    (p) => existsSync(p) && JSON.parse(readFileSync(p, "utf8")).id === systemId,
+);
+if (systemJson === undefined) {
+    process.stderr.write(`no ${systemId} system.json under ${systemDir}\n`);
+    process.exit(2);
+}
+if (systemId === WH40K && !existsSync(join(systemDir, "src", "packs", "validate-schema.cjs"))) {
     process.stderr.write(`system validators not found under ${systemDir}\n`);
     process.exit(2);
 }
-
-const require = createRequire(import.meta.url);
-const { validatePackSources } = require(join(systemDir, "src", "packs", "validate-schema.cjs"));
-const { validateActorPacks } = require(join(systemDir, "src", "packs", "validate-actors.cjs"));
-const { validateDoc } = await import(
-    pathToFileURL(join(systemDir, "scripts", "validate-pack-schema.mjs")).href
-);
 
 const lines = [];
 const log = (msg) => lines.push(msg);
 
 // Module structure: packs declared for the system, each with its .db file;
 // document types the system registers.
-const registered =
-    JSON.parse(readFileSync(join(systemDir, "src", "system.json"), "utf8")).documentTypes ?? {};
+const registered = JSON.parse(readFileSync(systemJson, "utf8")).documentTypes ?? {};
 const moduleFailures = [];
 for (const { dir, manifest } of moduleManifests(root)) {
     for (const pack of manifest.packs ?? []) {
-        if (pack.system !== "wh40k-rpg") {
-            moduleFailures.push(`${manifest.id}/${pack.name}: not declared for the wh40k-rpg system`);
+        if (pack.system !== systemId) {
+            moduleFailures.push(`${manifest.id}/${pack.name}: not declared for the ${systemId} system`);
         }
         if (!existsSync(join(dir, `${pack.path}.db`))) {
             moduleFailures.push(`${manifest.id}/${pack.name}: no ${pack.path}.db`);
@@ -96,16 +113,33 @@ for (const { module, pack, type, doc } of docs) {
     }
 }
 
-// Expand every pack into the system's authoring layout for its validators.
-const expanded = mkdtempSync(join(tmpdir(), "fpp-validate-"));
-for (const { pack, doc } of docs) {
-    const dir = join(expanded, "output", pack, "_source");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${String(doc._id)}.json`), `${JSON.stringify(doc, null, 4)}\n`);
+/** The wh40k-rpg system's own validators over the documents, expanded into its authoring layout. */
+async function wh40kValidators() {
+    const require = createRequire(import.meta.url);
+    const { validatePackSources } = require(join(systemDir, "src", "packs", "validate-schema.cjs"));
+    const { validateActorPacks } = require(join(systemDir, "src", "packs", "validate-actors.cjs"));
+    const { validateDoc } = await import(
+        pathToFileURL(join(systemDir, "scripts", "validate-pack-schema.mjs")).href
+    );
+    const expanded = mkdtempSync(join(tmpdir(), "fpp-validate-"));
+    for (const { pack, doc } of docs) {
+        const dir = join(expanded, "output", pack, "_source");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${String(doc._id)}.json`), `${JSON.stringify(doc, null, 4)}\n`);
+    }
+    const schema = validatePackSources({ rootDir: expanded, verbose: values.verbose, log });
+    const actors = validateActorPacks({ rootDir: expanded, verbose: values.verbose, log });
+    const zodFailures = [];
+    const files = sourceFiles(expanded);
+    for (const file of files) {
+        const errs = validateDoc(JSON.parse(readFileSync(file, "utf8")));
+        if (errs.length > 0) {
+            zodFailures.push({ file: relative(expanded, file), errors: errs });
+        }
+    }
+    rmSync(expanded, { recursive: true, force: true });
+    return { schema, actors, zodFailures, files };
 }
-
-const schema = validatePackSources({ rootDir: expanded, verbose: values.verbose, log });
-const actors = validateActorPacks({ rootDir: expanded, verbose: values.verbose, log });
 
 function sourceFiles(dir) {
     const out = [];
@@ -120,15 +154,16 @@ function sourceFiles(dir) {
     return out.sort();
 }
 
-const zodFailures = [];
-const files = sourceFiles(expanded);
-for (const file of files) {
-    const errs = validateDoc(JSON.parse(readFileSync(file, "utf8")));
-    if (errs.length > 0) {
-        zodFailures.push({ file: relative(expanded, file), errors: errs });
-    }
-}
-rmSync(expanded, { recursive: true, force: true });
+// Other systems ship no pack validators to run; their modules get the module check alone.
+const { schema, actors, zodFailures, files } =
+    systemId === WH40K
+        ? await wh40kValidators()
+        : {
+              schema: { filesWithWarnings: 0, byRule: {} },
+              actors: { byRule: {} },
+              zodFailures: [],
+              files: [],
+          };
 
 for (const line of lines) {
     process.stdout.write(`${line}\n`);

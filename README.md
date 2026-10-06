@@ -1,10 +1,10 @@
 # foundry-pdf-parser
 
-Turns a PDF into Foundry VTT compendium packs for the wh40k-rpg system. You give
-it a PDF and nothing else. It reads the text layer, renders and OCRs every page,
-corrects the text layer against what is actually printed, works out the layout
-(tables, statblocks, catalogue entries, headings), and writes documents in the
-system's own schema.
+Turns a PDF into Foundry VTT compendium packs for the wh40k-rpg or dnd5e
+system. You give it a PDF and nothing else. It reads the text layer, renders and
+OCRs every page, corrects the text layer against what is actually printed, works
+out the layout (tables, statblocks, catalogue entries, headings), and writes
+documents in the system's own schema.
 
 It runs in two places with identical results:
 
@@ -34,12 +34,13 @@ do not share, upload or redistribute it. The tool will not open encrypted
 
 - **The PDF is the only content input.** No profiles, no config files, no path
   or file name inspection. Besides where output and caches go, the one user
-  choice is the **target schema**: which of the system's game lines (`dh2` by
-  default) to write. It selects a mechanical structure — document types, field
+  choice is the **target schema**: a wh40k-rpg game line (`dh2` by default,
+  `dh1`, `rt`, `dw`, `ow`, `bc`, `im`) or a dnd5e ruleset (`dnd5e-2014`,
+  `dnd5e-2024`). It selects a mechanical structure — document types, field
   paths, value types and bounds — never content: a schema holds no enumerated
   entries and no per-entry values, and the user's PDF supplies every value.
-- **No document identification.** The engine never works out which book or game
-  line a PDF is; the target schema comes only from the user. It recognizes
+- **No document identification.** The engine never works out which book, game
+  line or ruleset a PDF is; the target schema comes only from the user. It recognizes
   generic layout (aligned columns, captioned tables, characteristic grids, bold
   field labels under display-face headings) and maps it onto the chosen
   schema's vocabulary.
@@ -57,16 +58,18 @@ pnpm install
 pnpm web:dev
 
 # command line: every PDF given becomes part of one module; each --target sets
-# the line of the PDFs after it (an entity printed in several lines is homologated)
-pnpm cli infer [--target <line>] <pdf> [[--target <line>] <pdf>…] [--out-dir <dir>] [--cache-dir <dir>] [--ocr-workers <n>]
-pnpm cli batch [--target <line>] <dir> [[--target <line>] <dir>…]
+# the target of the PDFs after it (an entity printed in several wh40k-rpg lines
+# is homologated). A module holds one system's packs, so a run's targets are
+# all wh40k-rpg lines or all dnd5e rulesets.
+pnpm cli infer [--target <id>] <pdf> [[--target <id>] <pdf>…] [--out-dir <dir>] [--cache-dir <dir>] [--ocr-workers <n>]
+pnpm cli batch [--target <id>] <dir> [[--target <id>] <dir>…]
 ```
 
 The output is a **Foundry VTT module** that exposes the packs as compendiums of
-the wh40k-rpg system:
+the targets' system:
 
 ```
-<module id>/module.json            declares every pack for the wh40k-rpg system
+<module id>/module.json            declares every pack for the system
 <module id>/packs/<pack>.db        NeDB: one document per line
 <module id>/assets/<id>.<ext>      extracted images the documents reference
 ```
@@ -81,7 +84,7 @@ across them all and offers the same module as a zip.
 Several modules install side by side: the module id is a hash of the module's
 own contents, pack names are namespaced by the module, image paths point into
 the module, and nothing touches the system or other packages. Packs are named
-`<line>-<book>-<category>`; the book segment comes from the PDF's own metadata
+`<target>-<book>-<category>`; the book segment comes from the PDF's own metadata
 title.
 
 ## How it works
@@ -105,21 +108,45 @@ title.
 5. **Infer**: tables are classified by header vocabulary and read row by row.
    Catalogue entries are typed by their field labels or their section heading.
    Statblocks are found by their 3×3 characteristic grid. Result tables with
-   `Name: effect` rows become one item per result.
+   `Name: effect` rows become one item per result. For a dnd5e target the
+   engine reads character options instead (see below).
 6. **Emit**: one stable JSON document per entity, with a content-derived `_id`
-   and the system's cost/variant/provenance shapes, in the target line's own
-   document types.
+   and the system's cost/variant/provenance shapes, in the target's own
+   document types. A document that grants another (a class its features)
+   references it by compendium UUID.
 7. **Package**: the documents of every PDF in the run, merged into one module
    (`module.json` with the engine's identity in its flags, NeDB packs, assets).
 
 The engine core (`src/`) is runtime-neutral; `src/node/` holds the CLI and its
 filesystem caches, and `web/` holds the upload page and its worker.
 
+## dnd5e character options
+
+With a `dnd5e-2014` or `dnd5e-2024` target the engine writes the dnd5e system's
+character-option Items, each marked with the chosen ruleset
+(`system.source.rules`). It reads the page as regions — columns, and tables set
+across both columns — and the sections its headings nest, and recognizes each
+option by the schema fields it carries, never by its name:
+
+| Option        | Recognized by                                                                            | Written as                                                                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Class         | a hit-die field and a level table with Level and Features columns                        | `class`: hit die, primary ability, advancement (hit points, save/armor/weapon/skill proficiency traits, features by level, ability score improvements, a scale value per extra table column, the subclass level) |
+| Class feature | a heading the level table's features column names, or `Level N: <name>`                  | `feat` (class feature), granted at its level                                                                                                                                                                     |
+| Subclass      | `<…> Subclass: <name>`, or a section of the class whose subsections state their levels   | `subclass` with its features granted by level                                                                                                                                                                    |
+| Species       | size and speed fields or traits; a section inside it with traits of its own is a subrace | `race`: speed, darkvision, creature type, size and ability-score advancements, traits granted as features                                                                                                        |
+| Background    | skill-proficiency and equipment fields                                                   | `background`: skill proficiencies, ability scores, its feat or feature granted                                                                                                                                   |
+| Feat          | an italic first line naming a feat category or a prerequisite                            | `feat` with its category, prerequisite level and repeatability                                                                                                                                                   |
+
+Not yet read: spells (and the spells a subclass grants), equipment, monsters,
+spellcasting progression, and proficiencies in specific weapons, tools and
+languages (only weapon and armor categories map to the system's keys).
+
 ## Checking output
 
-- `node scripts/validate-output.mjs <modules dir>` checks the modules (packs declared
-  for the system, document types it registers) and runs the wh40k-rpg system's
-  own pack validators (schema, actor completeness, Zod content gate).
+- `node scripts/validate-output.mjs <modules dir> [--system <system checkout>]` checks
+  the modules (packs declared for their system, document types it registers)
+  and, for wh40k-rpg modules, runs that system's own pack validators (schema,
+  actor completeness, Zod content gate).
 - `tsx scripts/audit-output.ts --output <modules dir> --reference <canonical packs> --line dh2 --book "<source book>"`
   compares against a canonical compendium tree: per-type coverage and
   field-level disagreements. Only RAW-provenance reference entries count.

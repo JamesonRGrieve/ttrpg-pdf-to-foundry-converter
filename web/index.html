@@ -11,7 +11,7 @@
         <main>
             <h1>PDF to Compendium</h1>
             <p class="lede">
-                Converts PDFs into a Foundry VTT module of compendium packs for the wh40k-rpg system.
+                Converts PDFs into a Foundry VTT module of compendium packs for the wh40k-rpg or dnd5e system.
                 Everything runs in this browser tab: the files are never uploaded anywhere. Unzip the module
                 into Foundry's <code>Data/modules</code> folder; several can be installed side by side.
             </p>
@@ -22,7 +22,10 @@
                     <span>Drop PDFs here, or activate to browse</span>
                     <input id="pdf-input" type="file" accept="application/pdf,.pdf" multiple />
                 </label>
-                <p>Choose the game line whose schema each PDF is written in.</p>
+                <p>
+                    Choose the game line or ruleset whose schema each PDF is written in. One module holds one
+                    system's packs.
+                </p>
                 <ul id="chosen" aria-label="Chosen PDFs"></ul>
                 <button id="convert" type="button" disabled>Convert</button>
             </section>

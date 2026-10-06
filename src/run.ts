@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { inferDnd5e } from "./infer/dnd5e/index.ts";
 import { infer } from "./infer/pipeline.ts";
-import { LINES, type Line } from "./infer/schema.ts";
-import type { TargetSchema } from "./infer/targets.ts";
+import type { Line } from "./infer/schema.ts";
+import { type SystemId, type Target, TARGET_IDS, targetId } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
 import type { PageReader } from "./ocr/ppocr/reader.ts";
@@ -62,8 +63,8 @@ export interface IrCache {
 }
 
 export interface EngineOptions {
-    /** The user's choice of output schema (game line); never inferred from the document. */
-    target: TargetSchema;
+    /** The user's choice of output schema (game line or ruleset); never inferred from the document. */
+    target: Target;
     ocr: OcrEngine;
     /** Reads pages with no text layer (scans) first; see `recognizeDocument`. */
     scanReader: PageReader;
@@ -128,7 +129,10 @@ export async function runEngine(pdfBytes: Uint8Array, opts: EngineOptions): Prom
     if (read === null) {
         return { encrypted: true };
     }
-    const inferred = infer(read.ir, opts.log, opts.target);
+    const inferred =
+        opts.target.system === "dnd5e"
+            ? inferDnd5e(read.ir, opts.log, opts.target)
+            : infer(read.ir, opts.log, opts.target);
     const assetExt = new Map(read.assets.assets.map((a) => [a.assetId, a.ext] as const));
     const emitted = emit(inferred.graph, assetExt, { assetRefPrefix: opts.assetRefPrefix });
     return {
@@ -160,7 +164,19 @@ export type ModuleOptions = Omit<EngineOptions, "assetRefPrefix" | "onOcrPage" |
 /** One PDF and the output schema the user chose for it. */
 export interface ModuleDocument {
     pdf: Uint8Array;
-    target: TargetSchema;
+    target: Target;
+}
+
+/** The one game system a run's targets write for; a module belongs to a single system. */
+export function moduleSystem(documents: readonly ModuleDocument[]): SystemId {
+    const systems = [...new Set(documents.map((d) => d.target.system))];
+    const [system] = systems;
+    if (system === undefined || systems.length > 1) {
+        throw new Error(
+            `one module holds one game system's packs; convert the PDFs for ${systems.join(" and ")} in separate runs`,
+        );
+    }
+    return system;
 }
 
 export interface ModuleResult {
@@ -191,7 +207,8 @@ export async function runModule(
     documents: readonly ModuleDocument[],
     opts: ModuleOptions,
 ): Promise<ModuleResult> {
-    const results: (EngineResult & { line: Line })[] = [];
+    const system = moduleSystem(documents);
+    const results: (EngineResult & { target: Target })[] = [];
     const refused: number[] = [];
     for (const [index, { pdf, target }] of documents.entries()) {
         const { onProgress, ...engineOpts } = opts;
@@ -209,20 +226,28 @@ export async function runModule(
         if (result.encrypted) {
             refused.push(index);
         } else {
-            results.push({ ...result, line: target.line });
+            results.push({ ...result, target });
         }
     }
     const warnings = results.flatMap((r) => r.warnings);
     if (results.length === 0) {
         return { module: null, refused, warnings };
     }
-    const homologated = homologate(results.map((r) => ({ line: r.line, packs: r.packs })));
-    const lines = new Set(results.map((r) => r.line));
+    // wh40k-rpg lines share entities across lines (homologated); dnd5e rulesets keep their own.
+    const wh40k: { line: Line; packs: EmittedPack[] }[] = results.flatMap((r) =>
+        r.target.system === "wh40k-rpg" ? [{ line: r.target.line, packs: r.packs }] : [],
+    );
+    const grouped: { group: string; packs: EmittedPack[] }[] =
+        system === "wh40k-rpg"
+            ? homologate(wh40k).map(({ line, packs }) => ({ group: line, packs }))
+            : results.map((r) => ({ group: targetId(r.target), packs: r.packs }));
+    const ids = new Set(results.map((r) => targetId(r.target)));
     const module = buildModule({
-        packs: homologated.flatMap(({ line, packs }) =>
+        system,
+        packs: grouped.flatMap(({ group, packs }) =>
             packs.map((p) => ({
                 name: p.pack,
-                label: packLabel(p.pack, line),
+                label: packLabel(p.pack, group),
                 documentType: p.documentType,
                 documents: p.documents,
             })),
@@ -235,8 +260,8 @@ export async function runModule(
             extractor: EXTRACTOR_ID,
             renderer: RENDERER_ID,
             ocr: `${opts.ocr.id}|${opts.scanReader.id}`,
-            // One line reads as before; several list in the system's line order.
-            target: LINES.filter((l) => lines.has(l)).join(","),
+            // One target reads as its id; several list in the system's order.
+            target: TARGET_IDS.filter((id) => ids.has(id)).join(","),
         },
     });
     return { module, refused, warnings };

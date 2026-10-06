@@ -15,6 +15,7 @@ const doc = (id: string, name: string, img?: string) => ({
 
 function input(over: Partial<ModuleInput> = {}): ModuleInput {
     return {
+        system: SYSTEM_ID,
         packs: [
             {
                 name: "dh2-lamps-items-gear",

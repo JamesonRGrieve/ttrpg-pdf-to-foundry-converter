@@ -79,7 +79,7 @@ export interface Entry {
     body: string;
 }
 
-function joinRuns(runs: readonly IRTextRun[]): string {
+export function joinRuns(runs: readonly IRTextRun[]): string {
     let text = "";
     let prevEnd = Number.NEGATIVE_INFINITY;
     let prevSize = 0;
@@ -290,13 +290,15 @@ const FURNITURE_Y_BUCKET = 6;
  * Drop running heads and feet — the same text at the same height in a margin
  * band on many pages. They belong to no entry and would otherwise read as
  * headings. (Body lines can repeat by coincidence; the margin band tells them
- * apart.)
+ * apart.) `textKey` sets what counts as the same text (e.g. a foot with the
+ * folio in it, its digits ignored).
  */
-export function withoutRunningFurniture(
-    lines: readonly TextLine[],
+export function withoutRunningFurniture<T extends TextLine>(
+    lines: readonly T[],
     marginal: (line: TextLine) => boolean,
-): TextLine[] {
-    const place = (l: TextLine): string => `${l.text}\u0000${Math.round(l.y / FURNITURE_Y_BUCKET)}`;
+    textKey: (text: string) => string = (text) => text,
+): T[] {
+    const place = (l: TextLine): string => `${textKey(l.text)}\u0000${Math.round(l.y / FURNITURE_Y_BUCKET)}`;
     const pages = new Map<string, Set<number>>();
     for (const l of lines.filter(marginal)) {
         const key = place(l);
@@ -526,7 +528,7 @@ function fieldOf(line: TextLine): [string, string] | null {
  * heads, feet and folios; a side margin holds thumb-index tabs and marginal
  * notes.
  */
-function marginalIn(ir: IR): (line: TextLine) => boolean {
+export function marginalIn(ir: IR): (line: TextLine) => boolean {
     const heights = new Map(ir.pages.map((p) => [p.pageIndex, p.height] as const));
     const widths = new Map(ir.pages.map((p) => [p.pageIndex, p.width] as const));
     const bands = marginBandsOf(ir);

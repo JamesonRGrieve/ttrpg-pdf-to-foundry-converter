@@ -41,10 +41,12 @@ function watchOffOrigin(page: Page, origin: string): string[] {
     return offOrigin;
 }
 
+/** Targets the picker offers: the wh40k-rpg game lines, then the dnd5e rulesets. */
+const TARGET_COUNT = 9;
+
 /**
- * Upload the PDFs, choose each one's game line (`targets`, by position;
- * default otherwise), convert, and check the downloaded module against a
- * golden case.
+ * Upload the PDFs, choose each one's target (`targets`, by position; default
+ * otherwise), convert, and check the downloaded module against a golden case.
  */
 async function convertsLikeCli(
     page: Page,
@@ -61,11 +63,11 @@ async function convertsLikeCli(
     await page.getByLabel(/drop pdfs here/i).setInputFiles(pdfs.map((pdf) => resolve(repoRoot, pdf)));
     const chosen = page.getByRole("list", { name: "Chosen PDFs" }).getByRole("listitem");
     await expect(chosen).toHaveCount(pdfs.length);
-    // Each PDF has its own game-line picker, on the default line.
+    // Each PDF has its own target picker, on the default line.
     for (const [i, pdf] of pdfs.entries()) {
-        const line = chosen.nth(i).getByLabel(`Game line for ${basename(pdf)}`);
+        const line = chosen.nth(i).getByLabel(`Target schema for ${basename(pdf)}`);
         await expect(line).toHaveValue("dh2");
-        await expect(line.locator("option")).toHaveCount(7);
+        await expect(line.locator("option")).toHaveCount(TARGET_COUNT);
         const target = targets[i];
         if (target !== undefined) {
             await line.selectOption(target);
@@ -120,6 +122,12 @@ test("homologates an entity printed in two lines, each PDF in its chosen line", 
         "cross-line",
         ["dh2", "rt"],
     );
+});
+
+test("converts character options for the dnd5e system in the chosen ruleset", async ({ page, baseURL }) => {
+    await convertsLikeCli(page, baseURL, ["fixtures/rendered/class-compendium.pdf"], "class-compendium", [
+        "dnd5e-2024",
+    ]);
 });
 
 test("refuses an encrypted PDF", async ({ page }) => {

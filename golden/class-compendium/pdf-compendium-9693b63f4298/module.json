@@ -1,0 +1,109 @@
+{
+    "compatibility": {
+        "minimum": "14",
+        "verified": "14"
+    },
+    "description": "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the dnd5e system.",
+    "flags": {
+        "foundry-pdf-parser": {
+            "engineVersion": "0.2.0",
+            "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
+            "irVersion": 41,
+            "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
+            "renderer": "mupdf@1.28.1/300dpi/gray",
+            "target": "dnd5e-2024"
+        }
+    },
+    "id": "pdf-compendium-9693b63f4298",
+    "packFolders": [
+        {
+            "name": "PDF Compendium 9693b63f4298",
+            "packs": [
+                "dnd5e-2024-tinker-compendium-backgrounds",
+                "dnd5e-2024-tinker-compendium-class-features",
+                "dnd5e-2024-tinker-compendium-classes",
+                "dnd5e-2024-tinker-compendium-feats",
+                "dnd5e-2024-tinker-compendium-species",
+                "dnd5e-2024-tinker-compendium-subclasses"
+            ]
+        }
+    ],
+    "packs": [
+        {
+            "label": "Tinker Compendium Backgrounds",
+            "name": "dnd5e-2024-tinker-compendium-backgrounds",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-backgrounds",
+            "system": "dnd5e",
+            "type": "Item"
+        },
+        {
+            "label": "Tinker Compendium Class Features",
+            "name": "dnd5e-2024-tinker-compendium-class-features",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-class-features",
+            "system": "dnd5e",
+            "type": "Item"
+        },
+        {
+            "label": "Tinker Compendium Classes",
+            "name": "dnd5e-2024-tinker-compendium-classes",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-classes",
+            "system": "dnd5e",
+            "type": "Item"
+        },
+        {
+            "label": "Tinker Compendium Feats",
+            "name": "dnd5e-2024-tinker-compendium-feats",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-feats",
+            "system": "dnd5e",
+            "type": "Item"
+        },
+        {
+            "label": "Tinker Compendium Species",
+            "name": "dnd5e-2024-tinker-compendium-species",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-species",
+            "system": "dnd5e",
+            "type": "Item"
+        },
+        {
+            "label": "Tinker Compendium Subclasses",
+            "name": "dnd5e-2024-tinker-compendium-subclasses",
+            "ownership": {
+                "ASSISTANT": "OWNER",
+                "PLAYER": "OBSERVER"
+            },
+            "path": "packs/dnd5e-2024-tinker-compendium-subclasses",
+            "system": "dnd5e",
+            "type": "Item"
+        }
+    ],
+    "relationships": {
+        "systems": [
+            {
+                "id": "dnd5e",
+                "type": "system"
+            }
+        ]
+    },
+    "title": "PDF Compendium: tinker-compendium",
+    "version": "0.2.0"
+}
