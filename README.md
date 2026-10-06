@@ -1,9 +1,18 @@
 # foundry-pdf-parser
 
-Turns a PDF into Foundry VTT compendium packs for the wh40k-rpg or dnd5e
-system. You give it a PDF and nothing else. It reads the text layer, renders and
-OCRs every page, corrects the text layer against what is actually printed, works
-out the layout (tables, statblocks, catalogue entries, headings), and writes
+Turns a tabletop RPG PDF you own into Foundry VTT compendium packs:
+
+- **5th edition, for the dnd5e system** (2014 or 2024 rules): classes and
+  their features, subclasses, species, backgrounds and feats, with the
+  system's advancement — proficiencies, features by level, scale values,
+  ability score improvements — wired up. See
+  [dnd5e character options](#dnd5e-character-options).
+- **The wh40k-rpg system's game lines**: weapons, armour, gear, talents,
+  traits, psychic powers, origin paths, NPC and vehicle statblocks and more.
+
+You give it a PDF and nothing else. It reads the text layer, renders and OCRs
+every page, corrects the text layer against what is actually printed, works out
+the layout (tables, statblocks, catalogue entries, headings), and writes
 documents in the system's own schema.
 
 It runs in two places with identical results:
@@ -34,9 +43,9 @@ do not share, upload or redistribute it. The tool will not open encrypted
 
 - **The PDF is the only content input.** No profiles, no config files, no path
   or file name inspection. Besides where output and caches go, the one user
-  choice is the **target schema**: a wh40k-rpg game line (`dh2` by default,
-  `dh1`, `rt`, `dw`, `ow`, `bc`, `im`) or a dnd5e ruleset (`dnd5e-2014`,
-  `dnd5e-2024`). It selects a mechanical structure — document types, field
+  choice is the **target schema**: a dnd5e ruleset (`dnd5e-2014`,
+  `dnd5e-2024`) or a wh40k-rpg game line (`dh2`, the default, `dh1`, `rt`,
+  `dw`, `ow`, `bc`, `im`). It selects a mechanical structure — document types, field
   paths, value types and bounds — never content: a schema holds no enumerated
   entries and no per-entry values, and the user's PDF supplies every value.
 - **No document identification.** The engine never works out which book, game
