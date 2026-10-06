@@ -12,9 +12,23 @@ It runs in two places with identical results:
   The PDF never leaves the machine. The page is published at
   <https://jamesonrgrieve.github.io/ttrpg-pdf-to-foundry-converter/> on every
   push to `main`.
-- **From the command line** (Node ≥ 22).
+- **From the command line** (Node ≥ 22.13).
 
 Same PDF + same engine version gives byte-identical output in either.
+
+## Notice
+
+This is an unofficial, independent tool. It is not affiliated with, endorsed,
+sponsored or approved by the publisher of any game, book or Foundry VTT game
+system it can read or write for. All trademarks and copyrights belong to their
+respective owners; game and system names appear here only to say what the tool
+works with.
+
+The tool contains no book content and ships none: you supply the PDF and every
+value in the output comes from it. Use it only on PDFs you have lawfully
+obtained, for your own use. A converted module contains text from your book, so
+do not share, upload or redistribute it. The tool will not open encrypted
+(DRM-protected) PDFs, and you should not remove protection to make one convert.
 
 ## Hard constraints
 

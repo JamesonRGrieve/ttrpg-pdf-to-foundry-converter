@@ -41,6 +41,18 @@ main {
     color: var(--muted);
 }
 
+.notice {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 0 1rem 2rem;
+    color: var(--muted);
+    font-size: 0.875rem;
+}
+
+.notice h2 {
+    font-size: 1rem;
+}
+
 section {
     margin-top: 2rem;
 }
