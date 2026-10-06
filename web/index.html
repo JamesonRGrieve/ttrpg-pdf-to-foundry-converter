@@ -21,20 +21,30 @@
             <p class="lede">
                 Converts PDFs into a Foundry VTT module of compendium packs for the dnd5e system (5th edition
                 character options, 2014 or 2024 rules) or the wh40k-rpg system. Everything runs in this
-                browser tab: the files are never uploaded anywhere. Install the module as described in
-                <a href="#install-heading">Install in Foundry</a>; several can be installed side by side.
+                browser tab: the files are never uploaded anywhere. Follow the three steps below.
             </p>
 
             <section aria-labelledby="choose-heading">
                 <h2 id="choose-heading">1. Choose PDFs</h2>
+                <ol class="steps">
+                    <li>
+                        Drop your PDF files on the box below, or click it to pick them. You can add several.
+                    </li>
+                    <li>
+                        Next to each file, pick what the book is for: <strong>dnd5e-2014</strong> or
+                        <strong>dnd5e-2024</strong> for a 5th edition book (whichever rules it uses), or the
+                        game-line code (<code>dh2</code>, <code>dh1</code>, <code>rt</code>, <code>dw</code>,
+                        <code>ow</code>, <code>bc</code> or <code>im</code>) for a book of the wh40k-rpg
+                        system. All files in one batch must be for the same system.
+                    </li>
+                    <li>Wrong file? Click its <strong>×</strong> to take it out.</li>
+                    <li>Leave <em>Resources</em> as it is unless your computer struggles (see step 2).</li>
+                    <li>Click <strong>Convert</strong>.</li>
+                </ol>
                 <label id="drop-zone" class="drop-zone" for="pdf-input">
                     <span>Drop PDFs here, or activate to browse</span>
                     <input id="pdf-input" type="file" accept="application/pdf,.pdf" multiple />
                 </label>
-                <p>
-                    Choose the game line or ruleset whose schema each PDF is written in. One module holds one
-                    system's packs.
-                </p>
                 <ul id="chosen" aria-label="Chosen PDFs"></ul>
                 <fieldset class="resources">
                     <legend>Resources</legend>
@@ -53,15 +63,32 @@
                         Choose PDFs to see the memory a job needs.
                     </p>
                     <p class="hint">
-                        OCR reads one page per core. A memory budget runs fewer pages at once to fit it (an
-                        approximate fit). The output is the same either way.
+                        The converter reads one page per core. A memory budget reads fewer pages at once to
+                        fit it (an approximate fit). The result is the same either way; only the speed
+                        changes.
                     </p>
                 </fieldset>
                 <button id="convert" type="button" disabled>Convert</button>
             </section>
 
             <section aria-labelledby="progress-heading">
-                <h2 id="progress-heading">2. Progress</h2>
+                <h2 id="progress-heading">2. Wait for Completion</h2>
+                <ul class="steps">
+                    <li>
+                        <strong>Keep this tab open</strong> until the status below says <strong>Done</strong>.
+                        Don't close it, reload it, or let the computer sleep, or you will have to start again.
+                    </li>
+                    <li>
+                        Every page is read like a scan, so a big book takes a while. The bar shows how far it
+                        has got; after the last page the module still has to be put together, so wait for
+                        <strong>Done</strong>.
+                    </li>
+                    <li>
+                        If it says the browser ran out of memory: close other programs and other browser
+                        windows and tabs, then convert again. Fewer CPU cores or a smaller memory budget in
+                        step 1 also uses less memory.
+                    </li>
+                </ul>
                 <p id="status" role="status" aria-live="polite">No file chosen.</p>
                 <p id="oom" class="alert" role="alert" hidden>
                     Your browser ran out of memory. Close background programs, especially other Chrome windows
@@ -74,8 +101,8 @@
                 </details>
             </section>
 
-            <section aria-labelledby="result-heading">
-                <h2 id="result-heading">3. Result</h2>
+            <section aria-labelledby="install-heading">
+                <h2 id="install-heading">3. Download and Install</h2>
                 <table id="packs" hidden>
                     <caption>
                         Documents per pack
@@ -89,44 +116,76 @@
                     <tbody></tbody>
                 </table>
                 <a id="download" class="button" hidden download="module.zip">Download module (.zip)</a>
-            </section>
-
-            <section aria-labelledby="install-heading">
-                <h2 id="install-heading">4. Install in Foundry</h2>
                 <ol class="steps">
                     <li>
-                        Install the game system the module is for, if you have not:
-                        <strong>dnd5e</strong> (Foundry v14 or later) or <strong>wh40k-rpg</strong> (Foundry
-                        v13 or later). The module only appears in worlds that use that system.
+                        When the conversion is done, click <strong>Download module (.zip)</strong> above. (The
+                        button only appears once it is finished.)
                     </li>
                     <li>
-                        Unzip the downloaded file. It holds one folder, named like
-                        <code>pdf-compendium-1a2b3c4d5e6f</code>.
+                        Make sure Foundry has the game system the module is for: <strong>dnd5e</strong> (needs
+                        Foundry v14 or later) or <strong>wh40k-rpg</strong> (needs Foundry v13 or later). If
+                        not, install it from Foundry's setup screen: <em>Game Systems → Install System</em>.
                     </li>
                     <li>
-                        Put that folder in the <code>Data/modules</code> folder of your Foundry user data. On
-                        Foundry's setup screen, the <em>Configuration</em> tab shows where your user data is.
-                        On a hosted server, upload the folder into <code>Data/modules</code> with your host's
-                        file manager.
+                        Find Foundry's <code>modules</code> folder. On Foundry's setup screen, the
+                        <em>Configuration</em> tab shows the <em>User Data Path</em>; the folder you want is
+                        <code>Data/modules</code> inside it. Unless you changed it, that is:
+                        <ul>
+                            <li>Windows: <code>%LOCALAPPDATA%\FoundryVTT\Data\modules</code></li>
+                            <li>macOS: <code>~/Library/Application Support/FoundryVTT/Data/modules</code></li>
+                            <li>Linux: <code>~/.local/share/FoundryVTT/Data/modules</code></li>
+                        </ul>
+                        On a hosted server, use your host's file manager to open <code>Data/modules</code>
+                        there, not a folder on your own computer.
                     </li>
                     <li>
-                        Restart Foundry, or go back to its setup screen. The module is listed under
-                        <em>Add-on Modules</em> as “PDF Compendium: …” with the converter release in its name.
+                        Unzip the downloaded file into that <code>modules</code> folder. You get one new
+                        folder named like <code>pdf-compendium-1a2b3c4d5e6f</code>.
                     </li>
                     <li>
-                        Launch your world, open <em>Game Settings → Manage Modules</em>, tick the module and
-                        save.
+                        <strong>Check:</strong> open that new folder. You must see
+                        <code>module.json</code> right there. If you see another
+                        <code>pdf-compendium-…</code> folder instead, your unzip tool made a folder inside a
+                        folder: move the inner one up into <code>modules</code> and delete the empty outer
+                        one.
                     </li>
                     <li>
-                        The packs are in the <em>Compendium Packs</em> sidebar tab, in a folder named “PDF
-                        Compendium …”.
+                        <strong>Quit Foundry completely and start it again.</strong> (If it runs on a server,
+                        go back to its setup screen.) Foundry only notices new modules then.
+                    </li>
+                    <li>
+                        On the setup screen, open <em>Add-on Modules</em>. You should see
+                        <strong>PDF Compendium: …</strong> with the converter release in brackets.
+                    </li>
+                    <li>
+                        Launch a world that uses the matching game system. In it, open
+                        <em>Game Settings → Manage Modules</em>, tick <strong>PDF Compendium: …</strong>, and
+                        click <strong>Save Module Settings</strong>. The world reloads.
+                    </li>
+                    <li>
+                        Open the <em>Compendium Packs</em> tab in the right-hand sidebar (the book icon). Your
+                        packs are in the folder named <strong>PDF Compendium …</strong>.
                     </li>
                 </ol>
+                <p><strong>Not showing up?</strong></p>
+                <ul class="steps">
+                    <li>
+                        Not in <em>Add-on Modules</em>: redo the check in step 5, then restart Foundry again.
+                    </li>
+                    <li>
+                        Listed, but not in your world's <em>Manage Modules</em>: the world uses a different
+                        game system from the one you picked in step 1, or your Foundry is older than the
+                        system needs.
+                    </li>
+                    <li>
+                        Packs listed twice: you have an older conversion installed too. Each conversion is its
+                        own module; disable or delete the old one.
+                    </li>
+                </ul>
                 <p>
-                    Each conversion is its own module, so converting again (after a new converter release,
-                    say) gives a new folder beside the old one. Disable or delete the old module so the packs
-                    are not listed twice. When a newer converter release is out, Foundry tells the GM once
-                    when the world loads.
+                    When a newer converter release is out, Foundry tells the GM once when the world loads.
+                    Convert your PDFs again here for the new results, install the new module, and delete the
+                    old one.
                 </p>
             </section>
         </main>
