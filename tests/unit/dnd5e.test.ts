@@ -712,6 +712,18 @@ describe("dnd5e character options (older conventions)", () => {
         expect(readings.species[0]?.traits.map((t) => t.label)).toEqual(["Dust Wings", "Soot Cloak"]);
     });
 
+    it("names a species by its heading when its traits heading runs the words together", () => {
+        const doc = new Doc();
+        new Column(doc, 0, 0, LEFT)
+            .heading("Burrowkin", 18)
+            .heading("BurrowkinTraits", 14)
+            .trait("Size", "Your size is Small.")
+            .trait("Speed", "Your base walking speed is 25 feet.")
+            .trait("Deep Nose", "You smell water underground.");
+        const read = readCharacterOptions(readLayout(doc.ir()));
+        expect(read.species.map((s) => s.name)).toEqual(["Burrowkin"]);
+    });
+
     it("reads a background nested under a species heading, and a feat by its prerequisite", () => {
         expect(readings.backgrounds).toHaveLength(1);
         expect(readings.backgrounds[0]).toMatchObject({

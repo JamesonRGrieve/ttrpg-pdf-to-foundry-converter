@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { singularKey } from "../pipeline.ts";
+import { nameKey, singularKey } from "../pipeline.ts";
 import {
     allLines,
     ancestors,
@@ -607,11 +607,14 @@ function readSpecies(section: Section): SpeciesReading[] | null {
     ) {
         return null;
     }
+    // The traits are under a heading that extends the species' own ("<Name> Traits").
+    // Compared without spaces: a read may run a heading's words together.
     const parent = section.parent;
     const titled =
         parent !== null &&
         parent.heading !== null &&
-        plainWords(section.title).startsWith(`${plainWords(parent.title)} `)
+        nameKey(section.title).length > nameKey(parent.title).length &&
+        nameKey(section.title).startsWith(nameKey(parent.title))
             ? parent
             : section;
     const subraces = sectionsOf(titled)
