@@ -18,6 +18,19 @@ coverage/
 dist-web/
 web/public/vendor/
 
+# Corpus-audit tooling and its results. These drive the engine against a private
+# commercial corpus and name the books they audit, so they stay local and are never
+# published (the shippable engine, fixtures and gates do not depend on them).
+output/
+scripts/*.json
+scripts/audit-*
+scripts/validate-dh2-*
+scripts/crop-*
+scripts/im-*
+scripts/owbc-*
+scripts/__pycache__/
+.claude/
+
 # Playwright artifacts
 test-results/
 playwright-report/
