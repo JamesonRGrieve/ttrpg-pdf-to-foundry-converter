@@ -21,6 +21,12 @@ describe("weapon-table load rows", () => {
         expect(rowType("weapon", shell)).toBe("ammunition");
     });
 
+    it("reads every row of a table with no class, rate of fire or clip column as a weapon", () => {
+        const melee = { name: "Iron Hook", range: "—", damage: "1d10+2 R", penetration: "1", weight: "3kg" };
+        expect(isLoadRow(melee)).toBe(false);
+        expect(rowType("weapon", melee)).toBe("weapon");
+    });
+
     it("keeps wielded weapons and self-contained charges as weapons", () => {
         expect(rowType("weapon", { ...shell, class: "Pistol", range: "30m", rof: "S/-/-" })).toBe("weapon");
         expect(rowType("weapon", { ...shell, clip: "1" })).toBe("weapon");

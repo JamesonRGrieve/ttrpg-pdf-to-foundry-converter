@@ -515,6 +515,12 @@ export function parseRenown(raw: string): (typeof RENOWN_RANKS)[number] | null {
 }
 
 /** The class words a cell names, in order, each once. */
+/** The weapon class a caption names ("Melee Weapons"), when it names exactly one. */
+export function captionWeaponClass(caption: string): WeaponClass | null {
+    const found = classWords(clean(caption).toLowerCase());
+    return found.length === 1 ? (found[0] ?? null) : null;
+}
+
 function classWords(text: string): WeaponClass[] {
     const found: WeaponClass[] = [];
     for (const word of text.split(/[^a-z]+/u)) {

@@ -67,6 +67,14 @@ export function classifyTable(table: DetectedTable): Classification {
     ) {
         return { contentType: "weapon", confidence: 0.9 };
     }
+    // Damage beside penetration is a weapon profile too: a melee table prints no
+    // rate of fire, class or clip, but no other table kind prints both.
+    if (
+        headers.some((h) => headerRole(h) === "damage") &&
+        headers.some((h) => headerRole(h) === "penetration")
+    ) {
+        return { contentType: "weapon", confidence: 0.8 };
+    }
 
     const scores: [ContentType, number][] = [
         ["weapon", weaponScore],

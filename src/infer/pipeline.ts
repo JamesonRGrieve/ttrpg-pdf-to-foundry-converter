@@ -33,6 +33,7 @@ import {
     stripHeadingLabel,
     wordsOf,
 } from "./names.ts";
+import { captionWeaponClass } from "./notation.ts";
 import { parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
@@ -440,6 +441,8 @@ function extractTables(
         }
         // A caption naming a tier ("… Tier 2 …") gives every row that tier.
         const captionTier = /\btier\s*(\d)\b/iu.exec(table.tableTitle ?? "")?.[1];
+        // A weapon table with no class column takes the one class its caption names ("Melee Weapons").
+        const captionClass = type === "weapon" ? captionWeaponClass(table.tableTitle ?? "") : null;
         // A section row groups the records under it; in a ship weapon table it
         // names their weapon type ("Lances").
         let section: string | null = null;
@@ -469,6 +472,9 @@ function extractTables(
             const cells = rowCells(row, roles);
             if (captionTier !== undefined && cells.tier === undefined) {
                 cells.tier = captionTier;
+            }
+            if (captionClass !== null && cells.class === undefined) {
+                cells.class = captionClass;
             }
             const itemType = rowType(type, cells);
             if (itemType === null) {

@@ -12,6 +12,17 @@ describe("table classification", () => {
         ).toBe("weapon");
     });
 
+    it("recognises a melee weapon table by damage beside penetration", () => {
+        expect(
+            classifyTable(table(["Name", "Range", "Dam", "Pen", "Special", "Wt.", "Availability"]))
+                .contentType,
+        ).toBe("weapon");
+        // Damage alone (a table of damage modifiers, say) is not a weapon profile.
+        expect(classifyTable(table(["Name", "Damage", "Wt.", "Availability"])).contentType).not.toBe(
+            "weapon",
+        );
+    });
+
     it("recognises catalogues of protection and of acquirable goods", () => {
         expect(classifyTable(table(["Name", "Protection Rating", "Weight"])).contentType).toBe("force-field");
         expect(classifyTable(table(["Name", "AP", "Weight"])).contentType).toBe("armour");

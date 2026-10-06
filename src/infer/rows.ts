@@ -309,12 +309,19 @@ function trait(cells: RowCells): RowMapping {
 }
 
 /**
- * A weapon-table row that prints damage but no class, range, rate of fire or
- * clip is not wielded: it is a load fired from another weapon (a shell or
- * warhead). A row with a clip holds its own charge.
+ * A weapon-table row that prints damage but leaves its table's class, range,
+ * rate of fire and clip blank is not wielded: it is a load fired from another
+ * weapon (a shell or warhead). A row with a clip holds its own charge. A table
+ * with no class, rate of fire or clip column at all (a melee table) holds no
+ * loads: its rows are weapons whatever their range.
  */
 export function isLoadRow(cells: RowCells): boolean {
-    return filled(cells.damage) && ![cells.class, cells.range, cells.rof, cells.clip].some(filled);
+    const firingColumns = cells.class !== undefined || cells.rof !== undefined || cells.clip !== undefined;
+    return (
+        filled(cells.damage) &&
+        firingColumns &&
+        ![cells.class, cells.range, cells.rof, cells.clip].some(filled)
+    );
 }
 
 /** A weapon's profile columns, each with the notation its values are printed in. */

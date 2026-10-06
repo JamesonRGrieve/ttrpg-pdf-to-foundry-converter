@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import {
+    captionWeaponClass,
     isEmptyCell,
     parseArmourPoints,
     parseAvailability,
@@ -20,6 +21,19 @@ import {
     parseWeaponClass,
     parseWeight,
 } from "../../src/infer/notation.ts";
+
+describe("captionWeaponClass", () => {
+    it("reads the one weapon class a caption names", () => {
+        expect(captionWeaponClass("Table 2-2: Melee Weapons")).toBe("melee");
+        expect(captionWeaponClass("Table 3-1: Basic Weapons")).toBe("basic");
+    });
+
+    it("reads no class from a caption naming none, or several", () => {
+        expect(captionWeaponClass("Table 2-1: Ranged Weapons")).toBeNull();
+        expect(captionWeaponClass("Pistol and Basic Weapons")).toBeNull();
+        expect(captionWeaponClass("")).toBeNull();
+    });
+});
 
 describe("parseDamage", () => {
     it("reads dice, signed bonus and damage-type letter", () => {
