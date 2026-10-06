@@ -42,6 +42,9 @@
                         <option value="8192">8 GB</option>
                         <option value="16384">16 GB</option>
                     </select>
+                    <p id="estimate" class="hint" aria-live="polite">
+                        Choose PDFs to see the memory a job needs.
+                    </p>
                     <p class="hint">
                         OCR reads one page per core. A memory budget runs fewer pages at once to fit it (an
                         approximate fit). The output is the same either way.
@@ -53,6 +56,10 @@
             <section aria-labelledby="progress-heading">
                 <h2 id="progress-heading">2. Progress</h2>
                 <p id="status" role="status" aria-live="polite">No file chosen.</p>
+                <p id="oom" class="alert" role="alert" hidden>
+                    Your browser ran out of memory. Close background programs, especially other Chrome windows
+                    and tabs, then try again. A lower memory budget or fewer CPU cores also uses less memory.
+                </p>
                 <progress id="progress" max="1" value="0" aria-label="Conversion progress"></progress>
                 <details>
                     <summary>Engine log</summary>
@@ -99,6 +106,7 @@
             <p>
                 Free software under the
                 <a href="https://github.com/JamesonRGrieve/ttrpg-pdf-to-foundry-converter">GNU AGPL-3.0</a>.
+                Release <span id="release"></span> (UTC).
             </p>
         </footer>
         <script type="module" src="./main.ts"></script>

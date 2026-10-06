@@ -4,12 +4,16 @@
         "verified": "14"
     },
     "description": "Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the wh40k-rpg system.",
+    "esmodules": [
+        "scripts/update-check.js"
+    ],
     "flags": {
         "foundry-pdf-parser": {
             "engineVersion": "0.2.0",
             "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
             "irVersion": 41,
             "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
+            "release": "2026-10-06-18-30",
             "renderer": "mupdf@1.28.1/300dpi/gray",
             "target": "dh2,rt"
         }
@@ -36,6 +40,11 @@
     ],
     "packs": [
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Actors Bestiary",
             "name": "dh2-wayfarers-field-manual-actors-bestiary",
             "ownership": {
@@ -47,6 +56,11 @@
             "type": "Actor"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Armour",
             "name": "dh2-wayfarers-field-manual-items-armour",
             "ownership": {
@@ -58,6 +72,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Mutations",
             "name": "dh2-wayfarers-field-manual-items-mutations",
             "ownership": {
@@ -69,6 +88,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Talents",
             "name": "dh2-wayfarers-field-manual-items-talents",
             "ownership": {
@@ -80,6 +104,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Weapons",
             "name": "dh2-wayfarers-field-manual-items-weapons",
             "ownership": {
@@ -91,6 +120,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Rolltables",
             "name": "dh2-wayfarers-field-manual-rolltables",
             "ownership": {
@@ -102,6 +136,11 @@
             "type": "RollTable"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Actors Bestiary",
             "name": "rt-wayfarers-field-manual-actors-bestiary",
             "ownership": {
@@ -113,6 +152,11 @@
             "type": "Actor"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Armour",
             "name": "rt-wayfarers-field-manual-items-armour",
             "ownership": {
@@ -124,6 +168,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Mutations",
             "name": "rt-wayfarers-field-manual-items-mutations",
             "ownership": {
@@ -135,6 +184,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Talents",
             "name": "rt-wayfarers-field-manual-items-talents",
             "ownership": {
@@ -146,6 +200,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Items Weapons",
             "name": "rt-wayfarers-field-manual-items-weapons",
             "ownership": {
@@ -157,6 +216,11 @@
             "type": "Item"
         },
         {
+            "flags": {
+                "foundry-pdf-parser": {
+                    "release": "2026-10-06-18-30"
+                }
+            },
             "label": "Wayfarers Field Manual Rolltables",
             "name": "rt-wayfarers-field-manual-rolltables",
             "ownership": {
@@ -177,5 +241,5 @@
         ]
     },
     "title": "PDF Compendium: wayfarers-field-manual",
-    "version": "0.2.0"
+    "version": "2026-10-06-18-30"
 }

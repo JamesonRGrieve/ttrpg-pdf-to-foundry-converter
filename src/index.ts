@@ -52,7 +52,7 @@ export {
 export type { OcrEngine, OcrWord, OcrPage, RenderedPage } from "./ocr/types.ts";
 export { emit, type EmittedPack } from "./stages/emit.ts";
 export { buildModule, type BuiltModule, type ModuleFile, SYSTEM_ID } from "./stages/module.ts";
-export { ENGINE_VERSION, IR_VERSION } from "./version.ts";
+export { CONVERTER_URL, ENGINE_VERSION, IR_VERSION, RELEASE, RELEASE_FEED_URL } from "./version.ts";
 export { PINS } from "./pins.ts";
 export type { IR, RawDoc, ImageAssets } from "./types/ir.ts";
 export type { Entity, EntityGraph } from "./types/entity.ts";

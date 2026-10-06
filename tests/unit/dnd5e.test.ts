@@ -882,7 +882,7 @@ describe("dnd5e documents", () => {
             })),
             assets: [],
             sources: [result.book],
-            provenance: { engineVersion: "0.0.0", target: "dnd5e-2024" },
+            provenance: { release: "2000-01-02-03-04", target: "dnd5e-2024" },
         });
         const manifest = JSON.parse(
             String(built.files.find((f) => f.relPath.endsWith("module.json"))?.contents),

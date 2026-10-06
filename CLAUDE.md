@@ -200,7 +200,12 @@ Modules must **coexist**: any number can be installed together, and none may
 compete with another or with the system. The module id is a hash of the
 module's own content (never of the input files), pack names are namespaced by
 the module, image paths point into the module, and a module touches no global
-state — no scripts, no settings, no overrides.
+state — no settings, no overrides, and one script only: an update check that,
+for the GM, compares the module's converter release (its version, a
+`YYYY-MM-DD-HH-MM` UTC stamp also recorded on every pack) with the release
+published beside the web page, and offers to rebuild. It changes nothing, says
+nothing offline, speaks once for all active converted modules, and can be
+hidden until a newer release.
 
 ## Target Schema Selection
 

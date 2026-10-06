@@ -3,6 +3,7 @@ import type { SystemId } from "../infer/targets.ts";
 import type { FoundryDocumentType, JsonObject, JsonValue } from "../types/entity.ts";
 import { sha256Hex } from "../util/hash.ts";
 import { byteCompare, sortKeysDeep } from "../util/ordered.ts";
+import { FLAG_SCOPE, UPDATE_CHECK_PATH, UPDATE_CHECK_SCRIPT } from "./update-check.ts";
 
 /**
  * Stage 8 — Package. Turns one run's documents (from one or more PDFs) into a
@@ -12,15 +13,19 @@ import { byteCompare, sortKeysDeep } from "../util/ordered.ts";
  *   <id>/module.json
  *   <id>/packs/<pack>.db       NeDB: one JSON document per line
  *   <id>/assets/<asset>.<ext>  extracted images the documents reference
+ *   <id>/scripts/update-check.js  tells the GM when a newer converter release exists
  *
  * Foundry builds each pack's LevelDB from its `.db` file the first time the
  * pack is opened, so the module needs no native tooling to produce — the
- * browser and the CLI write identical bytes.
+ * browser and the CLI write identical bytes. The converter's release is the
+ * module's version and is stamped on every pack.
  *
  * Several such modules install side by side: the id is a hash of the module's
  * own content (never of the input files), so distinct runs get distinct ids;
  * pack names are namespaced by the module; image paths point into the module
- * itself; and nothing touches the system or any other package.
+ * itself; and nothing touches the system or any other package. The update
+ * check is the module's only script: it changes no document or setting, and
+ * all active converted modules share one notice.
  */
 
 /** Documents are emitted with image paths under this prefix; packaging points them at the module. */
@@ -59,12 +64,13 @@ export interface ModuleInput {
     assets: readonly { relPath: string; bytes: Uint8Array }[];
     /** Short names of the source documents, for the module's title. */
     sources: readonly string[];
-    /** The engine's identity (version, extractor, renderer, OCR, target), recorded in the manifest's flags. */
-    provenance: { engineVersion: string } & JsonObject;
+    /**
+     * The engine's identity (release, extractor, renderer, OCR, target),
+     * recorded in the manifest's flags; the release is the module's version
+     * and is stamped on every pack.
+     */
+    provenance: { release: string } & JsonObject;
 }
-
-/** Namespace of the manifest flags this tool writes. */
-const FLAG_SCOPE = "foundry-pdf-parser";
 
 export interface ModuleFile {
     /** Path relative to the modules directory: `<id>/…`. */
@@ -137,10 +143,12 @@ export function buildModule(input: ModuleInput): BuiltModule {
         id,
         title: `PDF Compendium: ${sources.join(", ")}`,
         description: `Compendium packs converted by foundry-pdf-parser from PDFs its user supplied, for the ${input.system} system.`,
-        version: input.provenance.engineVersion,
+        version: input.provenance.release,
         compatibility: COMPATIBILITY[input.system],
         flags: { [FLAG_SCOPE]: input.provenance },
         relationships: { systems: [{ id: input.system, type: "system" }] },
+        // Tells the GM when a newer converter release could build this module better.
+        esmodules: [UPDATE_CHECK_PATH],
         packs: packs.map((p) => ({
             name: p.name,
             label: p.label,
@@ -148,6 +156,7 @@ export function buildModule(input: ModuleInput): BuiltModule {
             type: p.documentType,
             system: input.system,
             ownership: { PLAYER: "OBSERVER", ASSISTANT: "OWNER" },
+            flags: { [FLAG_SCOPE]: { release: input.provenance.release } },
         })),
         packFolders: [
             { name: `PDF Compendium ${id.slice(-MODULE_ID_HASH_LENGTH)}`, packs: packs.map((p) => p.name) },
@@ -163,6 +172,7 @@ export function buildModule(input: ModuleInput): BuiltModule {
                 .join(""),
         })),
         ...assets.map((a) => ({ relPath: `${id}/assets/${a.relPath}`, contents: a.bytes })),
+        { relPath: `${id}/${UPDATE_CHECK_PATH}`, contents: UPDATE_CHECK_SCRIPT },
     ];
     files.sort((a, b) => byteCompare(a.relPath, b.relPath));
     return { id, files };

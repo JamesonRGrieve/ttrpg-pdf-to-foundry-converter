@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { DEFAULT_TARGET, TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
+import { RELEASE } from "../src/version.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
-import { planResources } from "./resources.ts";
+import { estimateMemoryMb, looksOutOfMemory, planResources } from "./resources.ts";
 
 /**
  * The upload page: hand one or more PDFs to the engine worker, show overall
@@ -47,6 +48,26 @@ fillCores();
 
 /** The memory budget chosen, in MB, or null to use everything. */
 const memoryBudget = (): number | null => (memory.value === "" ? null : Number(memory.value));
+
+const estimate = element("estimate", HTMLParagraphElement);
+const outOfMemory = element("oom", HTMLParagraphElement);
+element("release", HTMLSpanElement).textContent = RELEASE;
+
+const MB_PER_GB = 1024;
+
+/** Show roughly how much memory the chosen PDFs and settings need. */
+function updateEstimate(): void {
+    const bytes = chosen.reduce((n, c) => n + c.file.size, 0);
+    if (chosen.length === 0) {
+        estimate.textContent = "Choose PDFs to see the memory a job needs.";
+        return;
+    }
+    const plan = planResources(Number(cores.value), memoryBudget(), bytes);
+    const gb = (estimateMemoryMb(plan, bytes) / MB_PER_GB).toFixed(1);
+    estimate.textContent = `Estimated memory for this job: about ${gb} GB (${plan.ocrWorkers} page${plan.ocrWorkers === 1 ? "" : "s"} at once).`;
+}
+cores.addEventListener("change", updateEstimate);
+memory.addEventListener("change", updateEstimate);
 
 /** A chosen PDF, the control holding the target the user picked for it, and its remove button. */
 interface ChosenPdf {
@@ -111,6 +132,7 @@ function renderChosen(): void {
         chosen.length === 0
             ? "No file chosen."
             : `Ready: ${chosen.length} PDF${chosen.length === 1 ? "" : "s"}.`;
+    updateEstimate();
 }
 
 /** A button that takes one PDF out of the pending batch. */
@@ -146,12 +168,16 @@ function resetResult(): void {
         zipUrl = null;
     }
     log.textContent = "";
+    outOfMemory.hidden = true;
     progress.max = 1;
     progress.value = 0;
 }
 
 function appendLog(line: string): void {
     log.append(document.createTextNode(`${line}\n`));
+    if (looksOutOfMemory(line)) {
+        outOfMemory.hidden = false;
+    }
 }
 
 const refusedNames = (files: readonly File[], refused: readonly number[]): string =>
@@ -251,12 +277,16 @@ async function start(): Promise<void> {
                 break;
             case "error":
                 status.textContent = `Failed: ${message.message}`;
+                outOfMemory.hidden = !looksOutOfMemory(message.message);
                 finish();
                 break;
         }
     });
     engine.addEventListener("error", (event) => {
-        status.textContent = `Failed: ${event.message}`;
+        // A worker the browser kills (most often for memory) reports no message at all.
+        const reason = typeof event.message === "string" && event.message.length > 0 ? event.message : null;
+        status.textContent = `Failed: ${reason ?? "the converter stopped unexpectedly"}`;
+        outOfMemory.hidden = reason !== null && !looksOutOfMemory(reason);
         finish();
     });
     status.textContent = "Starting the engine…";

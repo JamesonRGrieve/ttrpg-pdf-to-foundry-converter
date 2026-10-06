@@ -19,6 +19,8 @@ export const RENDERED_PAGE_MB = 9;
 export const PDF_COPIES = 3;
 /** Pages rendered ahead per worker, so a worker never waits for the renderer. */
 export const PAGES_AHEAD_PER_WORKER = 2;
+/** Approximate memory the page and engine hold besides OCR and the PDFs (code, layout, documents), in MB. */
+export const ENGINE_BASE_MB = 500;
 
 const MB = 1024 * 1024;
 
@@ -41,10 +43,32 @@ export function planResources(cores: number, budgetMb: number | null, pdfBytes: 
     let ocrWorkers = coreCap;
     let overBudget = false;
     if (budgetMb !== null) {
-        const free = budgetMb - (PDF_COPIES * pdfBytes) / MB;
+        const free = budgetMb - ENGINE_BASE_MB - (PDF_COPIES * pdfBytes) / MB;
         const fits = Math.floor(free / perWorker);
         overBudget = fits < 1;
         ocrWorkers = Math.min(coreCap, Math.max(1, fits));
     }
     return { ocrWorkers, maxInFlight: ocrWorkers * PAGES_AHEAD_PER_WORKER, overBudget };
+}
+
+/** Approximate peak memory a plan holds converting PDFs totalling `pdfBytes`, in MB. */
+export function estimateMemoryMb(plan: ResourcePlan, pdfBytes: number): number {
+    return (
+        ENGINE_BASE_MB +
+        (PDF_COPIES * pdfBytes) / MB +
+        plan.ocrWorkers * OCR_WORKER_MB +
+        plan.maxInFlight * RENDERED_PAGE_MB
+    );
+}
+
+/**
+ * What browsers and WebAssembly runtimes print when an allocation fails: "out
+ * of memory", Emscripten's "OOM" and "Cannot enlarge memory", "Array buffer
+ * allocation failed", "could not allocate".
+ */
+const OUT_OF_MEMORY = /out of memory|\boom\b|allocation failed|cannot enlarge memory|could not allocate/iu;
+
+/** Whether a log line or error message reports running out of memory. */
+export function looksOutOfMemory(text: string): boolean {
+    return OUT_OF_MEMORY.test(text);
 }

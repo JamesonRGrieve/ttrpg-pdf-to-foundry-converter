@@ -95,6 +95,13 @@ button,
     cursor: pointer;
 }
 
+.alert {
+    padding: 0.75rem;
+    border: 2px solid #b3261e;
+    border-radius: 6px;
+    background: var(--panel);
+}
+
 .resources {
     display: grid;
     grid-template-columns: auto 1fr;

@@ -6,6 +6,7 @@ import {
     type ModuleInput,
     SYSTEM_ID,
 } from "../../src/stages/module.ts";
+import { RELEASE_FEED_URL } from "../../src/version.ts";
 
 const doc = (id: string, name: string, img?: string) => ({
     _id: id,
@@ -35,7 +36,7 @@ function input(over: Partial<ModuleInput> = {}): ModuleInput {
         ],
         assets: [{ relPath: "x1.png", bytes: new Uint8Array([1, 2, 3]) }],
         sources: ["lamps"],
-        provenance: { engineVersion: "9.9.9", target: "dh2" },
+        provenance: { release: "2000-01-02-03-04", target: "dh2" },
         ...over,
     };
 }
@@ -52,6 +53,7 @@ describe("module packaging", () => {
             `${module.id}/module.json`,
             `${module.id}/packs/dh2-lamps-actors-bestiary.db`,
             `${module.id}/packs/dh2-lamps-items-gear.db`,
+            `${module.id}/scripts/update-check.js`,
         ]);
         const manifest = JSON.parse(text(module.files[1]?.contents ?? "")) as Record<string, unknown>;
         expect(manifest["id"]).toBe(module.id);
@@ -65,6 +67,32 @@ describe("module packaging", () => {
             }),
             expect.objectContaining({ name: "dh2-lamps-items-gear", type: "Item", system: SYSTEM_ID }),
         ]);
+    });
+
+    it("versions the module by the converter release, on the manifest and every pack", () => {
+        const module = buildModule(input());
+        const manifest = JSON.parse(text(module.files[1]?.contents ?? "")) as {
+            version: string;
+            esmodules: string[];
+            packs: { flags: Record<string, { release: string }> }[];
+        };
+        expect(manifest.version).toBe("2000-01-02-03-04");
+        expect(manifest.packs.map((p) => p.flags["foundry-pdf-parser"]?.release)).toEqual([
+            "2000-01-02-03-04",
+            "2000-01-02-03-04",
+        ]);
+        expect(manifest.esmodules).toEqual(["scripts/update-check.js"]);
+    });
+
+    it("ships an update check that reads only the published release and can be hidden", () => {
+        const script = text(
+            buildModule(input()).files.find((f) => f.relPath.endsWith("update-check.js"))?.contents ?? "",
+        );
+        expect(script).toContain(RELEASE_FEED_URL);
+        expect(script).toContain('name="hide"');
+        expect(script).toContain("game.user?.isGM");
+        // The script parses (the template it is built from broke no syntax).
+        expect(() => new Function(script)).not.toThrow();
     });
 
     it("writes one document per line, by _id, with images pointed into the module", () => {

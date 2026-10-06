@@ -101,6 +101,14 @@ the module, and nothing touches the system or other packages. Packs are named
 `<target>-<book>-<category>`; the book segment comes from the PDF's own metadata
 title.
 
+Each module is versioned by the converter release that built it, a
+`YYYY-MM-DD-HH-MM` stamp (UTC) also recorded on every pack. Its one script,
+`scripts/update-check.js`, runs for the GM when a world loads: it reads the
+latest release from `release.json` beside the web page and, if a newer
+converter exists, says so once (for all converted modules) and offers to
+rebuild. It changes nothing, stays silent offline, and has a checkbox to hide
+the notice until a newer release.
+
 ## How it works
 
 1. **Extract**: text runs (position, font, size, weight) and embedded images,

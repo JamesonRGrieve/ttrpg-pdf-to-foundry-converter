@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import {
+    ENGINE_BASE_MB,
+    estimateMemoryMb,
+    looksOutOfMemory,
     OCR_WORKER_MB,
     PAGES_AHEAD_PER_WORKER,
     PDF_COPIES,
@@ -26,7 +29,7 @@ describe("resource plan", () => {
 
     it("fits the workers in the budget left after the PDFs", () => {
         const pdf = 100 * MB;
-        const budget = PDF_COPIES * 100 + 3 * PER_WORKER + 1;
+        const budget = ENGINE_BASE_MB + PDF_COPIES * 100 + 3 * PER_WORKER + 1;
         expect(planResources(8, budget, pdf)).toEqual({
             ocrWorkers: 3,
             maxInFlight: 3 * PAGES_AHEAD_PER_WORKER,
@@ -36,6 +39,27 @@ describe("resource plan", () => {
 
     it("keeps to the core count when the budget would allow more", () => {
         expect(planResources(2, 64 * 1024, MB).ocrWorkers).toBe(2);
+    });
+
+    it("estimates the engine, the PDF copies, the workers and the pages in flight", () => {
+        const plan = planResources(4, null, 0);
+        expect(estimateMemoryMb(plan, 10 * MB)).toBe(
+            ENGINE_BASE_MB +
+                PDF_COPIES * 10 +
+                4 * OCR_WORKER_MB +
+                4 * PAGES_AHEAD_PER_WORKER * RENDERED_PAGE_MB,
+        );
+    });
+
+    it("recognises an out-of-memory report and nothing else", () => {
+        expect(looksOutOfMemory("RangeError: Array buffer allocation failed")).toBe(true);
+        expect(looksOutOfMemory("Aborted(OOM)")).toBe(true);
+        expect(looksOutOfMemory("Cannot enlarge memory arrays")).toBe(true);
+        expect(looksOutOfMemory("tab ran out of memory")).toBe(true);
+        expect(looksOutOfMemory("Detected 40 diacritics")).toBe(false);
+        expect(looksOutOfMemory("info: OCR: 25/145 pages recognized")).toBe(false);
+        // A word merely containing the letters is not a report.
+        expect(looksOutOfMemory("broom closet")).toBe(false);
     });
 
     it("runs one worker and flags it when the budget cannot hold one", () => {

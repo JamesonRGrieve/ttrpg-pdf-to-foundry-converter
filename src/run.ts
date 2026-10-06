@@ -18,7 +18,7 @@ import { normalize } from "./stages/normalize.ts";
 import type { IR, ImageAssets } from "./types/ir.ts";
 import { sha256Hex } from "./util/hash.ts";
 import { byteCompare } from "./util/ordered.ts";
-import { ENGINE_VERSION, IR_VERSION } from "./version.ts";
+import { ENGINE_VERSION, IR_VERSION, RELEASE } from "./version.ts";
 
 /**
  * The engine: complete PDF in, Foundry compendium documents out.
@@ -255,6 +255,7 @@ export async function runModule(
         assets: results.flatMap((r) => r.assets),
         sources: results.map((r) => r.book),
         provenance: {
+            release: RELEASE,
             engineVersion: ENGINE_VERSION,
             irVersion: IR_VERSION,
             extractor: EXTRACTOR_ID,
