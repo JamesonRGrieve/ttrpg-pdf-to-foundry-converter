@@ -9,6 +9,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4173;
 /**
+ * The page is served under a path, as a project site is (GitHub Pages serves
+ * it at `/<repo>/`), so every URL it resolves must hold below the origin root.
+ */
+const SITE_PATH = "/converter/";
+/**
  * Tests run side by side, a page each. A page's engine recognizes on half the
  * machine's cores, so a quarter of the core count keeps them all busy without
  * crowding each other out.
@@ -25,7 +30,7 @@ export default defineConfig({
     workers: E2E_WORKERS,
     reporter: [["list"]],
     use: {
-        baseURL: `http://127.0.0.1:${PORT}/`,
+        baseURL: `http://127.0.0.1:${PORT}${SITE_PATH}`,
         acceptDownloads: true,
     },
     projects: [
@@ -43,8 +48,8 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: `pnpm web:build && pnpm exec vite preview --host 127.0.0.1 --port ${PORT} --strictPort`,
-        url: `http://127.0.0.1:${PORT}/`,
+        command: `pnpm web:build && pnpm exec vite preview --base ${SITE_PATH} --host 127.0.0.1 --port ${PORT} --strictPort`,
+        url: `http://127.0.0.1:${PORT}${SITE_PATH}`,
         reuseExistingServer: false,
         timeout: 120_000,
     },

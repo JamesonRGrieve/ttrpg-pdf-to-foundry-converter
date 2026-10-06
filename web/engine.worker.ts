@@ -50,12 +50,9 @@ async function run(request: RunRequest): Promise<void> {
         }
         documents.push({ pdf: new Uint8Array(pdf), target });
     }
-    const vendorBase = new URL(`${import.meta.env.BASE_URL}vendor/tesseract/`, self.location.origin).href;
+    const vendorBase = new URL("vendor/tesseract/", request.siteBase).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
-    const ppocr = createBrowserPpOcrPool(
-        ocrWorkers,
-        new URL(`${import.meta.env.BASE_URL}${PPOCR_VENDOR_PATH}`, self.location.origin).href,
-    );
+    const ppocr = createBrowserPpOcrPool(ocrWorkers, new URL(PPOCR_VENDOR_PATH, request.siteBase).href);
     try {
         const result = await runModule(documents, {
             ocr,

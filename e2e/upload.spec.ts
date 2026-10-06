@@ -41,6 +41,17 @@ function watchOffOrigin(page: Page, origin: string): string[] {
     return offOrigin;
 }
 
+/** Record every response the site answered with an error (a file it does not serve, say). */
+function watchFailures(page: Page): string[] {
+    const failed: string[] = [];
+    page.on("response", (response) => {
+        if (response.status() >= 400) {
+            failed.push(`${response.status()} ${response.url()}`);
+        }
+    });
+    return failed;
+}
+
 /** Targets the picker offers: the wh40k-rpg game lines, then the dnd5e rulesets. */
 const TARGET_COUNT = 9;
 
@@ -59,7 +70,9 @@ async function convertsLikeCli(
         throw new Error("baseURL is set in playwright.config.ts");
     }
     const offOrigin = watchOffOrigin(page, new URL(baseURL).origin);
-    await page.goto("/");
+    const failed = watchFailures(page);
+    // Relative to the site's path: the page is served below the origin root.
+    await page.goto("./");
     await page.getByLabel(/drop pdfs here/i).setInputFiles(pdfs.map((pdf) => resolve(repoRoot, pdf)));
     const chosen = page.getByRole("list", { name: "Chosen PDFs" }).getByRole("listitem");
     await expect(chosen).toHaveCount(pdfs.length);
@@ -95,6 +108,7 @@ async function convertsLikeCli(
         ).toBe(true);
     }
     expect(offOrigin, "requests left the page's origin").toEqual([]);
+    expect(failed, "requests the site could not serve").toEqual([]);
 }
 
 test("converts a PDF in-browser into a module identical to the CLI golden", async ({ page, baseURL }) => {
@@ -131,7 +145,7 @@ test("converts character options for the dnd5e system in the chosen ruleset", as
 });
 
 test("refuses an encrypted PDF", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("./");
     await page
         .getByLabel(/drop pdfs here/i)
         .setInputFiles(resolve(repoRoot, "fixtures/rendered/encrypted.pdf"));

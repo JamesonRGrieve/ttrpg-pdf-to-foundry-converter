@@ -12,6 +12,13 @@ export interface RunRequest {
     type: "run";
     /** The PDFs to convert into one module, each with its chosen line. */
     documents: RunDocument[];
+    /**
+     * The URL the page is served under (its directory), which the OCR models
+     * and engines are vendored beneath. The page sends it because the worker's
+     * own URL sits in a build directory, and the site may be served under a
+     * path (a project site), not at the origin's root.
+     */
+    siteBase: string;
 }
 
 export interface PackSummary {

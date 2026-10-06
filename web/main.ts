@@ -163,7 +163,11 @@ async function start(): Promise<void> {
         switch (message.type) {
             case "ready": {
                 status.textContent = "Converting…";
-                const request: RunRequest = { type: "run", documents };
+                const request: RunRequest = {
+                    type: "run",
+                    documents,
+                    siteBase: new URL("./", document.baseURI).href,
+                };
                 const transfer = documents.map((d) => d.pdf);
                 engine.postMessage(request, transfer);
                 break;
