@@ -8,7 +8,8 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -34,9 +35,27 @@ function jsonOf(command, args) {
     }
 }
 
-const bin = (name) => join(ROOT, "node_modules", ".bin", name);
-const eslint = jsonOf(bin("eslint"), [".", "--format", "json"]);
-const biome = jsonOf(bin("biome"), ["lint", "--reporter=json", "--max-diagnostics=0", "."]);
+const requireFromRoot = createRequire(join(ROOT, "package.json"));
+
+/**
+ * A package's own bin script, run through this Node. `node_modules/.bin` holds
+ * shell shims that Windows can only start through a shell, so spawning them
+ * directly fails there with ENOENT; the package's JS entry runs everywhere.
+ */
+function binScript(pkg, name) {
+    const manifest = requireFromRoot.resolve(`${pkg}/package.json`);
+    const { bin } = JSON.parse(readFileSync(manifest, "utf8"));
+    return join(dirname(manifest), typeof bin === "string" ? bin : bin[name]);
+}
+
+const eslint = jsonOf(process.execPath, [binScript("eslint", "eslint"), ".", "--format", "json"]);
+const biome = jsonOf(process.execPath, [
+    binScript("@biomejs/biome", "biome"),
+    "lint",
+    "--reporter=json",
+    "--max-diagnostics=0",
+    ".",
+]);
 const current = {
     eslintWarnings: eslint.reduce((n, file) => n + file.warningCount, 0),
     biomeWarnings: biome.summary.warnings,

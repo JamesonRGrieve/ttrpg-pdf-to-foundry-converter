@@ -26,8 +26,12 @@ function mapsEqual(a: Map<string, Uint8Array>, b: Map<string, Uint8Array>): bool
     return true;
 }
 
-/** A case runs the whole engine twice, recognizing a scanned fixture's pages in every pass when cold. */
-const CASE_TIMEOUT_MS = 120_000;
+/**
+ * A case runs the whole engine twice, recognizing a scanned fixture's pages in every pass when cold.
+ * The cases run concurrently, so on a small CI runner (macOS: 3 cores) the scanned case's two OCR
+ * passes share the machine with every other case; it has needed more than 120 s there.
+ */
+const CASE_TIMEOUT_MS = 300_000;
 
 // Cases run side by side: each is its own engine run, sharing nothing.
 describe.concurrent("determinism (in-memory)", () => {
