@@ -7,10 +7,11 @@
 import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { read } from "./lib/files.mjs";
+import { cliCommand } from "./lib/cli.mjs";
+import { posixRelative, read } from "./lib/files.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = JSON.parse(read(repoRoot, "fixtures/manifest.json")).cases;
@@ -34,24 +35,19 @@ function targetedPdfs(entry) {
 }
 
 async function runCli(outDir, cacheDir, entry) {
-    const { stderr } = await run(
-        "npx",
-        [
-            "tsx",
-            "src/node/cli.ts",
-            "infer",
-            ...targetedPdfs(entry),
-            "--out-dir",
-            outDir,
-            "--cache-dir",
-            cacheDir,
-            "--ocr-workers",
-            String(OCR_WORKERS),
-            "--log-level",
-            "error",
-        ],
-        { cwd: repoRoot },
-    );
+    const [command, args] = cliCommand([
+        "infer",
+        ...targetedPdfs(entry),
+        "--out-dir",
+        outDir,
+        "--cache-dir",
+        cacheDir,
+        "--ocr-workers",
+        String(OCR_WORKERS),
+        "--log-level",
+        "error",
+    ]);
+    const { stderr } = await run(command, args, { cwd: repoRoot });
     if (stderr.length > 0) {
         process.stderr.write(stderr);
     }
@@ -65,7 +61,7 @@ function tree(dir) {
             if (statSync(full).isDirectory()) {
                 walk(full);
             } else {
-                out.set(relative(dir, full), readFileSync(full));
+                out.set(posixRelative(dir, full), readFileSync(full));
             }
         }
     };

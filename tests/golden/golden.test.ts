@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadManifest, runCase } from "../../scripts/lib/run-case.ts";
@@ -21,7 +21,8 @@ function walk(dir: string): string[] {
             if (statSync(full).isDirectory()) {
                 recurse(full);
             } else {
-                out.push(relative(dir, full));
+                // Module paths use `/` on every platform.
+                out.push(relative(dir, full).split(sep).join("/"));
             }
         }
     };

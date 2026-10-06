@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cliCommand } from "./lib/cli.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXIT_ENCRYPTED = 3;
@@ -14,20 +15,15 @@ const tmp = mkdtempSync(join(tmpdir(), "fpp-refuse-"));
 const outDir = join(tmp, "out");
 let code = 0;
 try {
-    execFileSync(
-        "npx",
-        [
-            "tsx",
-            "src/node/cli.ts",
-            "infer",
-            "fixtures/rendered/encrypted.pdf",
-            "--out-dir",
-            outDir,
-            "--cache-dir",
-            join(tmp, "cache"),
-        ],
-        { cwd: repoRoot, stdio: "ignore" },
-    );
+    const [command, args] = cliCommand([
+        "infer",
+        "fixtures/rendered/encrypted.pdf",
+        "--out-dir",
+        outDir,
+        "--cache-dir",
+        join(tmp, "cache"),
+    ]);
+    execFileSync(command, args, { cwd: repoRoot, stdio: "ignore" });
 } catch (err) {
     code = typeof err.status === "number" ? err.status : 1;
 }

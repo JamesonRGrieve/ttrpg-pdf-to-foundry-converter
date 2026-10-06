@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
+
+/** A path relative to `root`, with `/` separators on every platform (as module paths are). */
+export function posixRelative(root, full) {
+    return relative(root, full).split(sep).join("/");
+}
 
 /** Directories never scanned by CI gates (generated / vendored / regenerable). */
 const IGNORED = new Set(["node_modules", ".git", "dist", ".cache", ".tmp", "coverage", ".vitest"]);
@@ -16,7 +21,7 @@ export function listFiles(root, dir = root) {
         if (statSync(full).isDirectory()) {
             out.push(...listFiles(root, full));
         } else {
-            out.push(relative(root, full));
+            out.push(posixRelative(root, full));
         }
     }
     return out;
