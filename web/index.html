@@ -28,6 +28,24 @@
                     system's packs.
                 </p>
                 <ul id="chosen" aria-label="Chosen PDFs"></ul>
+                <fieldset class="resources">
+                    <legend>Resources</legend>
+                    <label for="cores">CPU cores</label>
+                    <select id="cores"></select>
+                    <label for="memory">Memory budget</label>
+                    <select id="memory">
+                        <option value="" selected>Use everything</option>
+                        <option value="1024">1 GB</option>
+                        <option value="2048">2 GB</option>
+                        <option value="4096">4 GB</option>
+                        <option value="8192">8 GB</option>
+                        <option value="16384">16 GB</option>
+                    </select>
+                    <p class="hint">
+                        OCR reads one page per core. A memory budget runs fewer pages at once to fit it (an
+                        approximate fit). The output is the same either way.
+                    </p>
+                </fieldset>
                 <button id="convert" type="button" disabled>Convert</button>
             </section>
 
@@ -62,8 +80,15 @@
             <h2 id="notice-heading">Notice</h2>
             <p>
                 This is an unofficial, independent tool. It is not affiliated with, endorsed, sponsored or
-                approved by the publisher of any game, book or Foundry VTT game system it can read or write
-                for. All trademarks and copyrights belong to their respective owners.
+                approved by Wizards of the Coast, Games Workshop, Fantasy Flight Games, Cubicle 7, Foundry
+                Gaming, or any other publisher of a game, book or Foundry VTT game system it can read or write
+                for.
+            </p>
+            <p>
+                Dungeons &amp; Dragons and D&amp;D are trademarks of Wizards of the Coast LLC. Warhammer
+                40,000 is a trademark of Games Workshop Limited. Foundry Virtual Tabletop is a trademark of
+                Foundry Gaming LLC. All other trademarks and copyrights belong to their respective owners;
+                they are named here only to say what the tool works with.
             </p>
             <p>
                 Use it only on PDFs you have lawfully obtained, for your own use. A converted module contains

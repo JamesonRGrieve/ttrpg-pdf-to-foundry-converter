@@ -28,10 +28,15 @@ Same PDF + same engine version gives byte-identical output in either.
 ## Notice
 
 This is an unofficial, independent tool. It is not affiliated with, endorsed,
-sponsored or approved by the publisher of any game, book or Foundry VTT game
-system it can read or write for. All trademarks and copyrights belong to their
-respective owners; game and system names appear here only to say what the tool
-works with.
+sponsored or approved by Wizards of the Coast, Games Workshop, Fantasy Flight
+Games, Cubicle 7, Foundry Gaming, or any other publisher of a game, book or
+Foundry VTT game system it can read or write for.
+
+Dungeons & Dragons and D&D are trademarks of Wizards of the Coast LLC.
+Warhammer 40,000 is a trademark of Games Workshop Limited. Foundry Virtual
+Tabletop is a trademark of Foundry Gaming LLC. All other trademarks and
+copyrights belong to their respective owners; game and system names appear here
+only to say what the tool works with.
 
 The tool contains no book content and ships none: you supply the PDF and every
 value in the output comes from it. Use it only on PDFs you have lawfully

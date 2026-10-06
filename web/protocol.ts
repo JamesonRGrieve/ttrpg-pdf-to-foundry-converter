@@ -19,6 +19,10 @@ export interface RunRequest {
      * path (a project site), not at the origin's root.
      */
     siteBase: string;
+    /** OCR workers to run side by side (the user's core choice, fitted to their memory budget). */
+    ocrWorkers: number;
+    /** Pages rendered ahead of recognition at once. */
+    maxInFlight: number;
 }
 
 export interface PackSummary {

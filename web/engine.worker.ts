@@ -32,8 +32,6 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
  * format's 1980–2099 range.
  */
 const ZIP_MTIME = new Date(1980, 0, 2, 12, 0, 0);
-/** Leave a core for the page and the renderer. */
-const ocrWorkers = Math.max(1, Math.floor((navigator.hardwareConcurrency || 2) / 2));
 
 function post(message: WorkerMessage, transfer: Transferable[] = []): void {
     self.postMessage(message, transfer);
@@ -50,15 +48,17 @@ async function run(request: RunRequest): Promise<void> {
         }
         documents.push({ pdf: new Uint8Array(pdf), target });
     }
+    const { ocrWorkers, maxInFlight } = request;
     const vendorBase = new URL("vendor/tesseract/", request.siteBase).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
     const ppocr = createBrowserPpOcrPool(ocrWorkers, new URL(PPOCR_VENDOR_PATH, request.siteBase).href);
+    log.info(`OCR on ${ocrWorkers} worker${ocrWorkers === 1 ? "" : "s"}, ${maxInFlight} pages in flight`);
     try {
         const result = await runModule(documents, {
             ocr,
             scanReader: ppocr,
             ocrStore: new MemoryOcrPageStore(),
-            maxInFlight: ocrWorkers * 2,
+            maxInFlight,
             log,
             onProgress: (progress) => post({ type: "progress", ...progress }),
         });
