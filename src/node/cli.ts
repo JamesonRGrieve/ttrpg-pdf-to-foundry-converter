@@ -3,6 +3,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { unavailableTarget } from "../infer/planned.ts";
 import { DEFAULT_TARGET, type Target, TARGET_IDS, targetFor } from "../infer/targets.ts";
 import { createLogger, type Logger, type LogLevel } from "../logger.ts";
 import type { PageReader } from "../ocr/ppocr/reader.ts";
@@ -103,7 +104,7 @@ function resolveTargets(inputs: readonly TargetedInput[]): ResolvedInput[] | str
     for (const { input, targetId } of inputs) {
         const target = targetId === undefined ? DEFAULT_TARGET : targetFor(targetId);
         if (target === null) {
-            return `--target must be one of ${TARGET_IDS.join(", ")}, got ${JSON.stringify(targetId)}`;
+            return unavailableTarget(targetId ?? "", TARGET_IDS);
         }
         out.push({ input, target });
     }

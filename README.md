@@ -163,6 +163,22 @@ Not yet read: spells (and the spells a subclass grants), equipment, monsters,
 spellcasting progression, and proficiencies in specific weapons, tools and
 languages (only weapon and armor categories map to the system's keys).
 
+## Planned systems
+
+Registered but not yet readable (`src/infer/planned.ts`); the first version of
+each will read character options:
+
+| Target               | Foundry system                     | Character-option Item types                                                                      |
+| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `pf2e`               | `pf2e` (Foundry v14)               | ancestry, heritage, background, class, feat                                                      |
+| `pf1`                | `pf1` (Foundry v14)                | race, class, feat                                                                                |
+| `starwarsffg`        | `starwarsffg` (Foundry v13)        | species, career, specialization, talent, signature ability, background, motivation, obligation   |
+| `od6s`               | `od6s` (Foundry v13–14)            | species and character templates, skill, specialization, advantage, disadvantage, special ability |
+| `cyberpunk-red-core` | `cyberpunk-red-core` (Foundry v13) | role, skill                                                                                      |
+
+Deferred until a Foundry system for current Foundry exists: SW5e, and the
+BattleTech roleplaying game.
+
 ## Checking output
 
 - `node scripts/validate-output.mjs <modules dir> [--system <system checkout>]` checks
