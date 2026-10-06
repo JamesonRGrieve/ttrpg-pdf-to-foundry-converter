@@ -9,7 +9,9 @@ system's own schema.
 It runs in two places with identical results:
 
 - **In the browser.** A static page does the whole conversion inside the tab.
-  The PDF never leaves the machine.
+  The PDF never leaves the machine. The page is published at
+  <https://jamesonrgrieve.github.io/ttrpg-pdf-to-foundry-converter/> on every
+  push to `main`.
 - **From the command line** (Node ≥ 22).
 
 Same PDF + same engine version gives byte-identical output in either.

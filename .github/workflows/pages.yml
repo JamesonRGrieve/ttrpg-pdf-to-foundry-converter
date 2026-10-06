@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: pages
+
+# Publishes the client-side converter page (web/) to GitHub Pages on every push
+# to main. The page runs entirely in the visitor's browser; the build only ships
+# the engine, the pinned OCR runtime and the static page — no corpus data.
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one in flight.
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    # Deploys only after the build, typechecks, lint and unit suite pass. The
+    # browser e2e suite runs in ci.yml and does not gate the deployment.
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.1.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm build
+            - run: pnpm typecheck
+            - run: pnpm web:typecheck
+            - run: pnpm lint
+            - run: pnpm test
+            - run: pnpm web:build
+            - uses: actions/configure-pages@v5
+            - uses: actions/upload-pages-artifact@v3
+              with:
+                  path: dist-web
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - id: deployment
+              uses: actions/deploy-pages@v4
