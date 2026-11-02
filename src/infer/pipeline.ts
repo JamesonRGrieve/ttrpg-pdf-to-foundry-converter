@@ -5,6 +5,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
+import { applyAmmunitionWeaponTypes } from "./ammunition.ts";
 import { inferBookSlug, inferBookTitle } from "./book.ts";
 import { classifyTable } from "./classify.ts";
 import {
@@ -185,6 +186,8 @@ export function nameKey(name: string): string {
 class EntityCollector {
     readonly entities: Entity[] = [];
     readonly warnings: string[] = [];
+    /** Each ammunition's printed `Used With` line, by its name key (see `applyAmmunitionWeaponTypes`). */
+    readonly usedWith = new Map<string, string>();
     readonly line: Line;
 
     constructor(
@@ -1326,6 +1329,10 @@ function extractEntries(
         if (item.description.length > 0) {
             descriptions.set(nameKey(item.name), item.description);
         }
+        const usedWith = entry.fields.find(([label]) => /^used with$/iu.test(label.trim()))?.[1];
+        if (type === "ammunition" && usedWith !== undefined) {
+            out.usedWith.set(nameKey(item.name), usedWith);
+        }
         out.add(
             "Item",
             itemSegment(type),
@@ -2227,6 +2234,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
     applyCuePresets(entities);
+    applyAmmunitionWeaponTypes(entities, out.usedWith);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
