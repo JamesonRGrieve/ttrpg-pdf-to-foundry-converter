@@ -1104,6 +1104,16 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types a power by its Focus Power Test field, never a heading naming a discipline or a group", () => {
+        const fields: [string, string][] = [
+            ["Value", "100 xp"],
+            ["Focus Power Test", "Willpower"],
+        ];
+        expect(entryType(entry("Glow Bolt", fields, ["Psychic Powers"]))).toBe("psychicPower");
+        expect(entryType(entry("The Lampcraft Discipline", fields, ["Psychic Powers"]))).toBeNull();
+        expect(entryType(entry("Psychic Techniques", fields, ["Psychic Powers"]))).toBeNull();
+    });
+
     it("types an oath by its name and effect under a section about oaths", () => {
         const oath = entry(
             "OATH OF THE LAMP",
@@ -1306,6 +1316,10 @@ describe("entry typing", () => {
         // Printed straight under the catalogue, or outside one: no discipline, never the schema's default.
         expect(printedDiscipline(["Chapter Six", "Psychic Powers"])).toBe("");
         expect(printedDiscipline(["Equipment"])).toBe("");
+        // A section naming its discipline as such names it by the words before the word.
+        expect(printedDiscipline(["Psychic Disciplines", "Lampcraft Discipline: Wick Techniques"])).toBe(
+            "Lampcraft",
+        );
         const spark = entryItem(
             entry("SPARK", [["Focus Power", "Willpower"]], ["Psychic Powers", "Lampcraft"]),
             "psychicPower",

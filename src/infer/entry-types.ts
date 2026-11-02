@@ -330,7 +330,12 @@ export function entryType(entry: Entry): ItemType | null {
     if (skillTypeTag(entry.heading.text) !== null) {
         return "skill";
     }
-    if (has(fields, "focus power", "sustained", "sustain", "psychic power")) {
+    if (has(fields, "focus power", "focus power test", "sustained", "sustain", "psychic power")) {
+        // A heading naming a discipline, or a group of powers ("Psychic
+        // Techniques"), introduces the format, not a power of its own.
+        if (/\bdisciplines?\b|\b(?:techniques|powers)\s*$/iu.test(entry.heading.text)) {
+            return null;
+        }
         return "psychicPower";
     }
     if (has(fields, "tier")) {
@@ -502,7 +507,13 @@ const POWER_CATALOGUE = /\bpsychic (?:powers?|disciplines?)\b/iu;
  */
 export function printedDiscipline(sections: readonly string[]): string {
     const catalogue = sections.findLastIndex((s) => POWER_CATALOGUE.test(s));
-    const own = catalogue < 0 ? undefined : sections.slice(catalogue + 1).at(-1);
+    const under = catalogue < 0 ? [] : sections.slice(catalogue + 1);
+    // A section naming its discipline as such ("Lampcraft Discipline: Wick
+    // Techniques") names it by the words before the word.
+    const named = under
+        .map((s) => /^\s*(?:the\s+)?(?<name>\S.*?)\s+discipline\b/iu.exec(s)?.groups?.["name"])
+        .findLast((n) => n !== undefined);
+    const own = named ?? under.at(-1);
     return own === undefined ? "" : cleanName(own);
 }
 
