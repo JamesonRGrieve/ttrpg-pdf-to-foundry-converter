@@ -6,6 +6,7 @@ import {
     type Doc,
     editDistance,
     embeddedByType,
+    isLinksOnly,
     leafScore,
     leaves,
     nameKey,
@@ -218,6 +219,25 @@ describe("scoreBook", () => {
         );
         expect(r.types["armour"]?.fields["availability"]).toEqual({ checks: 1, score: 1 });
         expect(r.types["armour"]?.fields["modificationSlots"]).toEqual({ checks: 1, score: 1 });
+    });
+
+    it("leaves out a leaf holding only links into the reference's own packs", () => {
+        expect(isLinksOnly(["Compendium.sys.pack.Item.abc", "Compendium.sys.pack.Item.def"])).toBe(true);
+        expect(isLinksOnly("Compendium.sys.pack.Item.abc")).toBe(true);
+        expect(isLinksOnly(["Compendium.sys.pack.Item.abc", "Glare"])).toBe(false);
+        expect(isLinksOnly([])).toBe(false);
+        const p = scoreBook(
+            [
+                {
+                    name: "Glare",
+                    type: "psychicPower",
+                    system: { requires: ["Compendium.sys.pack.Item.abc"], range: "5m" },
+                },
+            ],
+            [{ name: "Glare", type: "psychicPower", system: { range: "5m" } }],
+            "dh2",
+        );
+        expect(p.types["psychicPower"]?.fields).not.toHaveProperty("requires");
     });
 
     it("leaves out legacy keys the schema strips on load, with every leaf beneath them", () => {

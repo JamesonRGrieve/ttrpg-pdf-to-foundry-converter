@@ -381,6 +381,21 @@ export function withoutLinks(v: Json): Json {
     return v;
 }
 
+/** A document link into the reference's own packs ("Compendium.<system>.<pack>.<type>.<id>"). */
+const COMPENDIUM_LINK = /^Compendium\./u;
+
+/**
+ * A leaf holding nothing but links into the reference's own packs (a `requires`
+ * list, a `talentsUuid` list): which documents of those packs it names is
+ * what a conversion of one PDF never knows, so the leaf is not compared.
+ */
+export function isLinksOnly(v: Json | undefined): boolean {
+    return (
+        (typeof v === "string" && COMPENDIUM_LINK.test(v)) ||
+        (Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && COMPENDIUM_LINK.test(x)))
+    );
+}
+
 function sortKeys(v: Json): Json {
     if (Array.isArray(v)) {
         return v.map(sortKeys);
@@ -773,7 +788,10 @@ export function scoreBook(
         const gotLeaves = leaves(load(type, got["system"]), line);
         for (const path of [...wantLeaves.keys()]) {
             const segments = path.split(".");
-            if (segments.some((_, i) => NOT_IN_SCHEMA.has(`${type}:${segments.slice(0, i + 1).join(".")}`))) {
+            if (
+                segments.some((_, i) => NOT_IN_SCHEMA.has(`${type}:${segments.slice(0, i + 1).join(".")}`)) ||
+                isLinksOnly(wantLeaves.get(path))
+            ) {
                 wantLeaves.delete(path);
             }
         }
