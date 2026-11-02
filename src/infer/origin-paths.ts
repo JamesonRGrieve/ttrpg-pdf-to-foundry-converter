@@ -473,7 +473,8 @@ function grantsOf(
                 const bonus = signedBonus(value);
                 if (bonus === null) {
                     woundsFormula =
-                        /\d+\s*\+\s*\d*d\d+|\d*d\d+\s*\+\s*\d+|\d+/iu.exec(value)?.[0].replace(/\s+/gu, "") ?? "";
+                        /\d+\s*\+\s*\d*d\d+|\d*d\d+\s*\+\s*\d+|\d+/iu.exec(value)?.[0].replace(/\s+/gu, "") ??
+                        "";
                 } else {
                     resources["wounds"] = bonus;
                 }

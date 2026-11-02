@@ -329,7 +329,10 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"
  * "Rank 3") and a Chaos alignment ("Aligned Nurgle"). Skills and talents are
  * names from the book, so they stay in `text` for the reader.
  */
-export function structuredPrerequisites(printed: string): { prerequisites: JsonObject; psyRating: number | null } {
+export function structuredPrerequisites(printed: string): {
+    prerequisites: JsonObject;
+    psyRating: number | null;
+} {
     const text = printed.replace(/\.\s*$/u, "").trim();
     const shown = /^(?:none|[-–—])?$/iu.test(text) ? "" : text;
     // Each gate is one listed part; a part offering an alternative ("… or 20+
@@ -419,9 +422,8 @@ export function focusPowerTest(printed: string | undefined, threshold: string | 
     const text = (printed ?? "").replace(/\s+/gu, " ").trim();
     const modifier = /\(\s*([+\-−–—]?)\s*(\d+)\s*\)/u.exec(text);
     const sign = modifier?.[1] !== undefined && modifier[1] !== "" && modifier[1] !== "+" ? -1 : 1;
-    const opposedBy = /\bopposed by (?:the )?(?:target(?:['’]s)? |its |his |her |their )?([a-z]+(?: [a-z]+)?)/iu.exec(
-        text,
-    );
+    const opposedBy =
+        /\bopposed by (?:the )?(?:target(?:['’]s)? |its |his |her |their )?([a-z]+(?: [a-z]+)?)/iu.exec(text);
     // The tested name: what precedes "test" — past a bracketed modifier, which
     // follows any difficulty word — or the whole value when it names no test.
     const phrase =
@@ -442,7 +444,10 @@ export function focusPowerTest(printed: string | undefined, threshold: string | 
     // the engine cannot tell from the skill's own, so it is left unset.
     const only = tested.length === 1 ? tested[0] : undefined;
     const skill =
-        characteristic === null && /\btests?\b/iu.test(text) && only !== undefined && /^\p{Lu}\p{Ll}+$/u.test(only)
+        characteristic === null &&
+        /\btests?\b/iu.test(text) &&
+        only !== undefined &&
+        /^\p{Lu}\p{Ll}+$/u.test(only)
             ? only.toLowerCase()
             : "";
     const thresholdValue = threshold === undefined ? null : /\d+/u.exec(threshold)?.[0];
@@ -455,7 +460,9 @@ export function focusPowerTest(printed: string | undefined, threshold: string | 
         opposedCharacteristic:
             opposedName === undefined
                 ? ""
-                : (characteristicKey(opposedName) ?? characteristicKey(opposedName.split(" ")[0] ?? "") ?? ""),
+                : (characteristicKey(opposedName) ??
+                  characteristicKey(opposedName.split(" ")[0] ?? "") ??
+                  ""),
         skill,
     };
 }

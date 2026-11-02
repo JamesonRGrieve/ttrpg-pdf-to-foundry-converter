@@ -71,9 +71,9 @@ describe("inferBookSlug", () => {
 describe("inferBookTitle", () => {
     it("keeps the title as the PDF gives it, whitespace collapsed, for source records", () => {
         expect(inferBookTitle(ir("  The  Lantern\nCodex ", []))).toBe("The Lantern Codex");
-        expect(inferBookTitle(ir(null, [run("Codex", 1, 200, 700, 24), run("Lantern", 1, 100, 700, 24)]))).toBe(
-            "Lantern Codex",
-        );
+        expect(
+            inferBookTitle(ir(null, [run("Codex", 1, 200, 700, 24), run("Lantern", 1, 100, 700, 24)])),
+        ).toBe("Lantern Codex");
         expect(inferBookTitle(ir(null, []))).toBe("Untitled");
         const long = inferBookTitle(ir(Array.from({ length: 40 }, (_, i) => `word${i}`).join(" "), []));
         expect(long.length).toBeLessThanOrEqual(MAX_BOOK_TITLE);

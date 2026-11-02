@@ -162,7 +162,11 @@ describe("module packaging", () => {
         expect(packCategory("items-weapon-mods")).toBe("weapon-mods");
         expect(packCategory("origins-elite-advances")).toBe("origins-elite-advances");
         expect(packCategory("vehicles-terracraft")).toBe("vehicles-terracraft");
-        expect(packFlags("rt", "rolltables")).toEqual({ line: "rt", category: "rolltables", homebrew: false });
+        expect(packFlags("rt", "rolltables")).toEqual({
+            line: "rt",
+            category: "rolltables",
+            homebrew: false,
+        });
     });
 
     it("ranks the packs the character builder reads 1..N per line, in pack-name order", () => {

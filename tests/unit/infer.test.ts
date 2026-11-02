@@ -1017,7 +1017,10 @@ describe("entry typing", () => {
             skill: "",
         };
         expect(focusPowerTest("Willpower", undefined)).toEqual(base);
-        expect(focusPowerTest("Difficult (–10) Willpower test", undefined)).toEqual({ ...base, modifier: -10 });
+        expect(focusPowerTest("Difficult (–10) Willpower test", undefined)).toEqual({
+            ...base,
+            modifier: -10,
+        });
         expect(focusPowerTest("Opposed (+0) Willpower test", undefined)).toEqual({ ...base, opposed: true });
         expect(
             focusPowerTest("Opposed (−10) Willpower test, opposed by the target's Toughness", undefined),
@@ -1042,9 +1045,9 @@ describe("entry typing", () => {
             "psychicPower",
         );
         expect(item.system["focusPower"]).toEqual({ ...base, modifier: -20, threshold: 9 });
-        expect(mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"]).toEqual(
-            base,
-        );
+        expect(
+            mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"],
+        ).toEqual(base);
     });
 
     it("gives a power the discipline its section prints, or none", () => {

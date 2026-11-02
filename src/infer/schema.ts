@@ -219,7 +219,9 @@ const BUILDER_ROLES: readonly { role: string; reads: (category: string) => boole
     {
         role: "startingEquipment",
         reads: (category) =>
-            ["weapons", "armour", "ammo", "gear", "cybernetics", "weapon-mods", "armor-mods"].includes(category),
+            ["weapons", "armour", "ammo", "gear", "cybernetics", "weapon-mods", "armor-mods"].includes(
+                category,
+            ),
     },
 ];
 
@@ -238,7 +240,12 @@ export function withBuilderRanks(
             const flags = out.get(name);
             const line = flags?.["line"];
             const category = flags?.["category"];
-            if (flags !== undefined && typeof line === "string" && typeof category === "string" && reads(category)) {
+            if (
+                flags !== undefined &&
+                typeof line === "string" &&
+                typeof category === "string" &&
+                reads(category)
+            ) {
                 const rank = (next.get(line) ?? 0) + 1;
                 next.set(line, rank);
                 out.set(name, { ...flags, [role]: rank });
