@@ -78,6 +78,7 @@ import {
     keyedByBands,
     namingEntry,
     listsCaption,
+    weaponProfileText,
     isBlank,
     actionGroupsOf,
     criticalEffects,
@@ -2636,6 +2637,28 @@ describe("statblock prose", () => {
             "ESHA WICK, THE LANTERN BEARER",
         );
         expect(namingEntry(entries, "Reed King", "Reed King Profile", 72)).toBeNull();
+    });
+
+    it("reads a craft's boxed weapon profile entry as panel lines, each weapon's qualities after it", () => {
+        const entry: Entry = {
+            heading: { text: "Twin Lamp Gun CLASS HEAVY", size: 13, style: "w", pageIndex: 0 },
+            sections: [],
+            fields: [
+                ["SPECIAL", "FLAME"],
+                ["SPECIAL", "TEARING"],
+                ["Wick Upgrades", "The craft may take a wick."],
+            ],
+            body: "RNG 30M ROF S/-/- DMG 1D10 + 5 (E)\n\nPEN 4 CLIP 20 RLD 2 FULL\n\nG l o w C a n n o n CLASS HEAVY\n\nRNG 60M ROF S/-/- DMG 2D10 (E)",
+        };
+        expect(weaponProfileText(entry).split("\n")).toEqual([
+            "Twin Lamp Gun CLASS HEAVY",
+            "RNG 30M ROF S/-/- DMG 1D10 + 5 (E)",
+            "PEN 4 CLIP 20 RLD 2 FULL",
+            "SPECIAL: FLAME",
+            "G l o w C a n n o n CLASS HEAVY",
+            "RNG 60M ROF S/-/- DMG 2D10 (E)",
+            "SPECIAL: TEARING",
+        ]);
     });
 
     it("knows a heading listing several creatures names none of them more fully", () => {

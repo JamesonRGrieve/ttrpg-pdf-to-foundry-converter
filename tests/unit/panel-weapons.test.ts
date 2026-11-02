@@ -1,13 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { blockFields } from "../../src/infer/npc.ts";
-import { closeUpSpacedLetters, panelWeapons } from "../../src/infer/panel-weapons.ts";
+import { afterLeadIn, closeUpSpacedLetters, panelWeapons } from "../../src/infer/panel-weapons.ts";
 
 describe("closeUpSpacedLetters", () => {
     it("closes up a word set in spaced capitals, keeping real word breaks", () => {
         expect(closeUpSpacedLetters("gL o W gu n")).toBe("gLoW gun");
         expect(closeUpSpacedLetters("Wi c k- L A M p")).toBe("Wick-LAMp");
         expect(closeUpSpacedLetters("Glow Rod")).toBe("Glow Rod");
+    });
+
+    it("opens a word at a capital after a capitalised word when small letters follow it", () => {
+        expect(closeUpSpacedLetters("L a m p W i c k")).toBe("Lamp Wick");
+        expect(closeUpSpacedLetters("Heavy W i c k")).toBe("Heavy Wick");
+        // Scrambled case: a capital before one small letter, or after mixed case, stays in the word.
+        expect(closeUpSpacedLetters("L a m p I l A s e r")).toBe("LampIlAser");
+    });
+});
+
+describe("afterLeadIn", () => {
+    it("drops a sentence of prose leading into a name line, not a short abbreviation", () => {
+        expect(afterLeadIn("The craft may take one hull mount. Lamp Gun")).toBe("Lamp Gun");
+        expect(afterLeadIn("One pintle-mounted gun with a forward arc: Wick Gun")).toBe("Wick Gun");
+        expect(afterLeadIn("Mk. II Lamp Gun")).toBe("Mk. II Lamp Gun");
+        expect(afterLeadIn("Lamp Gun")).toBe("Lamp Gun");
+    });
+
+    it("reads the name after the lead-in on a name line", () => {
+        const [weapon] = panelWeapons([
+            "The craft may take a pintle mount. L a m p G u n CLASS BASIC",
+            "RNG 90M ROF S/2/- DMG 1D10+3 (E)",
+        ]);
+        expect(weapon?.name).toBe("Lamp Gun");
     });
 });
 

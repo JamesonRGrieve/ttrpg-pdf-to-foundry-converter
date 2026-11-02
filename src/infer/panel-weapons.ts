@@ -39,16 +39,39 @@ const NAME_LINE = /^(?<name>.*?\p{L}.*?)\s+class\s*:?\s*(?<cls>[\p{L}/ ]+?)\s*$/
 /** A closing bracketed count ("(3)", "( 2)"). */
 const COUNT = /\s*\(\s*(\d+)\s*\)\s*$/u;
 
+/** Fewest spaced small letters after a capital for it to open a word of its own. */
+const MIN_WORD_TAIL = 2;
+
+/** How many lone small letters follow `tokens[i]` before anything else. */
+function smallLettersAfter(tokens: readonly string[], i: number): number {
+    let n = 0;
+    while (/^\p{Ll}$/u.test(tokens[i + 1 + n] ?? "")) {
+        n += 1;
+    }
+    return n;
+}
+
 /**
  * Close up a name set in spaced capitals: a single letter following a word
  * ends that word ("fr A g" → "frAg"), as a text layer spaces small-caps glyphs.
  */
 export function closeUpSpacedLetters(text: string): string {
     const out: string[] = [];
-    for (const token of text.split(/\s+/u).filter((t) => t.length > 0)) {
+    const tokens = text.split(/\s+/u).filter((t) => t.length > 0);
+    for (const [i, token] of tokens.entries()) {
         const prev = out.at(-1);
+        // Spaced letters keep their words' capitals: a capital after a word
+        // set as a capital and small letters, before small letters of its
+        // own, opens the next word ("L a m p W i c k" → "Lamp Wick"); after
+        // small letters alone ("fr A g"), or among letters of scrambled case,
+        // it is a small capital that lost its case.
+        const opensWord =
+            /^\p{Lu}-?$/u.test(token) &&
+            /^\p{Lu}\p{Ll}+$/u.test(prev ?? "") &&
+            smallLettersAfter(tokens, i) >= MIN_WORD_TAIL;
         const joins =
             prev !== undefined &&
+            !opensWord &&
             /^[\p{L}-]+$/u.test(prev) &&
             // A lone letter (perhaps before a hyphen), or anything after a word broken at a hyphen.
             (/^\p{L}-?$/u.test(token) || (prev.endsWith("-") && /^\p{L}/u.test(token)));
@@ -98,6 +121,28 @@ function labelledValues(line: string): RowCells {
     return cells;
 }
 
+/** Fewest words of prose a name line's lead-in sentence runs to. */
+const MIN_LEAD_IN_WORDS = 3;
+
+/**
+ * A name line's name without a sentence of prose leading into it ("The craft
+ * may take one hull mount. Lamp Gun" → "Lamp Gun"): what follows the last
+ * full stop or colon, when what precedes it is prose of a few words.
+ */
+export function afterLeadIn(name: string): string {
+    const m = /^(.*[.:])\s+(\S.*)$/su.exec(name);
+    const lead = m?.[1] ?? "";
+    return m !== null && /\p{Ll}{2}/u.test(lead) && lead.split(/\s+/u).length >= MIN_LEAD_IN_WORDS
+        ? (m[2] ?? name)
+        : name;
+}
+
+/** Whether a line is a profile's name line: a name closing on the schema's weapon class. */
+export function isWeaponNameLine(line: string): boolean {
+    const named = NAME_LINE.exec(line.trim())?.groups;
+    return named !== undefined && parseWeaponClass(named["cls"]?.trim() ?? "") !== null;
+}
+
 /** The weapon profiles printed in a statblock panel's lines, in order. */
 export function panelWeapons(lines: readonly string[]): PanelWeapon[] {
     const out: PanelWeapon[] = [];
@@ -106,7 +151,7 @@ export function panelWeapons(lines: readonly string[]): PanelWeapon[] {
         const named = NAME_LINE.exec(line.trim())?.groups;
         const cls = named?.["cls"]?.trim() ?? "";
         if (named !== undefined && parseWeaponClass(cls) !== null) {
-            const spaced = closeUpSpacedLetters(named["name"] ?? "");
+            const spaced = closeUpSpacedLetters(afterLeadIn(named["name"] ?? ""));
             const count = COUNT.exec(spaced);
             current = {
                 name: spaced.replace(COUNT, "").trim(),

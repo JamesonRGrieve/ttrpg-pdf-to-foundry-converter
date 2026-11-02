@@ -68,7 +68,7 @@ import {
     sameOrigin,
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
-import { panelWeapons } from "./panel-weapons.ts";
+import { isWeaponNameLine, panelWeapons } from "./panel-weapons.ts";
 import { variantGrid } from "./profile-variants.ts";
 import { buildRollTable, rollResults } from "./roll-tables.ts";
 import { mapRow, NO_DAMAGE, type RowCells, type RowMapping, rowType } from "./rows.ts";
@@ -835,6 +835,45 @@ function entryText(entry: Entry): string {
 const WEAPONS_LABEL = /^weapons?$/iu;
 /** Pages after a vehicle's heading its parts may be printed on. */
 const PART_PAGE_REACH = 1;
+/** The label a craft's weapons are kept under among its rules. */
+const WEAPONS_RULE = "Weapons";
+/** A weapon profile's qualities line. */
+const QUALITIES_LABEL = /^special$/iu;
+
+const headsWeapons = (part: Entry): boolean => WEAPONS_LABEL.test(part.heading.text.trim());
+
+/** An entry's heading and body lines, small capitals rejoined. */
+const profileLines = (entry: Entry): string[] =>
+    [entry.heading.text, ...entry.body.split(/\n+/u)].map(rejoinSmallCaps);
+
+/** An entry headed by a weapon's name line ("NAME  CLASS HEAVY"), its profile beneath. */
+function isWeaponProfile(entry: Entry): boolean {
+    return (
+        isWeaponNameLine(rejoinSmallCaps(entry.heading.text)) && panelWeapons(profileLines(entry)).length > 0
+    );
+}
+
+/**
+ * A boxed weapon profile entry as panel lines: each weapon's name line and
+ * profile lines, then its qualities. The entry's qualities fields are dealt
+ * out in order, one before each later weapon's name line, the rest at the end.
+ */
+export function weaponProfileText(entry: Entry): string {
+    const specials = entry.fields.filter(([label]) => QUALITIES_LABEL.test(label.trim()));
+    const lines: string[] = [];
+    let named = 0;
+    for (const line of profileLines(entry)) {
+        if (isWeaponNameLine(line)) {
+            const special = named > 0 ? specials.shift() : undefined;
+            if (special !== undefined) {
+                lines.push(`${special[0]}: ${special[1]}`);
+            }
+            named += 1;
+        }
+        lines.push(line);
+    }
+    return [...lines, ...specials.map(([label, value]) => `${label}: ${value}`)].join("\n");
+}
 
 /**
  * The entries printed as parts of the entry at `index`: those after it, all in
@@ -850,6 +889,17 @@ function vehicleParts(entries: readonly Entry[], index: number, claimed: Readonl
     const parts: Entry[] = [];
     for (const entry of entries.slice(index + 1)) {
         const style = parts[0]?.heading.style;
+        // A weapon's boxed profile under the craft's weapons heading carries
+        // its list on, whatever its heading's style.
+        if (
+            parts.some(headsWeapons) &&
+            !claimed.has(entry) &&
+            entry.heading.pageIndex - head.heading.pageIndex <= PART_PAGE_REACH &&
+            isWeaponProfile(entry)
+        ) {
+            parts.push(entry);
+            continue;
+        }
         if (
             claimed.has(entry) ||
             entry.heading.style === head.heading.style ||
@@ -878,8 +928,9 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
     if (!isVehicleProfile(pairs)) {
         return false;
     }
-    const headsWeapons = (part: Entry): boolean => WEAPONS_LABEL.test(part.heading.text.trim());
-    for (const part of parts.filter((p) => !headsWeapons(p))) {
+    // A boxed weapon profile under the weapons heading is part of the craft's weapons.
+    const profiles = new Set(parts.filter((p) => !headsWeapons(p) && isWeaponProfile(p)));
+    for (const part of parts.filter((p) => !headsWeapons(p) && !profiles.has(p))) {
         for (const [label, value] of panelPairs(entryText(part))) {
             if (!pairs.has(label)) {
                 pairs.set(label, value);
@@ -902,19 +953,26 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
     const isProse = (text: string): boolean => /\p{Ll}/u.test(text);
     const rules: [string, string][] = [
         ...entry.fields,
-        ...parts.flatMap((part): [string, string][] =>
-            headsWeapons(part)
-                ? [[part.heading.text.trim(), part.body.trim()]]
-                : [
-                      ...part.fields,
-                      // A rule broken across columns runs on in the part's body.
-                      ...part.body
-                          .split(PARAGRAPH_SPLIT)
-                          .filter(isProse)
-                          .map((p): [string, string] => [part.heading.text.trim(), p.trim()]),
-                  ],
-        ),
-    ].filter(([label]) => isProse(label));
+        ...parts.flatMap((part): [string, string][] => {
+            if (headsWeapons(part)) {
+                return [[part.heading.text.trim(), part.body.trim()]];
+            }
+            if (profiles.has(part)) {
+                return [
+                    [WEAPONS_RULE, weaponProfileText(part)],
+                    ...part.fields.filter(([label]) => !QUALITIES_LABEL.test(label.trim())),
+                ];
+            }
+            return [
+                ...part.fields,
+                // A rule broken across columns runs on in the part's body.
+                ...part.body
+                    .split(PARAGRAPH_SPLIT)
+                    .filter(isProse)
+                    .map((p): [string, string] => [part.heading.text.trim(), p.trim()]),
+            ];
+        }),
+    ].filter(([label]) => isProse(label) || WEAPONS_LABEL.test(label));
     const isWeapons = ([label]: [string, string]): boolean => WEAPONS_LABEL.test(label);
     const carried = mountedWeapons(
         out,
