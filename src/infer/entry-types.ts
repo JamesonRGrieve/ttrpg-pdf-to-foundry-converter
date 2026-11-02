@@ -387,6 +387,22 @@ export function structuredPrerequisites(printed: string): { prerequisites: JsonO
     };
 }
 
+/** A section heading naming the psychic-power catalogue as a whole. */
+const POWER_CATALOGUE = /\bpsychic (?:powers?|disciplines?)\b/iu;
+
+/**
+ * A power's discipline as the book prints it (content#35): the heading of the
+ * innermost section it sits in beneath the section naming the psychic-power
+ * catalogue. A power printed directly under that section, or outside one, has
+ * none ("") rather than the schema's default, which would name a discipline
+ * the book never gave it.
+ */
+export function printedDiscipline(sections: readonly string[]): string {
+    const catalogue = sections.findLastIndex((s) => POWER_CATALOGUE.test(s));
+    const own = catalogue < 0 ? undefined : sections.slice(catalogue + 1).at(-1);
+    return own === undefined ? "" : cleanName(own);
+}
+
 /** A characteristic key from a printed name or abbreviation, or null. */
 function characteristicKey(name: string): string | null {
     return CHARACTERISTICS[name.toLowerCase().replace(/\s+/gu, " ").trim()] ?? null;
@@ -527,6 +543,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                     system["prCost"] = psyRating;
                 }
             }
+            system["discipline"] = printedDiscipline(entry.sections);
             const focus = text("focus power") ?? text("focus power test");
             const threshold = text("threshold");
             if (focus !== undefined || threshold !== undefined) {

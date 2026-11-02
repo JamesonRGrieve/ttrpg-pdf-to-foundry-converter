@@ -33,6 +33,7 @@ import {
     isSustained,
     joinSkillCharacteristics,
     powerXpCost,
+    printedDiscipline,
     structuredPrerequisites,
     typeNamedBy,
 } from "../../src/infer/entry-types.ts";
@@ -1044,6 +1045,19 @@ describe("entry typing", () => {
         expect(mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"]).toEqual(
             base,
         );
+    });
+
+    it("gives a power the discipline its section prints, or none", () => {
+        expect(printedDiscipline(["Chapter Six", "Psychic Powers", "LAMPCRAFT"])).toBe("Lampcraft");
+        expect(printedDiscipline(["Psychic Disciplines", "Wick Lore", "Wick Rites"])).toBe("Wick Rites");
+        // Printed straight under the catalogue, or outside one: no discipline, never the schema's default.
+        expect(printedDiscipline(["Chapter Six", "Psychic Powers"])).toBe("");
+        expect(printedDiscipline(["Equipment"])).toBe("");
+        const spark = entryItem(
+            entry("SPARK", [["Focus Power", "Willpower"]], ["Psychic Powers", "Lampcraft"]),
+            "psychicPower",
+        );
+        expect(spark.system["discipline"]).toBe("Lampcraft");
     });
 
     it("reads a power's Sustained line as the schema's boolean", () => {
