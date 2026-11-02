@@ -77,6 +77,7 @@ import {
     isUnmarkedSectionRow,
     keyedByBands,
     namingEntry,
+    listsCaption,
     isBlank,
     actionGroupsOf,
     criticalEffects,
@@ -2635,6 +2636,14 @@ describe("statblock prose", () => {
             "ESHA WICK, THE LANTERN BEARER",
         );
         expect(namingEntry(entries, "Reed King", "Reed King Profile", 72)).toBeNull();
+    });
+
+    it("knows a heading listing several creatures names none of them more fully", () => {
+        expect(listsCaption("LAMP ENGINE AND WICK PARASITE ENGINE", "Lamp Engine (Elite)")).toBe(true);
+        expect(listsCaption("Mire Dok & Reedbork", "Mire Dok")).toBe(true);
+        // "or" offers one creature's other names; a single name lists nothing.
+        expect(listsCaption("INDUSTRIAL or HEAVY LAMP SERVITOR", "Lamp Servitor")).toBe(false);
+        expect(listsCaption("ESHA WICK, THE LANTERN BEARER", "Esha Wick")).toBe(false);
     });
 });
 

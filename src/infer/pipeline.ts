@@ -1669,6 +1669,21 @@ export function namingEntry(
     return best;
 }
 
+/** Words joining two names a heading lists together. */
+const LIST_JOIN = /\s+(?:and|&)\s+/iu;
+
+/**
+ * Whether a heading lists several names joined by "and" ("X and Y"), one of
+ * them holding every word of the caption (its closing note aside): the heading
+ * introduces the caption's creature among others.
+ */
+export function listsCaption(heading: string, caption: string): boolean {
+    const parts = heading.split(LIST_JOIN);
+    // A closing note (the statblock's tier) is no part of the name.
+    const words = nameWords(caption.replace(/\s*\([^()]*\)\s*$/u, ""));
+    return parts.length > 1 && parts.some((part) => words.every((w) => nameWords(part).includes(w)));
+}
+
 /** The words, in order, of the entries within a statblock's prose reach. */
 function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
     const near = entries.filter(
@@ -1710,7 +1725,12 @@ function extractActors(
                 : null;
         const intro = exact ?? naming;
         // A naming heading may carry the tier the statblock itself does not print.
-        const fromHeading = naming === null ? null : splitTier(naming.heading.text);
+        // One listing several creatures ("X and Y") introduces this one but
+        // names it no more fully than its caption.
+        const fromHeading =
+            naming === null || listsCaption(naming.heading.text, caption)
+                ? null
+                : splitTier(naming.heading.text);
         const name = fromHeading?.name ?? caption;
         const system =
             fromHeading !== null && fromHeading.tier !== null && npc.system["tier"] === undefined
