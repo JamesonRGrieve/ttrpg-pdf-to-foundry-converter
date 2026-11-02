@@ -18,6 +18,7 @@ import {
     shipTableRoles,
 } from "./columns.ts";
 import { applyCuePresets } from "./cue-presets.ts";
+import { applyCyberneticTypes } from "./cybernetic-types.ts";
 import { detectEntries, type Entry, runningHeads } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
 import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
@@ -2381,6 +2382,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
     applyCuePresets(entities);
+    applyCyberneticTypes(entities);
     applyTwoHandedClasses(entities, twoHandedClasses(ir.runs.map((r) => r.text).join(" ")));
     applyAmmunitionWeaponTypes(entities, out.usedWith);
     log.info(

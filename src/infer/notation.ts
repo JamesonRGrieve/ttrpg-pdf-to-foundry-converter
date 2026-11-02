@@ -3,6 +3,7 @@ import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
 import {
     ALL_HULLS,
     ARMOUR_TYPES,
+    CYBERNETIC_TYPES,
     GEAR_CATEGORIES,
     HULL_TYPES,
     SHIP_COMPONENT_TYPES,
@@ -341,6 +342,20 @@ export function parseArmourType(raw: string): string | null {
         raw,
         ARMOUR_TYPES.map((key) => ({ key, forms: [key.split("-")] })),
     );
+}
+
+/**
+ * A cybernetic's own name naming a kind of cybernetic ("Manipulator
+ * Mechadendrite", "Cerebral Implants") → the schema's cybernetic type; the
+ * choice naming the most words wins. Null when none is named (the schema's
+ * initial, `replacement`, is never read from a name: it is the default).
+ */
+export function parseCyberneticType(raw: string): string | null {
+    const type = longestNamedChoice(
+        raw,
+        CYBERNETIC_TYPES.map((key) => ({ key, forms: [key.split("-")] })),
+    );
+    return type === "replacement" ? null : type;
 }
 
 /** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */

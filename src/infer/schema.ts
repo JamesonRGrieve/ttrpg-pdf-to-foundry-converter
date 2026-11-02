@@ -116,6 +116,16 @@ export const ARMOUR_TYPES = [
     "force-field",
 ] as const;
 
+/** The system's cybernetic types (the cybernetic `type` choices; `replacement` is its initial). */
+export const CYBERNETIC_TYPES = [
+    "replacement",
+    "implant",
+    "augmetic",
+    "bionic",
+    "mechadendrite",
+    "integrated-weapon",
+] as const;
+
 /**
  * The system's creature size categories, by the label it shows for each
  * (`CONFIG.WH40K.sizes`): the NPC `size` value is the category's number.
