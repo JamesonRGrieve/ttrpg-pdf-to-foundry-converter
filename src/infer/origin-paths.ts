@@ -103,6 +103,8 @@ export interface OriginPathReading {
     modifiers: Record<string, number>;
     /** Signed changes to the character's resources (`wounds`, `fate`), when printed. */
     resources?: Record<string, number>;
+    /** The origin grants a Psy Rating, so it makes the character a psyker. */
+    grantsPsychicPowers?: true;
     /** Rules text of a single-effect origin (a table row's effect), plain text. */
     effect?: string;
     /** Experience cost of taking the step, when it has one. */
@@ -410,6 +412,7 @@ function grantsOf(
     grants: JsonObject;
     modifiers: Record<string, number>;
     resources?: Record<string, number>;
+    grantsPsychicPowers?: true;
     xpCost?: number;
     requirements?: string;
 } {
@@ -426,11 +429,18 @@ function grantsOf(
     let woundsFormula = "";
     let fateThreshold = 0;
     const resources: Record<string, number> = {};
+    let psyker = false;
     for (const entry of labels) {
         const label = capitalizeWords(entry.heading.text.toLowerCase());
         // A grant's value is the label's first paragraph; later ones are narrative.
         const value = (entry.body.split(PARAGRAPH_BREAK)[0] ?? "").trim();
-        switch (labelField(entry.heading.text)) {
+        const field = labelField(entry.heading.text);
+        // A granted Psy Rating makes the character a psyker (#681); one asked
+        // for by a prerequisite or price does not.
+        if (field === undefined || !PRICE_FIELDS.has(field)) {
+            psyker ||= PSY_RATING.test(entry.heading.text) || PSY_RATING.test(value);
+        }
+        switch (field) {
             case "xpCost": {
                 const digits = /\d[\d,]*/u.exec(value)?.[0].replace(/,/gu, "");
                 xpCost = digits === undefined ? undefined : Number(digits);
@@ -584,8 +594,12 @@ function grantsOf(
         },
         modifiers,
         ...(Object.keys(resources).length === 0 ? {} : { resources }),
+        ...(psyker ? { grantsPsychicPowers: true } : {}),
     };
 }
+
+/** A Psy Rating named in a grant: the schema's psy rating, which only a psyker has. */
+const PSY_RATING = /\bpsy(?:chic)?\s+rating\b/iu;
 
 /** A value printed as a signed change ("+2", "−1", "-3"): its number, or null when unsigned. */
 function signedBonus(value: string): number | null {

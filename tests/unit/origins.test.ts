@@ -480,6 +480,43 @@ describe("origins granted by inline fields", () => {
         expect(system.grants).not.toHaveProperty("wounds");
     });
 
+    it("flags an origin granting a Psy Rating as making a psyker, never one asking for it (#681)", () => {
+        const read = (fields: [string, string][]): ReturnType<typeof readInlineOrigins> =>
+            readInlineOrigins(
+                [
+                    at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                    at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                    at("SKILLS, TALENTS & GEAR", "sub", ["Lamps", "Flamewright"], fields),
+                ],
+                bc,
+            );
+        const granted = read([
+            ["Starting Talents", "Steady Hand"],
+            ["Starting Traits", "Psy Rating 2"],
+            ["Starting Gear", "Lantern"],
+        ]);
+        expect(granted[0]?.grantsPsychicPowers).toBe(true);
+        const body = buildOriginPath({
+            name: "Flamewright",
+            step: { key: "archetype", index: 2 },
+            line: "bc",
+            book: "BC: Lamps",
+            page: "1",
+            description: "",
+            grants: granted[0]?.grants ?? {},
+            characteristics: {},
+            grantsPsychicPowers: true,
+        });
+        expect((body["system"] as Record<string, unknown>)["grantsPsychicPowers"]).toBe(true);
+        const asked = read([
+            ["Prerequisites", "Psy Rating 3"],
+            ["Starting Talents", "Steady Hand"],
+            ["Starting Gear", "Lantern"],
+        ]);
+        expect(asked.map((o) => o.name)).toEqual(["Flamewright"]);
+        expect(asked[0]?.grantsPsychicPowers).toBeUndefined();
+    });
+
     it("reads nothing from a single grant, a priced block, or a section naming no step", () => {
         const sections = ["Lamps", "Stage 1: Choose a Race"];
         const single = at("GLOW", "sub", sections, [["Starting Skills", "Hush"]]);

@@ -1025,6 +1025,7 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
             grants: origin.grants,
             characteristics: origin.modifiers,
             ...(origin.resources === undefined ? {} : { resources: origin.resources }),
+            ...(origin.grantsPsychicPowers === true ? { grantsPsychicPowers: true } : {}),
             ...(origin.effect === undefined ? {} : { effectText: toHtml(origin.effect) }),
             ...(origin.xpCost === undefined ? {} : { xpCost: origin.xpCost }),
             ...(origin.requirements === undefined ? {} : { requirements: origin.requirements }),

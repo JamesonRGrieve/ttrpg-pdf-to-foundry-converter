@@ -125,6 +125,11 @@ export interface OriginPathInput {
      * from its grants.
      */
     resources?: Record<string, number>;
+    /**
+     * The origin makes the character a psyker (#681): the system unlocks
+     * psychic-power purchases by this flag, never by an origin's name.
+     */
+    grantsPsychicPowers?: boolean;
     /** Rules text of an origin that is a single effect (a divination), as HTML. */
     effectText?: string;
     /** Experience cost of taking the step. */
@@ -153,6 +158,7 @@ export function buildOriginPath(input: OriginPathInput): JsonObject {
                     : { resources: input.resources }),
             },
             effectText: input.effectText ?? "",
+            ...(input.grantsPsychicPowers === true ? { grantsPsychicPowers: true } : {}),
             description: descriptionContainer(input.line, input.description),
             source: sourceRecord(input.line, input.book, input.page),
         },
