@@ -113,6 +113,31 @@ export interface OriginPathReading {
     requirements?: string;
     /** Read from a summary table row rather than a rules block. */
     fromTable?: boolean;
+    /**
+     * The origin's own named rules, each printed as a `Name: rules` field
+     * beside its grant fields ("Accustomed to Crowds: …"): talents the origin
+     * gives, named and described where it prints them.
+     */
+    rules?: OriginRule[];
+}
+
+/** A named rule an origin gives: a `Name: rules` field of its own. */
+export interface OriginRule {
+    name: string;
+    description: string;
+}
+
+/** Most words a field label naming a rule of its own may have. */
+const MAX_RULE_NAME_WORDS = 8;
+
+/**
+ * Whether a field label that names no grant names a rule of its own: words
+ * opening on a capital or a digit-free letter run, short as a name is — not a
+ * roll band ("1-2") or a sentence a layout read as a label.
+ */
+function namesRule(label: string): boolean {
+    const words = label.trim().split(/\s+/u);
+    return words.length <= MAX_RULE_NAME_WORDS && /^\p{L}/u.test(label.trim()) && !/\d/u.test(label);
 }
 
 /**
@@ -250,8 +275,11 @@ export function readOriginTable(
     return out;
 }
 
-const labelField = (label: string): GrantField | undefined =>
-    LABEL_FIELDS.find(([re]) => re.test(label))?.[1];
+const labelField = (label: string): GrantField | undefined => {
+    // A text layer may join a label's words ("StartingAptitudes").
+    const spaced = label.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
+    return LABEL_FIELDS.find(([re]) => re.test(spaced))?.[1];
+};
 
 /** Split `text` on `separator` wherever it is not inside parentheses. */
 export function splitTopLevel(text: string, separator: RegExp): string[] {
@@ -428,6 +456,7 @@ function grantsAnything(read: {
 function grantsOf(
     labels: readonly Entry[],
     optionsOf: (label: Entry) => readonly Entry[],
+    namedRules = false,
 ): {
     grants: JsonObject;
     modifiers: Record<string, number>;
@@ -435,7 +464,9 @@ function grantsOf(
     grantsPsychicPowers?: true;
     xpCost?: number;
     requirements?: string;
+    rules?: OriginRule[];
 } {
+    const rules: OriginRule[] = [];
     let xpCost: number | undefined;
     let requirements: string | undefined;
     const skills: JsonObject[] = [];
@@ -593,11 +624,20 @@ function grantsOf(
                 choices.push(...r.choices);
                 break;
             }
-            default:
+            default: {
+                // A field naming no grant, beside fields that do, is a rule
+                // of the origin's own, named by its label (granted as a talent
+                // once the origin's name is known).
+                const description = entry.body.trim();
+                if (namedRules && description.length > 0 && namesRule(entry.heading.text)) {
+                    rules.push({ name: entry.heading.text.trim(), description });
+                }
                 break;
+            }
         }
     }
     return {
+        ...(rules.length === 0 ? {} : { rules }),
         ...(xpCost === undefined ? {} : { xpCost }),
         ...(requirements === undefined ? {} : { requirements }),
         grants: {
@@ -843,7 +883,7 @@ export function readInlineOrigins(
         if (step === undefined) {
             return;
         }
-        const read = grantsOf(fieldEntries(entry), () => []);
+        const read = grantsOf(fieldEntries(entry), () => [], true);
         if (!grantsAnything(read)) {
             return;
         }
@@ -888,6 +928,63 @@ export function readInlineOrigins(
         });
     });
     return out;
+}
+
+/** A heading naming an origin's abilities: "<Origin> Special Ability" / "… Abilities". */
+const ABILITIES_OF = /^(?<origin>.+?)\s+special\s+abilit(?:y|ies)\s*$/iu;
+
+/** An origin's named rules printed apart from it, under a heading naming whose they are. */
+export interface OriginAbilities {
+    /** The origin the heading names, as printed. */
+    origin: string;
+    step: OriginStepDef;
+    pageIndex: number;
+    rules: OriginRule[];
+}
+
+/**
+ * An origin's abilities printed apart from its grants: a heading naming the
+ * origin and closing on the schema's special-ability label ("<Origin> Special
+ * Ability") under a section naming a creation step, each ability a `Name:
+ * rules` field beneath it.
+ */
+export function readOriginAbilities(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginAbilities[] {
+    return entries.flatMap((entry): OriginAbilities[] => {
+        const origin = ABILITIES_OF.exec(entry.heading.text.trim())?.groups?.["origin"]?.trim();
+        if (origin === undefined || letters(origin).length === 0) {
+            return [];
+        }
+        const step = [...entry.sections]
+            .reverse()
+            .map((section) => stepNamedIn(section, steps, true, false))
+            .find((s) => s !== undefined);
+        const rules = entry.fields
+            .filter(([label, value]) => value.trim().length > 0 && namesRule(label))
+            .map(([label, value]) => ({ name: label.trim(), description: value.trim() }));
+        if (step === undefined || rules.length === 0) {
+            return [];
+        }
+        return [
+            {
+                // Set in capitals (or with its case lost), the name takes title case.
+                origin:
+                    caseLost(origin) || !/\p{Ll}/u.test(origin)
+                        ? capitalizeWords(origin.toLowerCase())
+                        : origin,
+                step,
+                pageIndex: entry.heading.pageIndex,
+                rules,
+            },
+        ];
+    });
+}
+
+/** Whether two printed names spell the same origin (letters only, any case). */
+export function sameOrigin(a: string, b: string): boolean {
+    return letters(a) === letters(b);
 }
 
 /** How far up an entry's sections the step naming it may be (its own section, or its parent's). */

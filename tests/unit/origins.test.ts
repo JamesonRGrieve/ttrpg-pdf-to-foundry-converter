@@ -12,8 +12,10 @@ import {
     readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
+    readOriginAbilities,
     readOriginPaths,
     readOriginTable,
+    sameOrigin,
     signedCharacteristicChanges,
     splitTopLevel,
 } from "../../src/infer/origin-paths.ts";
@@ -431,6 +433,54 @@ describe("origins granted by inline fields", () => {
         expect(origins.map((o) => [o.name, o.step.key, o.description])).toEqual([
             ["Reed World", "homeWorld", "Born among the reeds."],
         ]);
+    });
+
+    it("reads an inline origin's fields naming no grant as rules of its own", () => {
+        const rt = TARGETS.rt.originSteps;
+        const sections = ["Creation", "Home World Options"];
+        const origins = readInlineOrigins(
+            [
+                at("reed World", "name", sections, [], "Born among the reeds."),
+                at("Reed World Characters", "sub", sections, [
+                    ["Starting Skills", "Wading, Hush."],
+                    ["Mud Footed", "Bogs are not Difficult Terrain for you."],
+                    ["1-2", "A roll band, not a rule."],
+                    ["Starting Wounds", "Twice the Toughness bonus."],
+                    ["StartingAptitudes", "Wading"],
+                ]),
+            ],
+            rt,
+        );
+        expect(origins[0]?.rules).toEqual([
+            { name: "Mud Footed", description: "Bogs are not Difficult Terrain for you." },
+        ]);
+        // A label whose words a text layer joined still reads as its grant.
+        expect(origins[0]?.grants["aptitudes"]).toEqual(["Wading"]);
+    });
+
+    it("reads an origin's abilities printed apart under a heading naming whose they are", () => {
+        const rt = TARGETS.rt.originSteps;
+        const abilities = readOriginAbilities(
+            [
+                at(
+                    "LAMPLIGHTER SPECIAL ABILITY",
+                    "sub",
+                    ["Career Paths", "Special Abilities"],
+                    [["Steady Flame", "Once per round, relight a lamp."]],
+                ),
+                at("SPECIAL ABILITIES", "sub", ["Career Paths"], [["Unnamed", "No origin named."]]),
+                at("Wick Special Ability", "sub", ["Lamps"], [["Trim", "Not under a step."]]),
+            ],
+            rt,
+        );
+        expect(abilities.map((a) => [a.origin, a.step.key, a.rules])).toEqual([
+            [
+                "Lamplighter",
+                "career",
+                [{ name: "Steady Flame", description: "Once per round, relight a lamp." }],
+            ],
+        ]);
+        expect(sameOrigin("Arch-militant", "ARCH-MILITANT")).toBe(true);
     });
 
     it("reads origins printed as headings with effect fields under a section naming a step", () => {

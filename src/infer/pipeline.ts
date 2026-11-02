@@ -54,14 +54,17 @@ import {
 import { listedBase, type NpcItem, type ParsedNpc, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
+    type OriginRule,
     originStepNamedBy,
     readFieldedOrigins,
     readInlineOrigins,
+    readOriginAbilities,
     readOriginPaths,
     namesOriginStep,
     pairsSteps,
     readEffectOrigins,
     readOriginTable,
+    sameOrigin,
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
 import { variantGrid } from "./profile-variants.ts";
@@ -1196,10 +1199,73 @@ function extractOriginPaths(
     const effects = readEffectOrigins(entries, out.target.originSteps).filter(
         (o) => !read.has(o.step.key) && !readInline.has(o.step.key),
     );
-    for (const origin of [...structured, ...inline, ...effects]) {
+    const origins = [...structured, ...inline, ...effects];
+    // An origin's own rules are talents of their own, which the origin grants;
+    // rules printed apart from it join it when the document reads it.
+    const apart = readOriginAbilities(entries, out.target.originSteps);
+    const ruled = [
+        ...origins.map((o) => ({
+            origin: cleanName(o.name),
+            pageIndex: o.pageIndex,
+            rules: o.rules ?? [],
+            owner: o,
+        })),
+        ...apart.map((group) => ({
+            origin: cleanName(group.origin),
+            pageIndex: group.pageIndex,
+            rules: group.rules,
+            owner: origins.find((o) => o.step.key === group.step.key && sameOrigin(o.name, group.origin)),
+        })),
+    ];
+    for (const { origin, pageIndex, rules, owner } of ruled) {
+        for (const rule of rules) {
+            const name = addOriginRule(out, rule, origin, pageIndex);
+            if (owner !== undefined) {
+                const talents = owner.grants["talents"];
+                owner.grants["talents"] = [
+                    ...(Array.isArray(talents) ? talents : []),
+                    { name, specialization: "" },
+                ];
+            }
+        }
+    }
+    for (const origin of origins) {
         addOrigin(out, origin);
     }
 }
+
+/** The talent category the system files an origin's own rules under. */
+const ORIGIN_TALENT_CATEGORY = "origin";
+
+/**
+ * An origin's own named rule as a talent, named by the rule qualified with
+ * its origin ("<Rule> (<Origin>)"): the same rule name recurs across
+ * origins. Returns the talent's name.
+ */
+function addOriginRule(out: EntityCollector, rule: OriginRule, origin: string, pageIndex: number): string {
+    const html = toHtml(rule.description);
+    const name = `${cleanName(rule.name)} (${origin})`;
+    out.add(
+        "Item",
+        itemSegment("talent"),
+        buildItem({
+            type: "talent",
+            name,
+            line: out.line,
+            book: out.sourceBook,
+            page: out.page(pageIndex),
+            description: html,
+            system: { category: ORIGIN_TALENT_CATEGORY, benefit: html },
+            variantized: {},
+        }),
+        pageIndex,
+        `${ORIGIN_RULE_READING}talent`,
+    );
+    return name;
+}
+
+/** The reading that gives an origin's own rule as a talent. */
+const ORIGIN_RULE_READING = "origin-rule:";
 
 /** A table row's cell texts in column order ("" for an empty cell). */
 /** Share of a table's rows whose name cell opens with a number band for it to list results. */
