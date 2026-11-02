@@ -1688,6 +1688,9 @@ describe("entry typing", () => {
         expect(typeNamedBy("Table 2-1: Mutations")).toBe("mutation");
         expect(typeNamedBy("Weapons Upgrades")).toBe("weaponModification");
         expect(typeNamedBy("Armour Upgrades")).toBe("armourModification");
+        // A word a text layer ran on to one in capitals.
+        expect(typeNamedBy("ODDAmmo")).toBe("ammunition");
+        expect(typeNamedBy("Lampmutations")).toBeNull();
     });
 
     it("builds a talent's tier, aptitudes and prerequisites", () => {

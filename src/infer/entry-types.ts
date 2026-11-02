@@ -191,9 +191,13 @@ function splitCharacteristic(heading: string): { name: string; characteristic: s
         : { name, characteristic: key };
 }
 
-/** The field-less catalogue type a heading or caption names, if any. */
+/**
+ * The field-less catalogue type a heading or caption names, if any. A word a
+ * text layer ran on to one in capitals ("UNUSUALAmmo") is read apart.
+ */
 export function typeNamedBy(text: string): ItemType | null {
-    return SECTION_TYPES.find(([re]) => re.test(text))?.[1] ?? null;
+    const apart = text.replace(/(\p{Lu})(?=\p{Lu}\p{Ll})/gu, "$1 ");
+    return SECTION_TYPES.find(([re]) => re.test(apart))?.[1] ?? null;
 }
 /** The kinds that identify themselves by field blocks (see SECTION_TYPES), by the word a section names them with. */
 const FIELDED_KINDS: readonly [RegExp, ItemType][] = [
