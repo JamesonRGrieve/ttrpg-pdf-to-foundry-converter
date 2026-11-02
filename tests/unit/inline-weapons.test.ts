@@ -74,4 +74,17 @@ describe("inlineWeapons", () => {
         expect(inlineWeapons("He carries a wick gun (Basic; 1d10 I) at all times")).toEqual([]);
         expect(inlineWeapons("Wick gun (Basic; 60m; Pen 2)")).toEqual([]);
     });
+
+    it("reads a craft's mounted weapons, whose profiles open on a facing or range, as the vehicle class", () => {
+        const text =
+            "Turret-mounted Ember Cannon (300m; S/-/-; 3d10+8 X; Pen 6; Clip 12; 2 Full; Blast [4]) " +
+            "with Co-Axial mounted Spark Gun (Front Facing; 100m; -/-/6; 1d10+4 I; Pen 2; Clip 60; Full)";
+        const weapons = inlineWeapons(text, true);
+        expect(weapons.map((w) => [w.name, w.cells.class, w.cells.range, w.cells.damage])).toEqual([
+            ["Ember Cannon", "vehicle", "300m", "3d10+8 X"],
+            ["Spark Gun", "vehicle", "100m", "1d10+4 I"],
+        ]);
+        // Outside a craft's weapon list a profile must open on its class.
+        expect(inlineWeapons(text)).toEqual([]);
+    });
 });

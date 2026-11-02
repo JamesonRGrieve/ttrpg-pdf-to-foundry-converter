@@ -36,12 +36,38 @@ function asName(text: string): string {
     return text.replace(/(^|\s)(\p{Ll})/gu, (_, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
 }
 
-/** The weapon profiles printed inline in `text`. */
-export function inlineWeapons(text: string): InlineWeapon[] {
+/**
+ * A craft's weapon list: its weapons are mounted ("Turret-mounted X (…)",
+ * "with co-axial mounted Y (…)"), their profiles open on a facing or the range
+ * rather than a class, and they are of the schema's vehicle class.
+ */
+const MOUNTED_PROFILE =
+    /(?<=^|[,;:\n•†]\s*|\b(?:or|and|with)\s+)(?<name>\p{L}[\p{L}\p{N}'’ -]{0,60}?)\s*\((?<profile>[^()]*(?:\([^()]*\)[^()]*)*)\)/gu;
+/** The mounting a craft's weapon list names before a weapon: "Turret-mounted", "Co-Axial mounted", "Fixed". */
+const MOUNTING = /^(?:(?:[\p{L}]+(?:[- ][\p{L}]+)?[- ])?mounted|fixed)\s+/iu;
+/** A profile part naming the weapon's facing ("Front Facing", "Front-Facing"). */
+const FACING = /\bfacing\b/iu;
+/** The schema's weapon class for weapons mounted on a craft. */
+const MOUNTED_CLASS = "vehicle";
+
+/**
+ * The weapon profiles printed inline in `text`; `mounted`: the text lists a
+ * craft's weapons, whose profiles need print no class.
+ */
+export function inlineWeapons(text: string, mounted = false): InlineWeapon[] {
     const out: InlineWeapon[] = [];
-    for (const m of text.matchAll(PROFILE)) {
-        const rawName = m.groups?.["name"]?.trim().replace(LEADING_JOIN, "") ?? "";
-        const parts = (m.groups?.["profile"] ?? "").split(";").map((p) => p.trim());
+    for (const m of text.matchAll(mounted ? MOUNTED_PROFILE : PROFILE)) {
+        const rawName =
+            m.groups?.["name"]
+                ?.trim()
+                .replace(LEADING_JOIN, "")
+                .replace(mounted ? MOUNTING : /$^/u, "") ?? "";
+        const printed = (m.groups?.["profile"] ?? "")
+            .split(";")
+            .map((p) => p.trim())
+            .filter((p) => !(mounted && FACING.test(p)));
+        const classed = printed[0] !== undefined && parseWeaponClass(printed[0]) !== null;
+        const parts = classed || !mounted ? printed : [MOUNTED_CLASS, ...printed];
         const [first, ...rest] = parts;
         const words = rawName.split(/\s+/u).filter((w) => w.length > 0).length;
         if (

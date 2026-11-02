@@ -41,6 +41,7 @@ import {
     splitTier,
     startsLikeName,
     stripHeadingLabel,
+    titleCase,
     wordsOf,
 } from "./names.ts";
 import {
@@ -51,7 +52,8 @@ import {
     parseWeaponType,
     splitTrailingClass,
 } from "./notation.ts";
-import { listedBase, type NpcItem, type ParsedNpc, parseNpc } from "./npc.ts";
+import { listedBase, type NpcItem, type ParsedNpc, parseNpc, rejoinSmallCaps } from "./npc.ts";
+import { panelWeapons } from "./panel-weapons.ts";
 import {
     type OriginPathReading,
     type OriginRule,
@@ -872,31 +874,111 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
         ),
     ].filter(([label]) => isProse(label));
     const isWeapons = ([label]: [string, string]): boolean => WEAPONS_LABEL.test(label);
-    out.add(
-        "Actor",
-        CRAFT_SEGMENT[kind],
-        buildVehicle({
-            actorType: out.target.actorTypes[kind],
-            name,
-            line: out.line,
-            book: out.sourceBook,
-            page: out.page(entry.heading.pageIndex),
-            description: toHtml(prose),
-            system,
-            weapons: rules
-                .filter(isWeapons)
-                .map(([, value]) => toHtml(value))
-                .join(""),
-            specialRules: rules
-                .filter((r) => !isWeapons(r))
-                .map(([label, value]) => toHtml(`${label}: ${value}`))
-                .join(""),
-        }),
+    const carried = mountedWeapons(
+        out,
+        name,
+        rules
+            .filter(isWeapons)
+            .map(([, value]) => value)
+            .join("\n"),
         entry.heading.pageIndex,
-        "entry:vehicle",
     );
+    const vehicle = buildVehicle({
+        actorType: out.target.actorTypes[kind],
+        name,
+        line: out.line,
+        book: out.sourceBook,
+        page: out.page(entry.heading.pageIndex),
+        description: toHtml(prose),
+        system,
+        weapons: rules
+            .filter(isWeapons)
+            .map(([, value]) => toHtml(value))
+            .join(""),
+        specialRules: rules
+            .filter((r) => !isWeapons(r))
+            .map(([label, value]) => toHtml(`${label}: ${value}`))
+            .join(""),
+    });
+    vehicle["items"] = carried;
+    out.add("Actor", CRAFT_SEGMENT[kind], vehicle, entry.heading.pageIndex, "entry:vehicle");
     return true;
 }
+
+/** A weapon profile's figures that tell one printing of a weapon from another. */
+function profileKey(system: JsonObject): string {
+    const damage = system["damage"];
+    const attack = system["attack"];
+    return JSON.stringify([
+        isJsonObject(damage) ? [damage["formula"], damage["bonus"], damage["penetration"]] : null,
+        isJsonObject(attack) && isJsonObject(attack["range"]) ? attack["range"]["value"] : null,
+    ]);
+}
+
+/**
+ * The weapons a craft's weapon list prints with their profiles, as bare items
+ * for the craft to carry. A weapon no other reading gives becomes an item of
+ * its own under its printed name; one the catalogue gives with the same
+ * profile is that item; one it gives with another profile (the mounted
+ * version) becomes an item qualified by the craft printing it, "Heavy Gun
+ * (Crawler)" — once per profile, so crafts sharing a mount share the item.
+ */
+function mountedWeapons(out: EntityCollector, craft: string, text: string, pageIndex: number): JsonObject[] {
+    const items: JsonObject[] = [];
+    // Profiles printed inline, or boxed as a name line and `LABEL value` lines.
+    const printed = [...inlineWeapons(text, true), ...panelWeapons(text.split(/\n+/u).map(rejoinSmallCaps))];
+    for (const found of printed) {
+        // A name line may close a sentence introducing it ("One hull-mounted
+        // gun with a forward arc: Spark Gun"); small capitals may lose case.
+        const weapon = { ...found, name: titleCase(found.name.replace(/^.*:\s*/su, "").trim()) };
+        if (!startsLikeName(weapon.name)) {
+            continue;
+        }
+        const mapped = mapRow("weapon", weapon.cells);
+        const key = profileKey(mapped.system);
+        const same = (e: Entity): boolean =>
+            e.fields["type"] === "weapon" &&
+            isJsonObject(e.fields["system"]) &&
+            profileKey(e.fields["system"]) === key;
+        const named = out.entities.filter(
+            (e) =>
+                e.fields["type"] === "weapon" &&
+                nameKey(String(e.fields["name"]).replace(QUALIFIER, "")) === nameKey(weapon.name),
+        );
+        const existing = named.find(same);
+        const name =
+            existing !== undefined
+                ? String(existing.fields["name"])
+                : named.length === 0
+                  ? weapon.name
+                  : `${weapon.name} (${craft})`;
+        if (existing === undefined) {
+            out.add(
+                "Item",
+                itemSegment("weapon"),
+                buildItem({
+                    type: "weapon",
+                    name,
+                    line: out.line,
+                    book: out.sourceBook,
+                    page: out.page(pageIndex),
+                    description: "",
+                    system: mapped.system,
+                    variantized: mapped.variantized,
+                }),
+                pageIndex,
+                `${MOUNTED_READING}weapon`,
+            );
+        }
+        if (!items.some((i) => i["name"] === name)) {
+            items.push({ name, type: "weapon", system: {} });
+        }
+    }
+    return items;
+}
+
+/** The reading that gives a weapon from a craft's weapon list. */
+const MOUNTED_READING = "mounted:";
 
 /**
  * An entry carrying a ship profile is a voidcraft: its profile gives the stat
@@ -1644,7 +1726,12 @@ export function embedNpcItems(entities: readonly Entity[]): void {
             return doc;
         });
         actor.fields["items"] = resolved;
-        if (resolved.some((d) => d["type"] === "weapon") && isJsonObject(actor.fields["system"])) {
+        // A craft's `weapons` is its printed weapon list, kept as it is.
+        if (
+            resolved.some((d) => d["type"] === "weapon") &&
+            isJsonObject(actor.fields["system"]) &&
+            typeof actor.fields["system"]["weapons"] !== "string"
+        ) {
             actor.fields["system"]["weapons"] = { mode: "embedded", simple: [] };
         }
     }
