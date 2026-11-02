@@ -414,6 +414,7 @@ function extractTables(
     const titledPages = new Set(titled.map((t) => t.pageIndex));
     const tables = [...titled, ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex))];
     let unclassified = 0;
+    const carried = carriedSections(tables);
     for (const table of tables) {
         // A captioned roll table is a RollTable, whatever items its rows also define.
         addRollTable(table, out);
@@ -483,7 +484,7 @@ function extractTables(
         const captionClass = type === "weapon" ? captionWeaponClass(table.tableTitle ?? "") : null;
         // A section row groups the records under it; in a ship weapon table it
         // names their weapon type ("Lances").
-        let section: string | null = null;
+        let section: string | null = carried.get(table) ?? null;
         const records: TableRecord[] = [];
         for (const row of table.rows) {
             if (row.isSectionHeader) {
@@ -1558,6 +1559,29 @@ export function fitModifications(entities: readonly Entity[], line: Line, book: 
             e.pack = packName(line, book, itemSegment(type));
         }
     }
+}
+
+/**
+ * A section row closing one part of a table the layout split into parts
+ * heads the part after it (the next table, under the same caption and
+ * headers): the section each such part opens under.
+ */
+export function carriedSections(tables: readonly DetectedTable[]): Map<DetectedTable, string> {
+    const keyOf = (t: DetectedTable): string => `${t.tableTitle ?? ""}\u0000${t.headers.join("\u0000")}`;
+    const out = new Map<DetectedTable, string>();
+    tables.forEach((table, i) => {
+        const next = tables[i + 1];
+        const last = table.rows.findLast((r) => !r.isHeaderRow);
+        if (
+            next !== undefined &&
+            keyOf(next) === keyOf(table) &&
+            last?.isSectionHeader === true &&
+            last.sectionName !== null
+        ) {
+            out.set(next, last.sectionName);
+        }
+    });
+    return out;
 }
 
 /** Share of a table's rows whose name recurs under another section for its rows to be grades of each. */

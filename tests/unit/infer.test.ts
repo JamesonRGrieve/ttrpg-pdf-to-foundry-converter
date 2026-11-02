@@ -79,6 +79,7 @@ import {
     mergeInto,
     preferTableBenefit,
     modalHeadingSizes,
+    carriedSections,
     nameKey,
     qualifiedBySection,
     siblingKinds,
@@ -2487,6 +2488,16 @@ describe("section-qualified table names", () => {
             "Candles: High Grade",
             "Oil: Low Grade",
         ]);
+    });
+
+    it("carries a section row closing one part of a split table to the next part", () => {
+        const first = table([row(["Glow Gun", "5"]), section("Ember Weapons")]);
+        const second = table([row(["Ember Gun", "6"])]);
+        const other = { ...table([row(["Wick", "1"])]), tableTitle: "Wicks" };
+        const carried = carriedSections([first, second, other]);
+        expect(carried.get(second)).toBe("Ember Weapons");
+        expect(carried.has(first)).toBe(false);
+        expect(carriedSections([first, other]).size).toBe(0);
     });
 
     it("leaves a catalogue that repeats a name or two", () => {
