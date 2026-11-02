@@ -482,6 +482,29 @@ function captionLines(lines: readonly TextLine[]): Set<TextLine> {
     return out;
 }
 
+/** A gap after a field's label wider than this many font sizes sets its value apart, in a column of its own. */
+const SET_APART_GAP_FACTOR = 2.5;
+/** A line starting this many points left of a set-apart value does not continue it. */
+const SET_APART_SLACK = 4;
+/** Fewest set-apart fields in an entry for them to be read as a block of aligned values. */
+const MIN_SET_APART_FIELDS = 2;
+
+/**
+ * Where a field line's value starts when a wide gap sets it apart from its
+ * bold label (the value aligned in a column of its own, as in a block of
+ * `Label:    value` lines); null when the value follows the label as running text.
+ */
+export function setApartValueX(line: TextLine): number | null {
+    const runs = visibleRuns(line);
+    const valueAt = runs.findIndex((r) => r.weight !== "bold");
+    const label = runs[valueAt - 1];
+    const value = runs[valueAt];
+    if (valueAt < 1 || label === undefined || value === undefined) {
+        return null;
+    }
+    return value.x - (label.x + label.width) > SET_APART_GAP_FACTOR * value.size ? value.x : null;
+}
+
 /** A field value ending mid-list — on a separator or conjunction — continues on the next line. */
 export function valueUnfinished(value: string): boolean {
     return /(?:[,;&–-]|\b(?:and|or))\s*$/iu.test(value);
@@ -655,6 +678,8 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
     const stack: Heading[] = [];
     let current: Entry | null = null;
     let lastFieldWrapped = false;
+    let lastValueX: number | null = null;
+    let setApartFields = 0;
     let bodyLines: string[] = [];
     let lastBody: TextLine | null = null;
 
@@ -722,6 +747,8 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             current = { heading, sections: stack.map((h) => h.text), fields: [], body: "" };
             stack.push(heading);
             lastFieldWrapped = false;
+            lastValueX = null;
+            setApartFields = 0;
             continue;
         }
         if (current === null) {
@@ -732,10 +759,19 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         if (field !== null) {
             entry.fields.push(field);
             lastFieldWrapped = continues(line, field[1]);
+            lastValueX = setApartValueX(line);
+            setApartFields += lastValueX === null ? 0 : 1;
             continue;
         }
         const last = entry.fields[entry.fields.length - 1];
-        if (lastFieldWrapped && last !== undefined) {
+        // In a block of fields whose values are set apart in a column of their
+        // own, a value runs on only in that column: a line back at the margin
+        // is the entry's text.
+        const atMargin =
+            lastValueX !== null &&
+            setApartFields >= MIN_SET_APART_FIELDS &&
+            (visibleRuns(line)[0]?.x ?? 0) < lastValueX - SET_APART_SLACK;
+        if (lastFieldWrapped && last !== undefined && !atMargin) {
             last[1] = `${last[1]} ${line.text}`.trim();
             lastFieldWrapped = continues(line, last[1]);
             continue;
