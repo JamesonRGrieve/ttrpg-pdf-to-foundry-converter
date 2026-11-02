@@ -1087,15 +1087,56 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
         dataRows.push(...readRows(copy, bounds));
     }
 
+    // A section row set above the header names the first part's section.
+    const lead = leadSection(lines, headerRow);
+    const sectioned =
+        lead === null || dataRows.length === 0 || dataRows[0]?.isSectionHeader === true
+            ? dataRows
+            : [{ cells: [], isHeaderRow: false, isSectionHeader: true, sectionName: lead }, ...dataRows];
+
     return dataRows.length > 0
         ? {
               pageIndex: title.pageIndex,
               headers: headers.slice(0, period),
-              rows: dataRows,
+              rows: sectioned,
               tableTitle: title.title,
               runs: [...lines.slice(0, headerIdx + 1), ...body].flatMap((l) => l.runs),
           }
         : null;
+}
+
+/** Most header sizes a section row set above the header sits above it: ordinary leading. */
+const LEAD_SECTION_FACTOR = 1.8;
+
+/**
+ * A section row set directly above a table's header, between it and the
+ * caption ("Las Weapons" over "Name Class Range …"): one bold run of words
+ * naming no column, starting where the header's first label starts. Its
+ * text, or null.
+ */
+export function leadSection(lines: readonly RawRow[], header: RawRow): string | null {
+    const start = lines.findIndex((line, i) => isHeaderRow(line, cellEdges(lines.slice(i + 1))));
+    const above = lines[start - 1];
+    const runs = above?.runs.filter((r) => r.text.trim().length > 0) ?? [];
+    const firstLabel = header.runs
+        .filter((r) => r.text.trim().length > 0)
+        .reduce<IRTextRun | null>((a, r) => (a === null || r.x < a.x ? r : a), null);
+    const text = runs
+        .map((r) => r.text)
+        .join(" ")
+        .replace(/\s+/gu, " ")
+        .trim();
+    const size = Math.max(...header.runs.map((r) => r.size));
+    return above === undefined ||
+        firstLabel === null ||
+        runs.length === 0 ||
+        !runs.every((r) => r.weight === "bold") ||
+        !/^\p{L}[\p{L}\s'’-]*$/u.test(text) ||
+        headerRole(text) !== null ||
+        Math.abs(Math.min(...runs.map((r) => r.x)) - firstLabel.x) > COLUMN_EDGE_TOLERANCE ||
+        above.y - header.y > LEAD_SECTION_FACTOR * size
+        ? null
+        : text;
 }
 
 /**

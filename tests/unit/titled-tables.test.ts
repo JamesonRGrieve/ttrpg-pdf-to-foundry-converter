@@ -114,6 +114,41 @@ describe("titled tables", () => {
         ]);
     });
 
+    it("reads a section row set above the header as the first part's section", () => {
+        const table = (lead: IRTextRun[]): string[] => {
+            const ir = irOf([
+                run("Table 1-1: Lamps", 60, 720, bold),
+                ...lead,
+                run("Name", 60, 690, bold),
+                run("Class", 200, 690, bold),
+                run("Range", 300, 690, bold),
+                run("Rushlight", 60, 675),
+                run("Basic", 200, 675),
+                run("30m", 300, 675),
+                run("Glim", 60, 660),
+                run("Pistol", 200, 660),
+                run("10m", 300, 660),
+                run("Wick Lamps", 60, 645, bold),
+                run("Hush Lamp", 60, 630),
+                run("Basic", 200, 630),
+                run("20m", 300, 630),
+            ]);
+            return (detectTitledTables(ir)[0]?.rows ?? []).map((r) =>
+                r.isSectionHeader ? `§${r.sectionName ?? ""}` : (r.cells[0]?.text ?? ""),
+            );
+        };
+        expect(table([run("Reed Lamps", 60, 704, bold)])).toEqual([
+            "§Reed Lamps",
+            "Rushlight",
+            "Glim",
+            "§Wick Lamps",
+            "Hush Lamp",
+        ]);
+        // Set apart from the header's first column, or naming a column, it is no section.
+        expect(table([run("Reed Lamps", 140, 704, bold)])[0]).toBe("Rushlight");
+        expect(table([run("Range", 60, 704, bold)])[0]).toBe("Rushlight");
+    });
+
     it("reads a two-line name whose values sit between its lines, past a superscript marker", () => {
         const ir = irOf([
             run("Table 1-1: Lamps", 60, 700, bold),
