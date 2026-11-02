@@ -58,6 +58,11 @@ function smallLettersAfter(tokens: readonly string[], i: number): number {
 export function closeUpSpacedLetters(text: string): string {
     const out: string[] = [];
     const tokens = text.split(/\s+/u).filter((t) => t.length > 0);
+    // Words keep their case only where every unspaced piece is a word in
+    // regular case; pieces like "Au" or "rI" are small capitals' scrambled case.
+    const regularCase = tokens
+        .filter((t) => [...t].length > 1)
+        .every((t) => /^\p{Lu}?\p{Ll}{2,}-?$/u.test(t));
     for (const [i, token] of tokens.entries()) {
         const prev = out.at(-1);
         // Spaced letters keep their words' capitals: a capital after a word
@@ -66,6 +71,7 @@ export function closeUpSpacedLetters(text: string): string {
         // small letters alone ("fr A g"), or among letters of scrambled case,
         // it is a small capital that lost its case.
         const opensWord =
+            regularCase &&
             /^\p{Lu}-?$/u.test(token) &&
             /^\p{Lu}\p{Ll}+$/u.test(prev ?? "") &&
             smallLettersAfter(tokens, i) >= MIN_WORD_TAIL;
@@ -73,8 +79,8 @@ export function closeUpSpacedLetters(text: string): string {
             prev !== undefined &&
             !opensWord &&
             /^[\p{L}-]+$/u.test(prev) &&
-            // A lone letter (perhaps before a hyphen), or anything after a word broken at a hyphen.
-            (/^\p{L}-?$/u.test(token) || (prev.endsWith("-") && /^\p{L}/u.test(token)));
+            // A lone letter (perhaps before a hyphen), a lone hyphen, or anything after a word broken at a hyphen.
+            (/^\p{L}-?$/u.test(token) || token === "-" || (prev.endsWith("-") && /^\p{L}/u.test(token)));
         if (prev !== undefined && joins) {
             out[out.length - 1] = `${prev}${token}`;
         } else {

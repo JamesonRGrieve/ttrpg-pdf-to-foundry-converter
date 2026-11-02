@@ -15,6 +15,10 @@ describe("closeUpSpacedLetters", () => {
         expect(closeUpSpacedLetters("Heavy W i c k")).toBe("Heavy Wick");
         // Scrambled case: a capital before one small letter, or after mixed case, stays in the word.
         expect(closeUpSpacedLetters("L a m p I l A s e r")).toBe("LampIlAser");
+        // Unspaced pieces in scrambled case ("Gl") mark the whole name's case as lost.
+        expect(closeUpSpacedLetters("Gl O w C a n n o n")).toBe("GlOwCannon");
+        // A hyphen spaced apart joins the word on either side.
+        expect(closeUpSpacedLetters("T w i n G l o w - L a m p")).toBe("Twin Glow-Lamp");
     });
 });
 
