@@ -62,6 +62,7 @@ import {
     armourOf,
     listedItems,
     parseNpc,
+    reinforcementTerms,
     rejoinSmallCaps,
     specialAbilities,
     splitFields,
@@ -74,6 +75,7 @@ import {
     givenNames,
     infer,
     splitNumberFromText,
+    enclosingEntry,
     introducingEntry,
     isUnmarkedSectionRow,
     keyedByBands,
@@ -749,6 +751,30 @@ describe("npc statblocks", () => {
         ]);
         expect(items.every((i) => typeof i["_id"] === "string" && String(i["_id"]).length === 16)).toBe(true);
         expect(Object(actor.fields["system"])["weapons"]).toEqual({ mode: "embedded", simple: [] });
+    });
+
+    it("reads a reinforcement's call terms from its introduction", () => {
+        expect(
+            reinforcementTerms(
+                "Influence Minimum: 40 Influence Cost: 6 Peer (LampWardens) talent lowers Influence Cost by 1d5\nProse.",
+            ),
+        ).toEqual({
+            influenceMinimum: 40,
+            influenceCost: 6,
+            peerDiscount: { peer: "Lamp Wardens", amount: "1d5" },
+        });
+        expect(
+            reinforcementTerms(
+                "Influence Minimum: 50 Influence Cost: 5 The PC who calls it must possess the Gloom Lore (Moths) skill at the Trained level, and gains 1d5 Corruption points.",
+            ),
+        ).toEqual({
+            influenceMinimum: 50,
+            influenceCost: 5,
+            caller: { skill: "gloomLore", specialization: "Moths", rank: 2, corruption: "1d5" },
+        });
+        // Rules prose naming the terms prints no figures for them.
+        expect(reinforcementTerms("Each one has an Influence Minimum and an Influence Cost.")).toBeNull();
+        expect(reinforcementTerms("Influence Minimum: 40")).toBeNull();
     });
 
     it("reads printed fate points", () => {
@@ -2709,6 +2735,22 @@ describe("statblock prose", () => {
         expect(introducingEntry(entries, "Mire Hound", 72)?.heading.pageIndex).toBe(71);
         expect(introducingEntry(entries, "Mire Hound", 12)).toBeNull();
         expect(introducingEntry(entries, "Reed King", 71)).toBeNull();
+    });
+
+    it("takes a heading setting a word of the name in the plural when none prints it exactly", () => {
+        const plural = heading("REED KINGS GUARD", 72);
+        expect(introducingEntry([plural], "Reed King Guard", 72)).toBe(plural);
+        const exact = heading("REED KING GUARD", 72);
+        expect(introducingEntry([exact, plural], "Reed King Guard", 72)).toBe(exact);
+    });
+
+    it("finds the entry an entry sits under, within reach", () => {
+        const outer = heading("MIRE HOUND", 71);
+        const inner = { ...heading("Mire Hound Profile", 71), sections: ["MIRE HOUND"] };
+        const far = { ...heading("Mire Hound Profile", 75), sections: ["MIRE HOUND"] };
+        expect(enclosingEntry([outer, inner, far], inner)).toBe(outer);
+        expect(enclosingEntry([outer, inner, far], far)).toBeNull();
+        expect(enclosingEntry([outer], outer)).toBeNull();
     });
 
     it("takes the heading a caption shortens, never the caption line itself", () => {

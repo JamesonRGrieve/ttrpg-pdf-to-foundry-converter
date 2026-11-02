@@ -54,7 +54,14 @@ import {
     parseWeaponType,
     splitTrailingClass,
 } from "./notation.ts";
-import { listedBase, type NpcItem, type ParsedNpc, parseNpc, rejoinSmallCaps } from "./npc.ts";
+import {
+    listedBase,
+    type NpcItem,
+    type ParsedNpc,
+    parseNpc,
+    reinforcementTerms,
+    rejoinSmallCaps,
+} from "./npc.ts";
 import {
     type OriginPathReading,
     type OriginRule,
@@ -1701,15 +1708,44 @@ const GRID_BANNER_WORD_SHARE = 0.8;
  */
 export function introducingEntry(entries: readonly Entry[], name: string, pageIndex: number): Entry | null {
     const key = nameKey(name);
+    const singular = singularWordsKey(name);
     let best: Entry | null = null;
+    let near: Entry | null = null;
     for (const e of entries) {
         const p = e.heading.pageIndex;
-        if (nameKey(e.heading.text) === key && p <= pageIndex && p >= pageIndex - STATBLOCK_PROSE_REACH) {
+        if (p > pageIndex || p < pageIndex - STATBLOCK_PROSE_REACH) {
+            continue;
+        }
+        if (nameKey(e.heading.text) === key) {
             best = e;
+        } else if (singularWordsKey(e.heading.text) === singular) {
+            near = e;
         }
     }
-    return best;
+    // A heading may set a word of the name in the plural ("Wardens Lamp Keeper").
+    return best ?? near;
 }
+
+/** The entry an entry sits under: the nearest earlier one headed by its innermost section, within reach. */
+export function enclosingEntry(entries: readonly Entry[], entry: Entry): Entry | null {
+    const parent = entry.sections.at(-1);
+    const at = entries.indexOf(entry);
+    if (parent === undefined || at < 0) {
+        return null;
+    }
+    return (
+        entries
+            .slice(0, at)
+            .findLast(
+                (e) =>
+                    e.heading.text === parent &&
+                    e.heading.pageIndex >= entry.heading.pageIndex - STATBLOCK_PROSE_REACH,
+            ) ?? null
+    );
+}
+
+/** A name's words, each without a plural ending, run together: plural-blind matching. */
+const singularWordsKey = (name: string): string => nameWords(name).map(singularKey).join("");
 
 /** A name's words, lower-cased, a possessive ending dropped. */
 const nameWords = (name: string): string[] =>
@@ -1814,10 +1850,17 @@ function extractActors(
                 ? null
                 : splitTier(naming.heading.text);
         const name = fromHeading?.name ?? caption;
-        const system =
+        const tiered =
             fromHeading !== null && fromHeading.tier !== null && npc.system["tier"] === undefined
                 ? { ...npc.system, tier: fromHeading.tier }
                 : npc.system;
+        // Its introduction may print the terms it is called in on as a Reinforcement Character.
+        // A statblock captioned under its own heading prints them under that one.
+        const reinforcement =
+            [intro, intro === null ? null : enclosingEntry(entries, intro)]
+                .map((e) => (e === null ? null : reinforcementTerms(entryText(e))))
+                .find((terms) => terms !== null) ?? null;
+        const system = reinforcement === null ? tiered : { ...tiered, isReinforcement: true, reinforcement };
         const actor = buildActor({
             name,
             actorType: out.target.actorTypes.npc,

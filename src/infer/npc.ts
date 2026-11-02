@@ -437,3 +437,68 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
                 : { name: trailing["base"], type, system: { level: Number(trailing["n"]) } };
         });
 }
+
+/** The schema's call terms, by their printed labels ("Influence Minimum: 50"). */
+const INFLUENCE_TERM = /\binfluence\s+(?<term>minimum|cost)\s*:\s*(?<n>\d+)/giu;
+/** "Peer (Group) talent lowers Influence Cost by 2": the discount and the peer group it needs. */
+const PEER_DISCOUNT =
+    /\bpeer\s*\((?<peer>[^()]+)\)\s*talent\s+(?:lowers|reduces)\s+(?:the\s+)?influence\s+cost\s+by\s+(?<amount>\d+(?:d\d+)?)\b/iu;
+/** A caller's required skill and rank: "must possess the X (Spec) skill at the Trained level". */
+const CALLER_SKILL =
+    /\bmust\s+possess\s+the\s+(?<skill>\p{L}[\p{L}\s-]*?)\s*(?:\((?<spec>[^()]+)\)\s*)?skill\s+at\s+the\s+(?<rank>known|trained|experienced|veteran)\s+level/iu;
+/** Corruption the caller gains: "gains 1d5 Corruption points". */
+const CALLER_CORRUPTION = /\bgains?\s+(?<amount>\d+(?:d\d+)?)\s+corruption\b/iu;
+/** The schema's skill ranks, first to last. */
+const SKILL_RANKS = ["known", "trained", "experienced", "veteran"] as const;
+
+/** A skill's name as the schema keys skills: lower camel case ("Forbidden Lore" → `forbiddenLore`). */
+const skillKey = (name: string): string =>
+    name
+        .trim()
+        .split(/[\s-]+/u)
+        .map((w, i) =>
+            i === 0 ? w.toLowerCase() : `${w.charAt(0).toUpperCase()}${w.slice(1).toLowerCase()}`,
+        )
+        .join("");
+
+/**
+ * The terms a Reinforcement Character is called in on, from its introduction:
+ * its `Influence Minimum` and `Influence Cost` (both printed, or it is none),
+ * a Peer talent's discount, and what the caller needs and suffers. Words a
+ * text layer ran together in the peer group are set apart.
+ */
+export function reinforcementTerms(text: string): JsonObject | null {
+    const terms = new Map<string, number>();
+    for (const m of text.matchAll(INFLUENCE_TERM)) {
+        const term = m.groups?.["term"]?.toLowerCase();
+        if (term !== undefined && !terms.has(term)) {
+            terms.set(term, Number(m.groups?.["n"]));
+        }
+    }
+    const minimum = terms.get("minimum");
+    const cost = terms.get("cost");
+    if (minimum === undefined || cost === undefined) {
+        return null;
+    }
+    const reinforcement: JsonObject = { influenceMinimum: minimum, influenceCost: cost };
+    const peer = PEER_DISCOUNT.exec(text)?.groups;
+    if (peer !== undefined) {
+        reinforcement["peerDiscount"] = {
+            peer: (peer["peer"] ?? "").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").trim(),
+            amount: peer["amount"] ?? "",
+        };
+    }
+    const skill = CALLER_SKILL.exec(text)?.groups;
+    const corruption = CALLER_CORRUPTION.exec(text)?.groups?.["amount"];
+    if (skill !== undefined || corruption !== undefined) {
+        const printedRank = (skill?.["rank"] ?? "").toLowerCase();
+        const rank = SKILL_RANKS.findIndex((r) => r === printedRank);
+        reinforcement["caller"] = {
+            skill: skill?.["skill"] === undefined ? "" : skillKey(skill["skill"]),
+            specialization: skill?.["spec"]?.trim() ?? "",
+            rank: rank < 0 ? null : rank + 1,
+            corruption: corruption ?? "",
+        };
+    }
+    return reinforcement;
+}
