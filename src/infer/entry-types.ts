@@ -527,14 +527,24 @@ const GROUP_NOUN = /\s+powers\s*$/iu;
 
 /**
  * A power's discipline as the book prints it (content#35): the heading of the
- * innermost section it sits in beneath the section naming the psychic-power
- * catalogue. A power printed directly under that section, or outside one, has
+ * section it sits in directly beneath the section naming the psychic-power
+ * catalogue (a heading deeper still groups some of that discipline's powers,
+ * or is a diagram's caption). A power printed directly under that section, or outside one, has
  * none ("") rather than the schema's default, which would name a discipline
  * the book never gave it.
  */
 export function printedDiscipline(sections: readonly string[]): string {
     const catalogue = sections.findLastIndex((s) => POWER_CATALOGUE.test(s));
-    const under = catalogue < 0 ? [] : sections.slice(catalogue + 1);
+    // Under no catalogue section (a display title set larger than the chapter's
+    // heading has closed it), a section naming a discipline's powers
+    // ("Lampcraft Powers") stands in for it: powers directly beneath it are
+    // that discipline's, ones under a heading of its own are that heading's.
+    const grouping = catalogue < 0 ? sections.findLastIndex((s) => GROUP_NOUN.test(s)) : -1;
+    if (grouping >= 0 && grouping === sections.length - 1) {
+        return cleanName(sections[grouping]?.replace(GROUP_NOUN, "") ?? "");
+    }
+    const anchor = Math.max(catalogue, grouping);
+    const under = anchor < 0 ? [] : sections.slice(anchor + 1);
     // A section naming its discipline as such ("Lampcraft Discipline: Wick
     // Techniques") names it by the words before the word.
     const named = under
@@ -542,7 +552,7 @@ export function printedDiscipline(sections: readonly string[]): string {
         .findLast((n) => n !== undefined);
     // A section naming its powers ("Lampcraft Powers") names the discipline by the words before.
     const qualified = sections.findLast((s) => QUALIFIED_CATALOGUE.test(s));
-    const own = named ?? under.at(-1)?.replace(GROUP_NOUN, "") ?? qualified;
+    const own = named ?? under.at(0)?.replace(GROUP_NOUN, "") ?? qualified;
     return own === undefined ? "" : cleanName(own);
 }
 

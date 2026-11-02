@@ -1473,7 +1473,14 @@ describe("entry typing", () => {
 
     it("gives a power the discipline its section prints, or none", () => {
         expect(printedDiscipline(["Chapter Six", "Psychic Powers", "LAMPCRAFT"])).toBe("Lampcraft");
-        expect(printedDiscipline(["Psychic Disciplines", "Wick Lore", "Wick Rites"])).toBe("Wick Rites");
+        // A heading within a discipline groups some of its powers: the discipline is still the outer one.
+        expect(printedDiscipline(["Psychic Disciplines", "Wick Lore", "Wick Rites"])).toBe("Wick Lore");
+        // A display title set above the chapter's heading closes the catalogue section; a section
+        // naming a discipline's powers stands in for it.
+        expect(printedDiscipline(["Chapter Six", "Wick Powers"])).toBe("Wick");
+        expect(printedDiscipline(["Chapter Six", "Wick Powers", "LAMPCRAFT", "Steady the flame"])).toBe(
+            "Lampcraft",
+        );
         // Printed straight under the catalogue, or outside one: no discipline, never the schema's default.
         expect(printedDiscipline(["Chapter Six", "Psychic Powers"])).toBe("");
         // A doubled display initial still names the catalogue; "… Powers" names its discipline.
