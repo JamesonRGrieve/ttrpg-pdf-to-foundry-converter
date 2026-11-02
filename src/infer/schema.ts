@@ -458,6 +458,9 @@ export interface ItemInput {
 }
 
 /** Build a full Item document body in the system's canonical authoring shape. */
+/** A damage cell printed as a dash: no damage. */
+const NO_DAMAGE_NOTATION = /^\s*[-–—]\s*$/u;
+
 export function buildItem(input: ItemInput): JsonObject {
     const system: JsonObject = {
         ...input.system,
@@ -467,6 +470,18 @@ export function buildItem(input: ItemInput): JsonObject {
     };
     for (const [field, value] of Object.entries(input.variantized ?? {})) {
         system[field] = variant(input.line, value);
+    }
+    // A printed dash for damage is the schema's no-damage profile: no dice,
+    // `none` set (the dash itself fails the formula field).
+    const damage = system["damage"];
+    if (
+        typeof damage === "object" &&
+        damage !== null &&
+        !Array.isArray(damage) &&
+        typeof damage["formula"] === "string" &&
+        NO_DAMAGE_NOTATION.test(damage["formula"])
+    ) {
+        system["damage"] = { ...damage, formula: "", none: true };
     }
     // The system wields every heavy weapon in two hands (`isTwoHanded`): the
     // stored flag says so too.

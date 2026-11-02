@@ -3071,6 +3071,24 @@ describe("schema", () => {
         expect(twoHanded({ class: "heavy", twoHanded: false })).toBe(false);
     });
 
+    it("stores a printed dash for damage as the schema's no-damage profile", () => {
+        const damage = (formula: string): unknown =>
+            (
+                buildItem({
+                    type: "weapon",
+                    name: "Glim Bomb",
+                    line: "dh2",
+                    book: "b",
+                    page: "3",
+                    description: "",
+                    system: { damage: { formula, type: "impact", bonus: 0, penetration: 0 } },
+                })["system"] as Record<string, unknown>
+            )["damage"];
+        expect(damage("-")).toEqual({ formula: "", none: true, type: "impact", bonus: 0, penetration: 0 });
+        expect(damage("—")).toMatchObject({ formula: "", none: true });
+        expect(damage("1d10")).toEqual({ formula: "1d10", type: "impact", bonus: 0, penetration: 0 });
+    });
+
     it("gives XP-cost and affliction items no acquisition cost", () => {
         const doc = buildItem({
             type: "talent",
