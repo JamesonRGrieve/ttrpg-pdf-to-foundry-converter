@@ -286,6 +286,10 @@ function fieldedSectionKind(sections: readonly string[]): ItemType | null {
  * Action)" — not prose that runs on into the field ("… in order").
  */
 const ORDER_TYPE = /^\s*(?:[\p{L}-]+\s+)?order\b/iu;
+/** A price in experience: "250 xp". */
+const XP_PRICE = /^\s*(?<xp>\d[\d,]*)\s*xp\b/iu;
+/** A `Type:` field naming how an ability is used: "Passive", or the action it takes. */
+const TAKES_ACTION = /^\s*(?:passive|(?:[\p{L}-]+\s+)?action)\s*\.?\s*$/iu;
 /** A `Type:` field naming only an action: "Full Action", "Half Action". */
 const ACTION_TYPE = /^\s*[\p{L}-]+\s+action\s*$/iu;
 
@@ -339,6 +343,15 @@ export function entryType(entry: Entry): ItemType | null {
         return "psychicPower";
     }
     if (has(fields, "tier")) {
+        return "talent";
+    }
+    // An ability bought with experience: its price in xp, the action it
+    // takes ("Passive", "Half Action") and its effect.
+    if (
+        XP_PRICE.test(fields.get("cost") ?? "") &&
+        has(fields, "effect") &&
+        TAKES_ACTION.test(fields.get("type") ?? "")
+    ) {
         return "talent";
     }
     // A talent printed with its prerequisites but no tier, under a Talents
@@ -768,7 +781,17 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             system["prerequisites"] = structuredPrerequisites(
                 text("prerequisites") ?? text("prerequisite") ?? "",
             ).prerequisites;
-            system["benefit"] = html;
+            // An ability bought with experience prints its price and its effect.
+            const price = XP_PRICE.exec(text("cost") ?? "")?.groups?.["xp"];
+            if (price !== undefined) {
+                system["cost"] = Number(price.replace(/,/gu, ""));
+            }
+            const effect = text("effect");
+            system["benefit"] = effect === undefined ? html : toHtml([effect, entry.body].join("\n\n"));
+            const use = text("type");
+            if (use !== undefined && TAKES_ACTION.test(use)) {
+                system["isPassive"] = /^\s*passive/iu.test(use);
+            }
             break;
         }
         case "psychicPower": {

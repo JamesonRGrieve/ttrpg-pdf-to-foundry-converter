@@ -1063,6 +1063,44 @@ describe("entry typing", () => {
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
     });
 
+    it("types an ability bought with experience, its use and effect printed, as a talent", () => {
+        const bought = entry(
+            "LAMP-BEARER",
+            [
+                ["Type", "Passive"],
+                ["Cost", "250 xp"],
+                ["Effect", "The lamp never goes out."],
+            ],
+            ["Creation", "Lamplighter"],
+            "",
+        );
+        expect(entryType(bought)).toBe("talent");
+        const system = entryItem(bought, "talent").system;
+        expect([system["cost"], system["isPassive"], system["benefit"]]).toEqual([
+            250,
+            true,
+            "<p>The lamp never goes out.</p>",
+        ]);
+        // A price alone, or a type that is no use, types nothing.
+        expect(
+            entryType(
+                entry("WICK", [
+                    ["Cost", "250 xp"],
+                    ["Effect", "Burns."],
+                ]),
+            ),
+        ).toBe(null);
+        expect(
+            entryType(
+                entry("WICK", [
+                    ["Type", "Tallow"],
+                    ["Cost", "250 xp"],
+                    ["Effect", "Burns."],
+                ]),
+            ),
+        ).toBe(null);
+    });
+
     it("reads a printed Focus Power test into the schema's focusPower object", () => {
         const base = {
             characteristic: "willpower",
