@@ -112,6 +112,8 @@ export const NOT_IN_SCHEMA: ReadonlySet<string> = new Set([
     "psychicPower:focusTime",
     "psychicPower:opposed",
     "psychicPower:threshold",
+    // A legacy statblock text the NPC schema has no field for (its talents are embedded items).
+    "npc:talents_traits",
 ]);
 
 /** Armour-point tokens of a legacy stat-block line → the schema's hit locations. */
@@ -333,7 +335,26 @@ function normScalar(v: Json): string {
             .toLowerCase();
         return /^-?\d+(?:\.\d+)?$/u.test(s) ? String(Number(s)) : s;
     }
-    return JSON.stringify(sortKeys(v));
+    return JSON.stringify(sortKeys(withoutLinks(v)));
+}
+
+/**
+ * A structured member without its `uuid` link keys: a link names a document
+ * of the reference's own packs, which a conversion of one PDF never knows; the
+ * member's printed fields (name, specialisation, rank) are what agree or not.
+ */
+export function withoutLinks(v: Json): Json {
+    if (Array.isArray(v)) {
+        return v.map(withoutLinks);
+    }
+    if (isObject(v)) {
+        return Object.fromEntries(
+            Object.entries(v)
+                .filter(([k]) => k !== "uuid")
+                .map(([k, x]) => [k, withoutLinks(x ?? null)]),
+        );
+    }
+    return v;
 }
 
 function sortKeys(v: Json): Json {

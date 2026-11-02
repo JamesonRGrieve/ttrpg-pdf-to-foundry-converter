@@ -71,6 +71,16 @@ describe("leafScore", () => {
         expect(leafScore(["a", "b"], ["a", "c"])).toBeCloseTo(1 / 3);
         expect(leafScore([], [])).toBe(1);
     });
+
+    it("compares structured members without their links into the reference's packs", () => {
+        expect(
+            leafScore(
+                [{ name: "Glow Lore", level: "known", uuid: "Compendium.x.y.Item.abc" }],
+                [{ level: "known", name: "Glow Lore" }],
+            ),
+        ).toBe(1);
+        expect(leafScore([{ name: "Glow Lore", uuid: "Compendium.x" }], [{ name: "Wick Lore" }])).toBe(0);
+    });
 });
 
 describe("leaves", () => {
