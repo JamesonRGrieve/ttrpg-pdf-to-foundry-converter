@@ -114,6 +114,18 @@ export const NOT_IN_SCHEMA: ReadonlySet<string> = new Set([
     "psychicPower:threshold",
     // A legacy statblock text the NPC schema has no field for (its talents are embedded items).
     "npc:talents_traits",
+    // Legacy order flags the order schema never declared (Foundry strips them on load).
+    "order:shipAction",
+    "order:manoeuvreAction",
+    "order:skill",
+    // Legacy flat navigator-power keys; the schema holds `levels.<level>.effect`, `test`, `sustain`.
+    "navigatorPower:novice",
+    "navigatorPower:adept",
+    "navigatorPower:master",
+    "navigatorPower:useTime",
+    "navigatorPower:range",
+    "navigatorPower:duration",
+    "navigatorPower:rollConfig",
 ]);
 
 /** Armour-point tokens of a legacy stat-block line → the schema's hit locations. */
@@ -234,6 +246,18 @@ export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
     "shipWeapon:weaponType": "macrobattery",
     "shipWeapon:location": "dorsal",
     "shipWeapon:availability": "common",
+    // The physical-item template's rarity, on every item type carrying it.
+    "weapon:availability": "common",
+    "armour:availability": "common",
+    "gear:availability": "common",
+    "ammunition:availability": "common",
+    "cybernetic:availability": "common",
+    "forceField:availability": "common",
+    "weaponModification:availability": "common",
+    "armourModification:availability": "common",
+    "backpack:availability": "common",
+    "armour:modificationSlots": 2,
+    "terracraft:type": "vehicle",
 };
 
 /**
@@ -748,7 +772,8 @@ export function scoreBook(
         const wantLeaves = leaves(load(type, want["system"]), line);
         const gotLeaves = leaves(load(type, got["system"]), line);
         for (const path of [...wantLeaves.keys()]) {
-            if (NOT_IN_SCHEMA.has(`${type}:${path}`)) {
+            const segments = path.split(".");
+            if (segments.some((_, i) => NOT_IN_SCHEMA.has(`${type}:${segments.slice(0, i + 1).join(".")}`))) {
                 wantLeaves.delete(path);
             }
         }

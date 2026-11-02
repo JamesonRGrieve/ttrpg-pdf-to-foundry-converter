@@ -210,6 +210,33 @@ describe("scoreBook", () => {
             "dh2",
         );
         expect(q.types["ammunition"]?.fields["damage.type"]).toEqual({ checks: 1, score: 1 });
+        // The physical-item template's rarity, and armour's modification slots.
+        const r = scoreBook(
+            [{ name: "Ward Coat", type: "armour", system: { availability: "common", modificationSlots: 2 } }],
+            [{ name: "Ward Coat", type: "armour", system: {} }],
+            "dh2",
+        );
+        expect(r.types["armour"]?.fields["availability"]).toEqual({ checks: 1, score: 1 });
+        expect(r.types["armour"]?.fields["modificationSlots"]).toEqual({ checks: 1, score: 1 });
+    });
+
+    it("leaves out legacy keys the schema strips on load, with every leaf beneath them", () => {
+        const p = scoreBook(
+            [
+                {
+                    name: "Steady Course",
+                    type: "navigatorPower",
+                    system: {
+                        sustain: "Yes",
+                        rollConfig: { characteristic: "perception" },
+                        novice: "Hold the lamp.",
+                    },
+                },
+            ],
+            [{ name: "Steady Course", type: "navigatorPower", system: { sustain: "Yes" } }],
+            "rt",
+        );
+        expect(Object.keys(p.types["navigatorPower"]?.fields ?? {}).sort()).toEqual(["name", "sustain"]);
     });
 
     it("compares a legacy NPC movement and armour line as the system loads them", () => {
