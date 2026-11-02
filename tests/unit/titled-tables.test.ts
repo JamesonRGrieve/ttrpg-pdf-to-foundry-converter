@@ -189,6 +189,40 @@ describe("titled tables", () => {
         expect(tables[0]?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("1d10 E");
     });
 
+    it("reads a header set in the body weight when its labels name the schema's fields", () => {
+        const plain = { size: 9, font: "body" };
+        const ir = irOf([
+            run("Table 1-5: Odd Lanterns", 60, 720, { font: "display" }),
+            run("Name", 60, 700, plain),
+            run("Class", 200, 700, plain),
+            run("Range", 260, 700, plain),
+            run("Dam", 320, 700, plain),
+            run("Pen", 380, 700, plain),
+            run("Rushlight Projector", 60, 685, plain),
+            run("Pistol", 200, 685, plain),
+            run("4m", 260, 685, plain),
+            run("1d10 E", 320, 685, plain),
+            run("3", 380, 685, plain),
+            run("Glim Beamer", 60, 672, plain),
+            run("Heavy", 200, 672, plain),
+            run("100m", 260, 672, plain),
+            run("2d10 E", 320, 672, plain),
+            run("5", 380, 672, plain),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["Name", "Class", "Range", "Dam", "Pen"]);
+        expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Rushlight Projector", "Glim Beamer"]);
+        // A plain line naming too few fields is a record, not a header.
+        const records = irOf([
+            run("Table 1-6: Wicks", 60, 720, { font: "display" }),
+            run("Wick", 60, 700, plain),
+            run("Pistol", 200, 700, plain),
+            run("Glim", 60, 685, plain),
+            run("Basic", 200, 685, plain),
+        ]);
+        expect(detectTitledTables(records)).toEqual([]);
+    });
+
     it("finds a caption set in several runs, its number in a larger size", () => {
         const ir = irOf([
             run("Table", 60, 700, { ...bold, width: 30 }),

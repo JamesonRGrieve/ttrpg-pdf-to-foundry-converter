@@ -6,7 +6,7 @@ import { columnAt } from "../util/columns.ts";
 import { inMarginBand, inSideMargin, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
-import { headerRole, isAdvanceList, normalizeHeader } from "./columns.ts";
+import { headerRole, isAdvanceList, mergedHeaderRoles, normalizeHeader } from "./columns.ts";
 import { restoreWordSpaces } from "./names.ts";
 import { mergeContinuationRows } from "./row-merge.ts";
 import type { DetectedTable, TableCell, TableRow, TitledTable } from "./types.ts";
@@ -672,8 +672,12 @@ const CARRY_ON_FACTOR = 1.5;
  */
 function withinHeaderSpan(header: RawRow, band: readonly IRTextRun[]): (r: IRTextRun) => boolean {
     // Every label on the header's baseline, across all the columns it spans.
+    const faces = new Set(header.runs.map((r) => `${r.font}|${r.weight}`));
     const labels = band.filter(
-        (r) => r.text.trim().length > 0 && r.weight === "bold" && Math.abs(r.y - header.y) < Y_TOL,
+        (r) =>
+            r.text.trim().length > 0 &&
+            faces.has(`${r.font}|${r.weight}`) &&
+            Math.abs(r.y - header.y) < Y_TOL,
     );
     const right = Math.max(...labels.map((r) => r.x + r.width));
     const size = Math.max(...labels.map((r) => r.size));
@@ -857,7 +861,28 @@ function isHeaderRow(row: RawRow, edges: readonly number[]): boolean {
  * can share the header's baseline; it is not a column label.
  */
 function headerLabels(row: RawRow): RawRow {
-    return { ...row, runs: row.runs.filter((r) => r.weight === "bold") };
+    const bold = row.runs.filter((r) => r.weight === "bold");
+    return { ...row, runs: bold.length > 0 ? bold : plainLabels(row.runs) };
+}
+
+/** Share of a plain-set line's labels that must name schema fields for it to be a header. */
+const PLAIN_HEADER_ROLE_SHARE = 0.75;
+
+/**
+ * A header set in the body weight, not bold: a line in one face, of at least
+ * MIN_ANCHOR_ROLES labels, nearly all naming schema fields ("Name", "Class",
+ * "Range", "RoF", "Dmg", "Pen", …) — a record's values never do. Otherwise
+ * none.
+ */
+function plainLabels(runs: readonly IRTextRun[]): IRTextRun[] {
+    const labels = runs.filter((r) => r.text.trim().length > 0);
+    const faces = new Set(labels.map((r) => `${r.font}|${r.weight}|${r.size}`));
+    const named = labels.filter((r) => headerRole(r.text) !== null || mergedHeaderRoles(r.text) !== null);
+    return faces.size === 1 &&
+        named.length >= MIN_ANCHOR_ROLES &&
+        named.length >= PLAIN_HEADER_ROLE_SHARE * labels.length
+        ? runs.filter((r) => labels.includes(r) || r.text.trim().length === 0)
+        : [];
 }
 
 /**
