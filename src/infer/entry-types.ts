@@ -290,6 +290,8 @@ function fieldedSectionKind(sections: readonly string[]): ItemType | null {
  * Action)" — not prose that runs on into the field ("… in order").
  */
 const ORDER_TYPE = /^\s*(?:[\p{L}-]+\s+)?order\b/iu;
+/** Text dealing a rolled amount of damage: "deals 1d10+PR Energy damage", "inflicts 2d10 damage". */
+const DEALS_DAMAGE = /\b(?:deals?|inflicts?)\s+(?:an?\s+(?:additional\s+)?)?\d*d\d+[^.]*?\bdamage\b/iu;
 /** A price in experience: "250 xp". */
 const XP_PRICE = /^\s*(?<xp>\d[\d,]*)\s*xp\b/iu;
 /** A `Type:` field naming how an ability is used: "Passive", or the action it takes. */
@@ -960,6 +962,9 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             const attack = powerAttackProfile([entry.body, ...entry.fields.map(([, v]) => v)].join(" "));
             if (attack !== null) {
                 system["damage"] = attack;
+                system["isAttack"] = true;
+            } else if (DEALS_DAMAGE.test(entry.body) || entry.fields.some(([, v]) => DEALS_DAMAGE.test(v))) {
+                // A power whose text deals a rolled amount of damage is an attack.
                 system["isAttack"] = true;
             }
             // A power printing no `Effect` field states its effect as its text.

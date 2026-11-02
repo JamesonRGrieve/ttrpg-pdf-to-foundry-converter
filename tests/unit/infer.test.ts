@@ -1587,6 +1587,30 @@ describe("entry typing", () => {
         expect(glare.system["isAttack"]).toBe(true);
     });
 
+    it("reads a power whose text deals rolled damage as an attack, without a damage profile", () => {
+        const flare = entryItem(
+            entry(
+                "FLARE",
+                [["Focus Power", "Willpower"]],
+                ["Psychic Powers", "Lampcraft"],
+                "A gout of light deals 1d10+PR Energy damage to the target.",
+            ),
+            "psychicPower",
+        );
+        expect(flare.system["isAttack"]).toBe(true);
+        expect(flare.system).not.toHaveProperty("damage");
+        const calm = entryItem(
+            entry(
+                "CALM",
+                [["Focus Power", "Willpower"]],
+                ["Psychic Powers", "Lampcraft"],
+                "The target heals 1d5 wounds.",
+            ),
+            "psychicPower",
+        );
+        expect(calm.system).not.toHaveProperty("isAttack");
+    });
+
     it("gives powers the discipline an earlier heading under the catalogue names as such", () => {
         // The discipline's heading heads a panel of its basic rules, set smaller
         // than the groups of powers after it, so it is on none of their stacks.
