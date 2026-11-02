@@ -56,6 +56,15 @@ describe("leafScore", () => {
         expect(leafScore("x", undefined)).toBe(0);
     });
 
+    it("scores prose by word overlap, whatever its markup", () => {
+        expect(
+            leafScore("<p>Reroll one missed attack each round.</p>", "Reroll one missed attack each round."),
+        ).toBe(1);
+        expect(leafScore("<p>alpha beta gamma delta</p>", "<p>alpha beta gamma epsilon</p>")).toBeCloseTo(
+            0.75,
+        );
+    });
+
     it("scores arrays by the Jaccard index of their members", () => {
         expect(leafScore(["a", "b"], ["b", "a"])).toBe(1);
         expect(leafScore(["a", "b"], ["a", "c"])).toBeCloseTo(1 / 3);

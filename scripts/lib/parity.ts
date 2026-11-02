@@ -264,7 +264,18 @@ export function leafScore(want: Json | undefined, got: Json | undefined): number
     if (want === undefined || got === undefined) {
         return 0;
     }
+    if (isProse(want) && typeof got === "string") {
+        return f1(scoreBag(tokens(markdownToText(got), false), tokens(markdownToText(want), false))).f1;
+    }
     return normScalar(want) === normScalar(got) ? 1 : 0;
+}
+
+/** Fewest words a plain string needs to be scored as prose. */
+const PROSE_WORDS = 8;
+
+/** Rules text (HTML, or a string of several words) is scored by word overlap, not exact identity. */
+function isProse(v: Json): v is string {
+    return typeof v === "string" && (/<p>/u.test(v) || v.trim().split(/\s+/u).length >= PROSE_WORDS);
 }
 
 /** Every compared leaf under a document's `system`, keyed by dotted path (line containers collapsed). */
