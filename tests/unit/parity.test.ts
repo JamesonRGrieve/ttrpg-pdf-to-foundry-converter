@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     citesBook,
     type Doc,
+    editDistance,
     embeddedByType,
     leafScore,
     leaves,
@@ -131,9 +132,10 @@ describe("scoreBook", () => {
     });
 
     it("scores a matched document by its mean leaf agreement and a missing one as zero", () => {
-        expect(r.types["weapon"]?.docScore).toBeCloseTo(2 / 3);
+        // Leaves: name (an exact match), damage.formula, damage.bonus (wrong), special.
+        expect(r.types["weapon"]?.docScore).toBeCloseTo(3 / 4);
         expect(r.types["weapon"]?.fields["damage.bonus"]).toEqual({ checks: 1, score: 0 });
-        expect(r.score).toBeCloseTo(2 / 3 / 3);
+        expect(r.score).toBeCloseTo(3 / 4 / 3);
     });
 
     it("matches a printed plural or article form of the reference name", () => {
@@ -143,6 +145,31 @@ describe("scoreBook", () => {
             "dh2",
         );
         expect(p.matched).toBe(1);
+    });
+
+    it("falls back to qualifier-free, suffix and spelling-distance matches, and charges a misread name", () => {
+        const p = scoreBook(
+            [
+                { name: "Widget Gun (Mount Kind)", type: "weapon", system: {} },
+                { name: "Faction Hunter Beast", type: "npc", system: {} },
+                { name: "Lantern Keeper", type: "npc", system: {} },
+            ],
+            [
+                { name: "Widget Gun", type: "weapon", system: {} },
+                { name: "Hunter Beast", type: "npc", system: {} },
+                { name: "Lanturn Keepr", type: "npc", system: {} },
+            ],
+            "dh2",
+        );
+        expect(p.matched).toBe(3);
+        expect(p.types["weapon"]?.tiers).toEqual({ qualifier: 1 });
+        expect(p.types["npc"]?.tiers).toEqual({ suffix: 1, fuzzy: 1 });
+        expect(p.types["npc"]?.fields["name"]).toEqual({ checks: 2, score: 1 });
+    });
+
+    it("measures edit distance with an early stop", () => {
+        expect(editDistance("kitten", "sitting", 5)).toBe(3);
+        expect(editDistance("abc", "abcdefgh", 2)).toBe(3);
     });
 
     it("scores an actor's embedded items per type", () => {

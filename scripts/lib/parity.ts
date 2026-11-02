@@ -329,6 +329,8 @@ export interface TypeReport {
     fields: Record<string, FieldStat>;
     /** Per-document mismatch notes for matched documents (field, want, got). */
     mismatches: { name: string; field: string; want: string; got: string }[];
+    /** Matched documents per match tier. */
+    tiers: Partial<Record<MatchTier, number>>;
 }
 
 export interface BookReport {
@@ -382,7 +384,120 @@ const emptyType = (): TypeReport => ({
     descriptionF1: { sum: 0, n: 0 },
     fields: {},
     mismatches: [],
+    tiers: {},
 });
+
+/**
+ * How a reference document found its output document, strictest first:
+ * - `exact`: the same name key, or a printed plural / article form of it;
+ * - `qualifier`: equal once bracketed and parenthesised qualifiers are dropped
+ *   from both names (an editor's disambiguator such as a mount or a
+ *   craftsmanship tag, or a printed profile label);
+ * - `suffix`: the reference name ends with the whole output name (an editor's
+ *   prefix such as a faction); the output name must be one candidate only;
+ * - `fuzzy`: name keys within a small edit distance (a misread name).
+ */
+export type MatchTier = "exact" | "qualifier" | "suffix" | "fuzzy";
+
+/** Levenshtein distance, stopping early once it exceeds `max`. */
+export function editDistance(a: string, b: string, max: number): number {
+    if (Math.abs(a.length - b.length) > max) {
+        return max + 1;
+    }
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i += 1) {
+        const cur = [i];
+        let rowMin = i;
+        for (let j = 1; j <= b.length; j += 1) {
+            const v = Math.min(
+                (prev[j] ?? 0) + 1,
+                (cur[j - 1] ?? 0) + 1,
+                (prev[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+            );
+            cur.push(v);
+            rowMin = Math.min(rowMin, v);
+        }
+        if (rowMin > max) {
+            return max + 1;
+        }
+        prev = cur;
+    }
+    return prev[b.length] ?? max + 1;
+}
+
+const unqualified = (name: string): string =>
+    nameKey(name.replace(/\([^)]*\)?|\[[^\]]*\]?/gu, " ").replace(/\s+/gu, " "));
+
+/** One-to-one matching of reference keys to output keys, tier by tier. */
+export function matchDocuments(
+    ref: ReadonlyMap<string, Doc>,
+    out: ReadonlyMap<string, Doc>,
+    used: Set<string>,
+): Map<string, { key: string; tier: MatchTier }> {
+    const result = new Map<string, { key: string; tier: MatchTier }>();
+    const typeOf = (k: string): string => k.slice(0, k.indexOf(":"));
+    const nameOf = (k: string): string => k.slice(k.indexOf(":") + 1);
+    const take = (refKey: string, outKey: string, tier: MatchTier): void => {
+        result.set(refKey, { key: outKey, tier });
+        used.add(outKey);
+    };
+    for (const key of ref.keys()) {
+        const hit = printedForms(typeOf(key), nameOf(key)).find(
+            (k) => out.has(k) && (k === key || !ref.has(k)) && !used.has(k),
+        );
+        if (hit !== undefined) {
+            take(key, hit, "exact");
+        }
+    }
+    const pending = (): string[] => [...ref.keys()].filter((k) => !result.has(k));
+    const free = (type: string): string[] =>
+        [...out.keys()].filter((k) => typeOf(k) === type && !used.has(k));
+    for (const key of pending()) {
+        const want = unqualified(String(ref.get(key)?.["name"] ?? ""));
+        if (want === "") {
+            continue;
+        }
+        const hit = free(typeOf(key)).find((k) => unqualified(String(out.get(k)?.["name"] ?? "")) === want);
+        if (hit !== undefined) {
+            take(key, hit, "qualifier");
+        }
+    }
+    for (const key of pending()) {
+        const want = nameKey(String(ref.get(key)?.["name"] ?? ""));
+        const hits = free(typeOf(key)).filter((k) => {
+            const got = nameOf(k);
+            return got.length >= 4 && got !== want && want.endsWith(got);
+        });
+        const only = hits[0];
+        if (hits.length === 1 && only !== undefined) {
+            take(key, only, "suffix");
+        }
+    }
+    for (const key of pending()) {
+        const want = nameOf(key);
+        if (want.length < 6) {
+            continue;
+        }
+        const max = want.length >= 12 ? 3 : 2;
+        let best: string | undefined;
+        let bestD = max + 1;
+        let tie = false;
+        for (const k of free(typeOf(key))) {
+            const d = editDistance(want, nameOf(k), max);
+            if (d < bestD) {
+                best = k;
+                bestD = d;
+                tie = false;
+            } else if (d === bestD) {
+                tie = true;
+            }
+        }
+        if (best !== undefined && !tie) {
+            take(key, best, "fuzzy");
+        }
+    }
+    return result;
+}
 
 const show = (v: Json | undefined): string => (v === undefined ? "∅" : JSON.stringify(v));
 
@@ -408,6 +523,7 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
         return fresh;
     };
     const used = new Set<string>();
+    const matchOf = matchDocuments(ref, out, used);
     let total = 0;
     let mechTotal = 0;
     for (const [key, want] of ref) {
@@ -415,11 +531,10 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
         const name = key.slice(key.indexOf(":") + 1);
         const r = bucket(type);
         r.reference += 1;
-        const outKey = printedForms(type, name).find(
-            (k) => out.has(k) && (k === key || !ref.has(k)) && !used.has(k),
-        );
+        const match = matchOf.get(key);
+        const outKey = match?.key;
         const got = outKey === undefined ? undefined : out.get(outKey);
-        if (outKey === undefined || got === undefined) {
+        if (match === undefined || outKey === undefined || got === undefined) {
             const other = byName.get(name);
             (other !== undefined ? r.misTyped : r.missing).push(
                 other !== undefined
@@ -428,11 +543,21 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
             );
             continue;
         }
-        used.add(outKey);
         r.matched += 1;
+        r.tiers[match.tier] = (r.tiers[match.tier] ?? 0) + 1;
         const wantLeaves = leaves(want["system"], line);
         const gotLeaves = leaves(got["system"], line);
         const scores = new Map<string, number>();
+        // A name matched only by spelling distance is a misread name: it costs one leaf.
+        scores.set("name", match.tier === "fuzzy" ? 0 : 1);
+        if (match.tier === "fuzzy") {
+            r.mismatches.push({
+                name: String(want["name"]),
+                field: "name",
+                want: show(want["name"]),
+                got: show(got["name"]),
+            });
+        }
         for (const [path, value] of wantLeaves) {
             const s = leafScore(value, gotLeaves.get(path));
             scores.set(path, s);
