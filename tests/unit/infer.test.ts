@@ -1717,8 +1717,13 @@ describe("entry typing", () => {
             characteristics: {},
             thresholds: {},
         });
-        expect(read("None.").prerequisites["text"]).toBe("");
-        expect(read("—").prerequisites["text"]).toBe("");
+        // "None" or a dash is the line as printed; it gates nothing.
+        expect(read("None.").prerequisites).toMatchObject({
+            text: "None",
+            characteristics: {},
+            thresholds: {},
+        });
+        expect(read("—").prerequisites["text"]).toBe("—");
     });
 
     it("gates a talent on its threshold only, never granting the stat (#691)", () => {

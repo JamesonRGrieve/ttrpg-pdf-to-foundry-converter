@@ -280,9 +280,8 @@ function talent(cells: RowCells): RowMapping {
     }
     out.system["aptitudes"] = cells.aptitudes === undefined ? [] : parseAptitudes(cells.aptitudes);
     const prereq = cells.prerequisites;
-    out.system["prerequisites"] = structuredPrerequisites(
-        prereq === undefined || isEmptyCell(prereq) ? "" : prereq,
-    ).prerequisites;
+    // The cell as printed, a dash for none included.
+    out.system["prerequisites"] = structuredPrerequisites(prereq ?? "").prerequisites;
     // `benefit` is an HTML field, as the entry reading writes it.
     if (cells.benefit !== undefined && !isEmptyCell(cells.benefit)) {
         out.system["benefit"] = toHtml(cells.benefit);

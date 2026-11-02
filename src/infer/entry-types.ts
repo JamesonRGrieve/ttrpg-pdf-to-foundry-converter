@@ -503,7 +503,8 @@ export function structuredPrerequisites(printed: string): {
     }
     return {
         prerequisites: {
-            text: shown,
+            // The line as printed, a "None" or dash for none included; only its gates are parsed.
+            text,
             characteristics,
             skills: [],
             talents: [],
