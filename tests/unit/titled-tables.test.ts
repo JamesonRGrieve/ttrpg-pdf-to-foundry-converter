@@ -499,6 +499,44 @@ describe("titled tables", () => {
         ]);
         expect(detectTitledTables(ir).flatMap((t) => t.headers)).not.toContain("WICKCRAFT");
     });
+
+    it("leaves the next column's field lines out of a table whose header shares their baseline", () => {
+        // The other column prints an entry's `Label: value` lines in the
+        // header's face; one sits on the header's baseline. It is no label of
+        // the table, so that column (and the next entry's heading in it) stays out.
+        const left = { column: 0 };
+        const right = { column: 1 };
+        const field = (label: string, value: string, y: number): IRTextRun[] => [
+            run(label, 60, y, { ...bold, ...left }),
+            run(value, 130, y, left),
+        ];
+        const ir = irOf([
+            run("Table 6-5: Wick Readings", 330, 729, { ...bold, ...right }),
+            run("Degrees", 335, 714, { ...bold, ...right }),
+            run("of Success", 335, 702, { ...bold, ...right }),
+            run("Reading", 400, 702, { ...bold, ...right }),
+            ...field("Value:", "100xp", 699),
+            run("1", 335, 688, right),
+            run("Dim: the flame gutters.", 400, 688, right),
+            ...field("Action:", "Half Action", 687),
+            run("2", 335, 674, right),
+            run("Bright: the flame holds.", 400, 674, right),
+            ...field("Range:", "5m", 675),
+            run("3", 335, 660, right),
+            run("Blaze: the flame leaps.", 400, 660, right),
+            run("4", 335, 646, right),
+            run("Pyre: the flame consumes.", 400, 646, right),
+            run("GLIM", 60, 600, { ...bold, ...left, size: 11.25 }),
+            run("SHIELD", 100, 600, { ...bold, ...left, size: 11.25 }),
+            ...field("Value:", "200xp", 588),
+            ...field("Action:", "Free Action", 576),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["of Success", "Reading"]);
+        const cells = table?.rows.flatMap((r) => r.cells.map((c) => c.text)) ?? [];
+        expect(cells).toEqual(expect.arrayContaining(["1", "2", "3", "4", "Pyre: the flame consumes."]));
+        expect(cells.filter((c) => /Value|Action|Range|GLIM/u.test(c))).toEqual([]);
+    });
 });
 
 describe("header runs holding two labels", () => {

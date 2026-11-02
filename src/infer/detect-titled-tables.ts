@@ -1003,7 +1003,12 @@ function headerColumns(header: RawRow, band: readonly IRTextRun[]): Set<number> 
     const faces = new Set(header.runs.map((r) => `${r.font}|${r.weight}`));
     const columns = new Set(header.runs.map((r) => r.column));
     for (const r of band) {
-        if (Math.abs(r.y - header.y) < Y_TOL && faces.has(`${r.font}|${r.weight}`)) {
+        // A bold `Label:` beside the header is a field line's label, not a column's.
+        if (
+            Math.abs(r.y - header.y) < Y_TOL &&
+            faces.has(`${r.font}|${r.weight}`) &&
+            !r.text.trim().endsWith(":")
+        ) {
             columns.add(r.column);
         }
     }
