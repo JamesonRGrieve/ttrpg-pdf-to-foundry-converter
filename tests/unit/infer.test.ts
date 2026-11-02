@@ -1103,6 +1103,30 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types medals with what they are awarded for and their squad bonus", () => {
+        const sections = ["Rewards", "MEDALS AND HONOURS"];
+        const medal = entry(
+            "Lantern Star",
+            [
+                ["Description", "A brass star on a black ribbon."],
+                ["Awarded for", "Holding the line in darkness."],
+                ["Squad Bonus", "+10 to Fear Tests."],
+            ],
+            sections,
+            "The star is rarely awarded.",
+        );
+        expect(entryType(medal)).toBe("medal");
+        const item = entryItem(medal, "medal");
+        expect(item.system["awardedFor"]).toBe("<p>Holding the line in darkness.</p>");
+        expect(item.system["squadBonus"]).toBe("<p>+10 to Fear Tests.</p>");
+        expect(item.description).toBe(
+            "<p>A brass star on a black ribbon.</p><p>The star is rarely awarded.</p>",
+        );
+        expect(entryItem(entry("Wick Cross", [], ["Campaign Medals"]), "medal").system["honourType"]).toBe(
+            "campaign",
+        );
+    });
+
     it("reads a skill's use time and, where it lists them as fields, its specialisations", () => {
         const lore = entryItem(
             entry(

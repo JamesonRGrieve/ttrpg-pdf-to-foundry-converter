@@ -57,6 +57,7 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     // (a text layer may run the word before on: "Usingnavigator Powers")
     [/navigator\s*powers?\b/iu, "navigatorPower"],
     [/\bvehicle traits?\b/iu, "vehicleTrait"],
+    [/\bmedals?\b/iu, "medal"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -642,6 +643,9 @@ const splitList = (s: string): string[] =>
         .map((x) => x.trim())
         .filter((x) => x.length > 0);
 
+/** The schema's medal honour types, matched in the medal's sections ("Campaign Honours"). */
+const MEDAL_HONOURS = ["imperial", "campaign", "regimental"] as const;
+
 /** A skill's own field labels (the schema's): never one of its specialisations. */
 const SKILL_FIELD_LABELS =
     /^(?:aptitudes?|skill use|use time|characteristic|special(?:isations?|izations?)|uses?|special uses?)$/iu;
@@ -763,6 +767,25 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "medal": {
+            // What it is awarded for and the bonus its squad gains, as printed.
+            for (const [label, key] of [
+                ["awarded for", "awardedFor"],
+                ["squad bonus", "squadBonus"],
+            ] as const) {
+                const value = text(label);
+                if (value !== undefined) {
+                    system[key] = toHtml(value);
+                }
+            }
+            const honour = MEDAL_HONOURS.find((h) =>
+                entry.sections.some((s) => new RegExp(`\\b${h}\\b`, "iu").test(s)),
+            );
+            if (honour !== undefined) {
+                system["honourType"] = honour;
+            }
+            break;
+        }
         case "navigatorPower": {
             // Each mastery level's effect is printed under its level's name.
             const levels: JsonObject = {};
@@ -837,5 +860,8 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             variantized["effect"] = effect === undefined ? html : toHtml(effect);
         }
     }
-    return { type, name: cleanName(name), description: html, system, variantized };
+    // A "Description:" field opens the description (a medal's look).
+    const printed = type === "medal" ? text("description") : undefined;
+    const description = printed === undefined ? html : toHtml([printed, entry.body].join("\n\n"));
+    return { type, name: cleanName(name), description, system, variantized };
 }

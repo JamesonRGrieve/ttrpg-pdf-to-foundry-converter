@@ -51,7 +51,8 @@ export type ItemType =
     | "order"
     | "weaponQuality"
     | "navigatorPower"
-    | "vehicleTrait";
+    | "vehicleTrait"
+    | "medal";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -78,6 +79,7 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     weaponQuality: "items-weapon-qualities",
     navigatorPower: "items-navigator-powers",
     vehicleTrait: "items-vehicle-traits",
+    medal: "items-medals",
 };
 
 /** The system's ship weapon types (the ship weapon `weaponType` choices). */
