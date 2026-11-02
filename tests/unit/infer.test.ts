@@ -274,6 +274,7 @@ describe("columns", () => {
         expect(headerRole("D AM")).toBe("damage");
         expect(headerRole("Locations Covered")).toBe("locations");
         expect(headerRole("Location(s) Covered")).toBe("locations");
+        expect(headerRole("Weight per location")).toBe("weight");
         expect(headerRole("Armour Type")).toBe("name");
         expect(headerRole("Talent Name")).toBe("name");
         expect(headerRole("Names")).toBe("name");

@@ -914,7 +914,7 @@ export function stackedHeader(lines: readonly RawRow[]): { index: number; row: R
         return null;
     }
     const edges = cellEdges(lines.slice(index + 1));
-    const upper = headerLabels(first);
+    const upper = withLabelsAbove(headerLabels(first), lines[index - 1]);
     const next = lines[index + 1];
     const wrapped = next === undefined ? null : wrappedLabels(upper, next, lines.slice(index + 2));
     if (wrapped !== null) {
@@ -946,6 +946,46 @@ export function stackedHeader(lines: readonly RawRow[]): { index: number; row: R
 
 /** Most header sizes a wrapped label's second line sits below its first: ordinary leading. */
 const LABEL_WRAP_FACTOR = 1.5;
+
+/**
+ * A header whose fewer labels print their first words on a line of their own
+ * above it ("Weight per" over "location"): the line directly above, at
+ * ordinary leading, all bold, each run set over a label other than the first
+ * (a section row above a header starts where its first label does) — each is
+ * prefixed to the label it sits over. Returns the header, completed or as it was.
+ */
+function withLabelsAbove(header: RawRow, above: RawRow | undefined): RawRow {
+    const visible = (runs: readonly IRTextRun[]): IRTextRun[] => runs.filter((r) => r.text.trim().length > 0);
+    const labels = visible(header.runs).sort((a, b) => a.x - b.x);
+    const runs = visible(above?.runs ?? []);
+    const size = Math.max(...labels.map((r) => r.size));
+    if (
+        above === undefined ||
+        runs.length === 0 ||
+        runs.length >= labels.length ||
+        !runs.every((r) => r.weight === "bold") ||
+        above.y - header.y > LABEL_WRAP_FACTOR * size
+    ) {
+        return header;
+    }
+    const under = runs.map((r) =>
+        labels.findIndex(
+            (l) =>
+                Math.abs(l.x - r.x) <= COLUMN_EDGE_TOLERANCE || (r.x < l.x + l.width && l.x < r.x + r.width),
+        ),
+    );
+    if (under.some((i) => i < 1) || new Set(under).size !== under.length) {
+        return header;
+    }
+    const prefixes = new Map(under.map((i, k) => [labels[i], runs[k]?.text.trim() ?? ""] as const));
+    return {
+        ...header,
+        runs: header.runs.map((r) => {
+            const prefix = prefixes.get(r);
+            return prefix === undefined ? r : { ...r, text: `${prefix} ${r.text.trim()}` };
+        }),
+    };
+}
 
 /**
  * A header whose labels wrap onto a second line ("ROLL" over "(D100)"): the

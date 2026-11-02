@@ -57,7 +57,8 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(rld|reload)$/u, "reload"],
     // A special column may name a further list it holds ("Special + Attributes").
     [/^(special( .+)?|qualities)$/u, "special"],
-    [/^(wt|weight|kg)$/u, "weight"],
+    // A weight may say what it is counted by ("Weight per location").
+    [/^(wt|weight|kg)( per [a-z]+)?$/u, "weight"],
     // By its stem, so a misread letter later in the word ("Availabiity") still names it.
     [/^(avl|avail[a-z]*)$/u, "availability"],
     [/^renown$/u, "renown"],

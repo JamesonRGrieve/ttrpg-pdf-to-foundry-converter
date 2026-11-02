@@ -360,6 +360,32 @@ describe("titled tables", () => {
         ]);
     });
 
+    it("prefixes a label's first words printed on a line of their own above the header", () => {
+        const ir = irOf([
+            run("Table 1-8: Lamp Fittings", 60, 712, bold),
+            run("Weight per", 140, 698, bold),
+            run("Name", 60, 686, bold),
+            run("wick", 140, 686, bold),
+            run("Fits", 200, 686, bold),
+            run("Glass Hood", 60, 670),
+            run("+2 kg", 140, 670),
+            run("Any", 200, 670),
+            run("Brass Hood", 60, 656),
+            run("+1 kg", 140, 656),
+            run("Marsh lamps", 200, 656),
+            run("Tin Hood", 60, 642),
+            run("+1 kg", 140, 642),
+            run("Any", 200, 642),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.headers).toEqual(["Name", "Weight per wick", "Fits"]);
+        expect(table?.rows.map((r) => r.cells.map((c) => c.text))).toEqual([
+            ["Glass Hood", "+2 kg", "Any"],
+            ["Brass Hood", "+1 kg", "Marsh lamps"],
+            ["Tin Hood", "+1 kg", "Any"],
+        ]);
+    });
+
     it("keeps a section row under the header a section row, however close, when its like recurs", () => {
         const ir = irOf([
             run("Table 1-10: Lodgings", 60, 706, bold),
