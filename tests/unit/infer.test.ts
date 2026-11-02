@@ -1095,6 +1095,19 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types a ship's actions and an orders section's entries as orders", () => {
+        const ship = ["Starships", "Starship Combat", "ACtions"];
+        expect(entryType(entry("drift slowly", [], ship))).toBe("order");
+        expect(entryType(entry("EXTENDED ACTIONS", [], ship))).toBeNull();
+        // Actions outside a section about ships are no orders.
+        expect(entryType(entry("DUCK", [], ["Combat", "Actions"]))).toBeNull();
+        const comrades = ["Combat", "Comrades", "Orders", "Generic Orders"];
+        expect(entryType(entry("Hold Still (Comrade Half Action)", [], comrades))).toBe("order");
+        const order = entryItem(entry("Hold Still (Comrade Half Action)", [], comrades), "order");
+        expect(order.name).toBe("Hold Still");
+        expect(order.system["typeAndAction"]).toBe("Comrade Half Action");
+    });
+
     it("types entries under a weapon qualities section, case-lost headings included", () => {
         const sections = ["Armoury", "WEAPONSPECIAL QUALITIES"];
         expect(entryType(entry("GLARING", [], sections))).toBe("weaponQuality");

@@ -53,6 +53,7 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\barmou?rs? (?:modifications?|upgrades?)\b/iu, "armourModification"],
     // "Weapon Qualities", "Weapon Special Qualities" (a text layer may drop the space).
     [/\bweapons?\s*(?:special\s*)?qualit(?:y|ies)\b/iu, "weaponQuality"],
+    [/\borders\b/iu, "order"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -196,16 +197,28 @@ const FIELDED_KINDS: readonly [RegExp, ItemType][] = [
     [/\bpsychic powers?\b/iu, "psychicPower"],
 ];
 
+/** A heading's closing parenthetical naming an action ("(Comrade Half Action)"). */
+const ACTION_TAG = /\s*\(([^()]*\baction)\)\s*$/iu;
+
+/** A section of actions ("Actions", "Starship Actions"). */
+const ACTIONS = /^\s*(?:(?:star|void)?ship\s+)?actions\s*$/iu;
+/** A section about ships (the schema's starship and voidcraft kinds). */
+const SHIP = /\b(?:star|void)?ships?\b|\bvoidcraft\b/iu;
+
 /**
  * The field-less type an entry takes from its nearest enclosing section that
  * names a catalogue kind. A nearest kind that is a fielded one (a "Talents"
  * section) gives none: its field-less headings are section furniture.
  */
 function sectionType(sections: readonly string[]): ItemType | null {
-    for (const section of [...sections].reverse()) {
+    for (const [i, section] of [...sections.entries()].reverse()) {
         const type = typeNamedBy(section);
         if (type !== null) {
             return type;
+        }
+        // A ship's actions are the schema's orders (ship orders and commands).
+        if (ACTIONS.test(section) && sections.slice(0, i).some((outer) => SHIP.test(outer))) {
+            return "order";
         }
         if (FIELDED_KINDS.some(([re]) => re.test(section))) {
             return null;
@@ -324,7 +337,13 @@ export function entryType(entry: Entry): ItemType | null {
         return null;
     }
     const type = sectionType(entry.sections);
-    if (type === null || typeNamedBy(heading) === type) {
+    // A heading naming a group of actions ("Extended Actions") heads part of
+    // an orders section, as one naming its own kind does.
+    if (
+        type === null ||
+        typeNamedBy(heading) === type ||
+        (type === "order" && /\bactions\b/iu.test(heading))
+    ) {
         return null;
     }
     return MODIFICATION_TYPES.has(type) ? (modificationFor(fields) ?? type) : type;
@@ -608,9 +627,12 @@ const splitList = (s: string): string[] =>
 export function entryItem(entry: Entry, type: ItemType): EntryItem {
     const fields = fieldMap(entry);
     const skillType = skillTypeTag(entry.heading.text);
-    const { name, characteristic: headed } = splitCharacteristic(
+    const { name: headingName, characteristic: headed } = splitCharacteristic(
         withoutKindTag(entry.heading.text).replace(SKILL_TYPE_TAG, ""),
     );
+    // An order's heading may close on the action it takes: "Volley (Comrade Half Action)".
+    const actionTag = type === "order" ? ACTION_TAG.exec(headingName) : null;
+    const name = actionTag === null ? headingName : headingName.slice(0, actionTag.index);
     const printedCharacteristic = fields.get(fieldKey(CHARACTERISTIC_FIELD))?.toLowerCase() ?? "";
     const characteristic = headed ?? CHARACTERISTICS[printedCharacteristic] ?? null;
     const html = toHtml(entry.body);
@@ -713,6 +735,9 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             // The printed kind and action ("Sweeping Order (Free Action)"),
             // qualified by an `Order:` line when the kind is printed apart.
             system["notes"] = [text("order"), text("type")].filter((v) => v !== undefined).join(" ");
+            if (actionTag?.[1] !== undefined) {
+                system["typeAndAction"] = actionTag[1].trim();
+            }
             const requirements = [text("prerequisites") ?? text("prerequisite"), text("cost")].filter(
                 (v): v is string => v !== undefined,
             );
