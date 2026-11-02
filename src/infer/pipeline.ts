@@ -37,6 +37,7 @@ import {
 import { applyDefaultIcons } from "./icons.ts";
 import { applyIdentifiers } from "./identifiers.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
+import { withLigaturesJoined } from "./ligatures.ts";
 import {
     cleanName,
     endsMidSentence,
@@ -2368,7 +2369,8 @@ function consolidate(
  * The engine never works out which game line a document belongs to: the
  * target is the user's choice of output schema.
  */
-export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
+export function infer(read: IR, log: Logger, target: TargetSchema): InferResult {
+    const ir = withLigaturesJoined(read);
     const line = target.line;
     const book = inferBookSlug(ir);
     const numbering = inferPageNumbering(ir);
