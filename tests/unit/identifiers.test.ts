@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { applyIdentifiers, identifierFromName } from "../../src/infer/identifiers.ts";
+import { applyIdentifiers, identifierFor, identifierFromName } from "../../src/infer/identifiers.ts";
 import type { Entity } from "../../src/types/entity.ts";
 
 const entity = (name: string, type: string, system: Record<string, string> = {}, doc = "Item"): Entity => ({
@@ -19,6 +19,14 @@ describe("identifierFromName", () => {
         expect(identifierFromName("Widget-Gun (Mk. II)")).toBe("widget-gun-mk-ii");
         expect(identifierFromName("  Two  Words ")).toBe("two-words");
         expect(identifierFromName("Jack's Hook")).toBe("jacks-hook");
+    });
+
+    it("leaves a talent's or trait's specialisation placeholder out of its identifier", () => {
+        expect(identifierFor("trait", "Lamp Skin (X)")).toBe("lamp-skin");
+        expect(identifierFor("talent", "Wick Sense (+x)")).toBe("wick-sense");
+        expect(identifierFor("trait", "Glow (Bright)")).toBe("glow-bright");
+        // A quality's level is part of it.
+        expect(identifierFor("weaponQuality", "Flare (X)")).toBe("flare-x");
     });
 });
 

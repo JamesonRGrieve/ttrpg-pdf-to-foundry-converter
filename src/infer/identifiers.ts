@@ -55,6 +55,21 @@ export function identifierFromName(name: string): string {
         .replace(/^-|-$/gu, "");
 }
 
+/**
+ * Types whose names may close on a specialisation placeholder ("(X)",
+ * "(+X)"): the placeholder stands for the specialisation an owner picks and is
+ * no part of the talent or trait itself, so its identifier leaves it out.
+ */
+const SPECIALISED_TYPES: ReadonlySet<string> = new Set(["talent", "trait"]);
+
+/** A trailing specialisation placeholder: "(X)", "(+X)", "(x)". */
+const PLACEHOLDER = /\s*\(\s*\+?\s*x\s*\)\s*$/iu;
+
+/** The identifier of an item of `type` named `name`. */
+export function identifierFor(type: string, name: string): string {
+    return identifierFromName(SPECIALISED_TYPES.has(type) ? name.replace(PLACEHOLDER, "") : name);
+}
+
 /** Give every identified item an identifier from its name where it has none. */
 export function applyIdentifiers(entities: readonly Entity[]): void {
     for (const e of entities) {
@@ -74,7 +89,7 @@ export function applyIdentifiers(entities: readonly Entity[]): void {
         if (typeof current === "string" && current !== "") {
             continue;
         }
-        const id = identifierFromName(String(e.fields["name"] ?? ""));
+        const id = identifierFor(type, String(e.fields["name"] ?? ""));
         if (id !== "") {
             system["identifier"] = id;
         }
