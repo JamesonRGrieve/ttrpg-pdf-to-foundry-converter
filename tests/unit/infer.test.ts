@@ -2649,6 +2649,49 @@ describe("entry detection", () => {
         expect(entry?.fields).toEqual([["Requires", `${value} Lore (Wards)`]]);
     });
 
+    it("ends a finished list of names at its line when the entry's own sentences follow at its edge", () => {
+        const bodyRight = 60 + body.length * 5;
+        const fielded = (value: string, next: string[]): Entry | undefined => {
+            const ir = irOf(
+                [0],
+                [
+                    run("DIM WARD", 720, "h", 14),
+                    ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                    { ...run("Requires:", 450, "b", 10), weight: "bold" },
+                    // The value's line fills the measure: it wraps.
+                    { ...run(value, 450, "b", 10), x: bodyRight - value.length * 5 },
+                    ...next.map((t, i) =>
+                        run(t.padEnd(i < next.length - 1 ? body.length : 0), 438 - 12 * i, "b", 10),
+                    ),
+                ],
+            );
+            return detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        };
+        const ranOn = fielded("Glow Lore (Lamps), Steady Hand 40", [
+            "The bearer keeps a lamp lit through the longest of",
+            "nights, and every ally near him sees by it.",
+        ]);
+        expect(ranOn?.fields).toEqual([["Requires", "Glow Lore (Lamps), Steady Hand 40"]]);
+        expect(
+            ranOn?.body.endsWith(
+                "characters. The bearer keeps a lamp lit through the longest of nights, and every ally near him sees by it.",
+            ),
+        ).toBe(true);
+        // More names, even closed by a full stop, stay the field's.
+        const names = fielded("Glow Lore (Lamps), Steady Hand 40, Dim", ["Wick Lore."]);
+        expect(names?.fields).toEqual([["Requires", "Glow Lore (Lamps), Steady Hand 40, Dim Wick Lore."]]);
+        // A name broken inside its bracket runs on.
+        const open = fielded("Glow Lore (Lamps), Steady Hand (Wick", ["Lamps) Tests made in the dark."]);
+        expect(open?.fields).toEqual([
+            ["Requires", "Glow Lore (Lamps), Steady Hand (Wick Lamps) Tests made in the dark."],
+        ]);
+        // Prose broken before a capital is no list: it runs on.
+        const prose = fielded("The bearer may keep his Steady Hand", ["Tests until dawn."]);
+        expect(prose?.fields).toEqual([
+            ["Requires", "The bearer may keep his Steady Hand Tests until dawn."],
+        ]);
+    });
+
     it("reads ships as voidcraft, joining a header to a profile a sidebar split off", () => {
         const field = (text: string, y: number): IRTextRun => ({
             ...run(text, y, "b-bold", 10),

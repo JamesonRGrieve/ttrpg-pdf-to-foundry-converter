@@ -566,6 +566,33 @@ export function endsSentence(value: string): boolean {
     return /[.!?]["”’)]*\s*$/u.test(value);
 }
 
+/** Words this long or longer are content words: in a list of names they are capitalised. */
+const MIN_CONTENT_WORD = 4;
+
+/**
+ * A value that reads as a finished list of names: no sentence, no trailing
+ * separator, and every content word outside brackets capitalised ("Psy
+ * Rating, Strong Minded, Willpower 40"). Prose ("may re-roll Willpower") and
+ * a value broken mid-phrase ("Rank 2 in") are not.
+ */
+export function nameListValue(value: string): boolean {
+    if (value === "" || endsSentence(value) || valueUnfinished(value) || /[.!?]\s/u.test(value)) {
+        return false;
+    }
+    // A bracket left open ("Lore (Glow") breaks the value mid-name.
+    if ((value.match(/[([]/gu) ?? []).length > (value.match(/[)\]]/gu) ?? []).length) {
+        return false;
+    }
+    const outside = value.replace(/\([^)]*\)|\[[^\]]*\]/gu, " ");
+    const words = outside.match(/\p{L}[\p{L}'’-]*/gu) ?? [];
+    return words.every((w) => w.length < MIN_CONTENT_WORD || /^\p{Lu}/u.test(w));
+}
+
+/** Text holding a sentence end: a full stop (or other) at its end or before a space. */
+function holdsSentence(text: string): boolean {
+    return /[.!?]["”’)]*(?:\s|$)/u.test(text);
+}
+
 /** Most words an italic lead label carries; longer italic leads are emphasis in running text. */
 const MAX_ITALIC_LABEL_WORDS = 2;
 
@@ -760,8 +787,31 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
     let setApartFields = 0;
     let bodyLines: string[] = [];
     let lastBody: TextLine | null = null;
+    /**
+     * A finished list of names whose line wrapped, then ran on into a line
+     * opening on a capital: held until the run-on ends, when, if what ran on
+     * holds a sentence, it was the entry's text set at the field's own left
+     * edge, not more of the list.
+     */
+    let held: { field: [string, string]; before: string; lines: TextLine[] } | null = null;
+    const settle = (): void => {
+        if (held === null) {
+            return;
+        }
+        const { field, before, lines: ranOn } = held;
+        held = null;
+        const text = ranOn.map((l) => l.text).join(" ");
+        // More names closed by a full stop ("Strong Minded, Willpower 40.") stay the field's.
+        if (!holdsSentence(text) || nameListValue(text.replace(/[.!?]["”’)]*\s*$/u, ""))) {
+            return;
+        }
+        field[1] = before;
+        bodyLines.push(...ranOn.map((l) => l.text));
+        lastBody = ranOn.at(-1) ?? lastBody;
+    };
 
     const close = (): void => {
+        settle();
         if (current !== null) {
             current.body = bodyLines
                 .join(" ")
@@ -850,6 +900,7 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         const entry: Entry = current;
         const field = fieldOf(line, boldLabels);
         if (field !== null) {
+            settle();
             entry.fields.push(field);
             lastFieldWrapped = continues(line, field[1]);
             lastFieldLine = line;
@@ -876,11 +927,17 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             closesUp(lastFieldLine, line) &&
             line.right <= lastFieldLine.right + WRAP_SLACK;
         if ((lastFieldWrapped || runsOn) && last !== undefined && !atMargin) {
+            if (held !== null && held.field === last) {
+                held.lines.push(line);
+            } else if (lastFieldWrapped && nameListValue(last[1]) && /^\p{Lu}/u.test(line.text)) {
+                held = { field: last, before: last[1], lines: [line] };
+            }
             last[1] = `${last[1]} ${line.text}`.trim();
             lastFieldWrapped = continues(line, last[1]);
             lastFieldLine = line;
             continue;
         }
+        settle();
         lastFieldWrapped = false;
         lastFieldLine = null;
         if (opensParagraph(line)) {
