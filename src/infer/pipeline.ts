@@ -1220,6 +1220,7 @@ function extractEntries(
     const headingTypes = new Map<string, string>(typed.map(({ entry, type }) => [entry.heading.text, type]));
     const labels = headingLabels(typed.map(({ entry }) => entry.heading.text));
     const honourGroups = honourGroupsOf(entries);
+    const actionGroups = actionGroupsOf(entries);
     let count = 0;
     for (const typedEntry of typed) {
         const { type } = typedEntry;
@@ -1246,6 +1247,11 @@ function extractEntries(
         if (type === "medal" && item.system["honourType"] === undefined && grouped !== undefined) {
             item.system["honourType"] = grouped;
         }
+        // So may an order's action type ("Manoeuvre Actions").
+        const action = actionGroups.get(typedEntry.entry);
+        if (type === "order" && item.system["actionType"] === undefined && action !== undefined) {
+            item.system["actionType"] = action;
+        }
         if (item.description.length > 0) {
             descriptions.set(nameKey(item.name), item.description);
         }
@@ -1270,23 +1276,53 @@ function extractEntries(
     return count;
 }
 
-/** The schema's medal honour types. */
-const HONOUR_TYPES = ["imperial", "campaign", "regimental"] as const;
+/** The schema's medal honour types, each named by its own word. */
+const HONOUR_TYPES: readonly (readonly [string, string])[] = [
+    ["imperial", "imperial"],
+    ["campaign", "campaign"],
+    ["regimental", "regimental"],
+];
+/** The schema's order action types, by the word a group heading names each with. */
+const ORDER_ACTION_GROUPS: readonly (readonly [string, string])[] = [
+    ["manoeuvre", "maneuver-action"],
+    ["maneuver", "maneuver-action"],
+    ["extended", "extended-action"],
+    ["shooting", "shooting-action"],
+];
+/** Most words a heading naming a group ("Manoeuvre Actions") runs to. */
+const MAX_GROUP_WORDS = 3;
+
+/** The medals' honour groups ("Imperial Honours"). */
+export function honourGroupsOf(entries: readonly Entry[]): Map<Entry, string> {
+    return choiceGroupsOf(entries, HONOUR_TYPES, /^honours?$/u);
+}
+
+/** The orders' action groups ("Manoeuvre Actions"). */
+export function actionGroupsOf(entries: readonly Entry[]): Map<Entry, string> {
+    return choiceGroupsOf(entries, ORDER_ACTION_GROUPS, /^actions?$/u);
+}
 
 /**
- * The honour type each entry is grouped under by the nearest earlier heading
- * with no fields of its own naming one of the schema's honour types
- * ("Imperial Honours"), within its section: a group heading set smaller than
- * the medals it groups is not on their section stack.
+ * The schema choice each entry is grouped under by the nearest earlier short
+ * heading naming the choice's word and the group noun ("Imperial Honours",
+ * "Manoeuvre Actions"), while the entries stay in its section: a group
+ * heading set smaller than what it groups is not on their section stack.
  */
-export function honourGroupsOf(entries: readonly Entry[]): Map<Entry, string> {
+function choiceGroupsOf(
+    entries: readonly Entry[],
+    choices: readonly (readonly [string, string])[],
+    noun: RegExp,
+): Map<Entry, string> {
     const out = new Map<Entry, string>();
     let current: { honour: string; section: string } | null = null;
     for (const entry of entries) {
         const section = entry.sections.join("\u0000");
-        const words = entry.heading.text.toLowerCase().split(/[^a-z]+/u);
-        const honour = HONOUR_TYPES.find((h) => words.includes(h));
-        if (entry.fields.length === 0 && honour !== undefined && words.some((w) => /^honours?$/u.test(w))) {
+        const words = entry.heading.text
+            .toLowerCase()
+            .split(/[^a-z]+/u)
+            .filter((w) => w.length > 0);
+        const honour = choices.find(([word]) => words.includes(word))?.[1];
+        if (honour !== undefined && words.length <= MAX_GROUP_WORDS && words.some((w) => noun.test(w))) {
             current = { honour, section };
             continue;
         }

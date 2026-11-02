@@ -77,6 +77,7 @@ import {
     keyedByBands,
     namingEntry,
     isBlank,
+    actionGroupsOf,
     criticalEffects,
     honourGroupsOf,
     kindEntry,
@@ -2684,6 +2685,13 @@ describe("section-qualified table names", () => {
             "campaign",
             undefined,
         ]);
+        // Orders take their action type from a group heading the same way, fields or none.
+        const steer = at("Steer Wide", ["Ships", "Actions"]);
+        const actions = actionGroupsOf([
+            at("MANOEUVRE ACTIONS", ["Ships", "Actions"], [["Note", "Tests may be modified."]]),
+            steer,
+        ]);
+        expect(actions.get(steer)).toBe("maneuver-action");
     });
 
     it("reads a severity table into a critical injury's graded effects", () => {
