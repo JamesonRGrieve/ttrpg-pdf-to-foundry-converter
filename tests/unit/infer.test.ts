@@ -728,6 +728,8 @@ describe("npc statblocks", () => {
                 { name: "Hatred (Moths)", type: "talent", system: { specialization: "Moths" } },
                 { name: "Wick Coat", type: "gear", system: {} },
                 { name: "Wick Lance", type: "weapon", system: {} },
+                { name: "Patched Coats", type: "gear" },
+                { name: "Short Lance", type: "gear" },
             ],
         });
         embedNpcItems([talent, coat, lance, actor]);
@@ -740,6 +742,10 @@ describe("npc statblocks", () => {
             ["Wick Coat", "armour", { maxAgility: 40 }],
             // A gear item is no weapon: the listed weapon stays bare.
             ["Wick Lance", "weapon", {}],
+            // Gear the document defines nowhere, named on a noun only its armour
+            // closes on, is worn armour; one its gear closes on stays gear.
+            ["Patched Coats", "armour", undefined],
+            ["Short Lance", "gear", undefined],
         ]);
         expect(items.every((i) => typeof i["_id"] === "string" && String(i["_id"]).length === 16)).toBe(true);
         expect(Object(actor.fields["system"])["weapons"]).toEqual({ mode: "embedded", simple: [] });

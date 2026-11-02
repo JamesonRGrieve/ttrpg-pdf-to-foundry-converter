@@ -1913,6 +1913,34 @@ const GEAR_TYPES: ReadonlySet<string> = new Set(["armour", "gear", "ammunition",
 const listedAs = (listed: JsonValue | undefined, type: JsonValue | undefined): boolean =>
     listed === "gear" ? typeof type === "string" && GEAR_TYPES.has(type) : listed === type;
 
+/** The closing word of a name, lower case: the noun a compound name heads on. */
+const headNoun = (name: string): string => singularKey(name.trim().split(/\s+/u).at(-1) ?? "");
+
+/**
+ * The nouns the document's own armour names close on ("Vest", "Carapace")
+ * and none of its gear names do: what a worn piece of armour is called.
+ */
+export function armourHeads(items: readonly Entity[]): Set<string> {
+    const heads = (type: string): Set<string> =>
+        new Set(
+            items
+                .filter((e) => e.fields["type"] === type)
+                .map((e) => headNoun(String(e.fields["name"])))
+                .filter((h) => h.length > 0),
+        );
+    const gear = heads("gear");
+    return new Set([...heads("armour")].filter((h) => !gear.has(h)));
+}
+
+/**
+ * A listed piece of gear the document defines nowhere, named on a noun only
+ * its armour names close on ("Light Carapace" beside a catalogue "… Carapace"),
+ * is armour the creature wears.
+ */
+export function isWorn(listed: JsonValue | undefined, printed: string, heads: ReadonlySet<string>): boolean {
+    return listed === "gear" && heads.has(headNoun(printed));
+}
+
 /**
  * Resolve each NPC's listed Items against the document's own: a listed name
  * whose full name, or name without its parenthetical, is an Item of its kind
@@ -1925,6 +1953,7 @@ export function embedNpcItems(entities: readonly Entity[]): void {
     const items = entities.filter((e) => e.documentType === "Item");
     const find = (key: string, listed: JsonValue | undefined): Entity | undefined =>
         items.find((e) => listedAs(listed, e.fields["type"]) && nameKey(String(e.fields["name"])) === key);
+    const heads = armourHeads(items);
     for (const actor of entities) {
         const embedded = actor.fields["items"];
         if (actor.documentType !== "Actor" || !Array.isArray(embedded) || embedded.length === 0) {
@@ -1947,7 +1976,7 @@ export function embedNpcItems(entities: readonly Entity[]): void {
             const name = whole === undefined ? printed : String(whole.fields["name"]);
             const doc: JsonObject =
                 own === undefined
-                    ? { ...bare }
+                    ? { ...bare, ...(isWorn(bare["type"], printed, heads) ? { type: "armour" } : {}) }
                     : {
                           ...structuredClone(own.fields),
                           name,
