@@ -651,6 +651,14 @@ function extractTables(
                     mapped.system["componentType"] = componentType;
                 }
             }
+            // A caption naming its components essential ("Essential
+            // Components") says each is one a ship must carry: the schema's flag.
+            if (
+                itemType === "shipComponent" &&
+                parseShipComponentType(table.tableTitle ?? "") === "essential"
+            ) {
+                mapped.system["essential"] = true;
+            }
             // A gear table's caption names its items' category ("Tools").
             if (itemType === "gear" && mapped.system["category"] === undefined) {
                 const category = parseGearCategory(table.tableTitle ?? "");

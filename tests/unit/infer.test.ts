@@ -2710,6 +2710,47 @@ describe("entry detection", () => {
         expect(origins(table(["Divination", "Effect", "Page"], (y) => [cell("44", 460, y)]))).toEqual([]);
     });
 
+    it("flags the components a caption names essential", () => {
+        const cell = (
+            text: string,
+            x: number,
+            y: number,
+            weight: "bold" | "normal" = "normal",
+        ): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: text.length * 5,
+            font: weight === "bold" ? "h" : "b",
+            weight,
+            size: 10,
+        });
+        const components = (caption: string): JsonValue[] => {
+            const kind = caption.split(" ")[0] ?? "";
+            const ir = irOf(
+                [0],
+                [
+                    run(body, 760, "b", 10),
+                    cell(`Table 8-3: ${caption}`, 60, 720, "bold"),
+                    ...[`${kind} Components`, "Hull Types", "Power", "Space", "SP"].map((h, i) =>
+                        cell(h, [60, 220, 340, 400, 460][i] ?? 0, 700, "bold"),
+                    ),
+                    ...["Lamp Bridge", "Wick Quarters", "Glow Drive", "Hush Array"].flatMap((name, i) => [
+                        cell(name, 60, 680 - 20 * i),
+                        cell("All Ships", 220, 680 - 20 * i),
+                        cell(String(i + 1), 340, 680 - 20 * i),
+                        cell("2", 400, 680 - 20 * i),
+                        cell("1", 460, 680 - 20 * i),
+                    ]),
+                ],
+            );
+            return infer(ir, createLogger("error"), TARGETS.rt)
+                .graph.entities.filter((e) => e.fields["type"] === "shipComponent")
+                .map((e) => (e.fields["system"] as JsonObject | undefined)?.["essential"] ?? null);
+        };
+        expect(components("Essential Components")).toEqual([true, true, true, true]);
+        expect(components("Supplemental Components")).toEqual([null, null, null, null]);
+    });
+
     it("reads no heading or body from a table's lines", () => {
         const header = run("WEIGHT", 660, "h", 14);
         const cells = [run("+2 kg", 640, "b", 10), run("+1 kg", 620, "b", 10)];
