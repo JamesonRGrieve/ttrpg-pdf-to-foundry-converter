@@ -24,6 +24,7 @@ import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import {
+    CHARACTERISTICS,
     entryItem,
     entryType,
     joinPactGroups,
@@ -2007,6 +2008,36 @@ export function isWorn(listed: JsonValue | undefined, printed: string, heads: Re
     return listed === "gear" && heads.has(headNoun(printed));
 }
 
+/** The schema's word for a characteristic in an item named for any one of them ("… Characteristic (X)"). */
+const CHARACTERISTIC_CLASS = "characteristic";
+
+/**
+ * A listed item naming one characteristic ("Unnatural Strength") that the
+ * document defines only for any characteristic ("Unnatural Characteristic
+ * (X)"): that item, its name without the placeholder, and the characteristic
+ * as printed for its specialisation. Null when the name ends on no
+ * characteristic or the document defines no such item.
+ */
+export function characteristicClassItem(
+    printed: string,
+    items: readonly Entity[],
+): { item: Entity; name: string; specialization: string } | null {
+    const words = printed.trim().split(/\s+/u);
+    for (const size of [2, 1]) {
+        const tail = words.slice(-size).join(" ");
+        const prefix = words.slice(0, -size).join(" ");
+        if (prefix.length === 0 || tail.length <= 3 || CHARACTERISTICS[tail.toLowerCase()] === undefined) {
+            continue;
+        }
+        const key = nameKey(`${prefix} ${CHARACTERISTIC_CLASS}`);
+        const item = items.find((e) => nameKey(listedBase(String(e.fields["name"]))) === key);
+        if (item !== undefined) {
+            return { item, name: listedBase(String(item.fields["name"])), specialization: tail };
+        }
+    }
+    return null;
+}
+
 /**
  * Resolve each NPC's listed Items against the document's own: a listed name
  * whose full name, or name without its parenthetical, is an Item of its kind
@@ -2035,11 +2066,23 @@ export function embedNpcItems(entities: readonly Entity[]): void {
                     listedAs(bare["type"], e.fields["type"]) &&
                     singularKey(String(e.fields["name"])) === singularKey(printed),
             );
-            const own = exact ?? find(nameKey(listedBase(printed)), bare["type"]) ?? plural;
+            const byClass =
+                exact === undefined && plural === undefined
+                    ? characteristicClassItem(
+                          printed,
+                          items.filter((e) => listedAs(bare["type"], e.fields["type"])),
+                      )
+                    : null;
+            const own = exact ?? find(nameKey(listedBase(printed)), bare["type"]) ?? plural ?? byClass?.item;
             // The Item's own spelling where the whole name is its; a listed
             // specialisation or rating stays as printed.
             const whole = exact ?? plural;
-            const name = whole === undefined ? printed : String(whole.fields["name"]);
+            const name =
+                byClass !== null
+                    ? byClass.name
+                    : whole === undefined
+                      ? printed
+                      : String(whole.fields["name"]);
             const doc: JsonObject =
                 own === undefined
                     ? { ...bare, ...(isWorn(bare["type"], printed, heads) ? { type: "armour" } : {}) }
@@ -2051,6 +2094,7 @@ export function embedNpcItems(entities: readonly Entity[]): void {
                                   ? structuredClone(own.fields["system"])
                                   : {}),
                               ...(isJsonObject(bare["system"]) ? bare["system"] : {}),
+                              ...(byClass === null ? {} : { specialization: byClass.specialization }),
                           },
                       };
             doc["_id"] = id16(`${actorName}\x00${i}\x00${name}`);

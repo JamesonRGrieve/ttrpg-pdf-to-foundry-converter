@@ -95,6 +95,7 @@ import {
     criticalEffects,
     honourGroupsOf,
     kindEntry,
+    characteristicClassItem,
     kindNamed,
     mergeInto,
     preferTableBenefit,
@@ -708,6 +709,27 @@ describe("npc statblocks", () => {
             { name: "Wick Sense", type: "trait", system: { level: 4 } },
             { name: "Dread", type: "trait", system: { level: 3 } },
         ]);
+    });
+
+    it("resolves a trait named for one characteristic to the document's trait for any", () => {
+        const doc = (name: string): Entity => ({
+            blockId: name,
+            documentType: "Item",
+            group: "g",
+            pack: "p",
+            ordinal: 0,
+            fields: { name, type: "trait", system: { hasLevel: true } },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const items = [doc("Glowing Characteristic (X)"), doc("Dim Sight")];
+        expect(characteristicClassItem("Glowing Strength", items)).toMatchObject({
+            name: "Glowing Characteristic",
+            specialization: "Strength",
+        });
+        expect(characteristicClassItem("Glowing Weapon Skill", items)?.specialization).toBe("Weapon Skill");
+        expect(characteristicClassItem("Glowing Lamp", items)).toBeNull();
+        expect(characteristicClassItem("Dim Strength", items)).toBeNull();
     });
 
     it("takes a count set before a listed weapon's or gear's name as its quantity", () => {
