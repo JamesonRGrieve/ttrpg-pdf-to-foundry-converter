@@ -84,7 +84,15 @@ describe("inlineWeapons", () => {
             ["Ember Cannon", "vehicle", "300m", "3d10+8 X"],
             ["Spark Gun", "vehicle", "100m", "1d10+4 I"],
         ]);
-        // Outside a craft's weapon list a profile must open on its class.
-        expect(inlineWeapons(text)).toEqual([]);
+    });
+
+    it("reads a statblock's classless profile that prints a damage and a penetration", () => {
+        const weapons = inlineWeapons(
+            "Weapons: Wick blasta (30m; S/-/-; 1d10+2 I; Pen 0; Clip 5), Spark choppa (1d10+8 R; Pen 2; Tearing), glow rod (1d5 I; Primitive)",
+        );
+        expect(weapons.map((w) => [w.name, w.cells.class, w.cells.range])).toEqual([
+            ["Wick Blasta", undefined, "30m"],
+            ["Spark Choppa", "melee", undefined],
+        ]);
     });
 });

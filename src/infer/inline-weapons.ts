@@ -49,6 +49,10 @@ const MOUNTING = /^(?:(?:[\p{L}]+(?:[- ][\p{L}]+)?[- ])?mounted|fixed)\s+/iu;
 const FACING = /\bfacing\b/iu;
 /** The schema's weapon class for weapons mounted on a craft. */
 const MOUNTED_CLASS = "vehicle";
+/** A word joining a name to another, or to a choice: "or", "with", "either". */
+const JOINING_WORD = /(?:^|\s)(?:or|and|with|either|plus)(?=\s|$)/iu;
+/** The schema's weapon class of a profile with no range or rate of fire. */
+const MELEE_CLASS = "melee";
 
 /**
  * The weapon profiles printed inline in `text`; `mounted`: the text lists a
@@ -57,29 +61,29 @@ const MOUNTED_CLASS = "vehicle";
 export function inlineWeapons(text: string, mounted = false): InlineWeapon[] {
     const out: InlineWeapon[] = [];
     for (const m of text.matchAll(mounted ? MOUNTED_PROFILE : PROFILE)) {
-        const rawName =
-            m.groups?.["name"]
-                ?.trim()
-                .replace(LEADING_JOIN, "")
-                .replace(mounted ? MOUNTING : /$^/u, "") ?? "";
+        const rawName = m.groups?.["name"]?.trim().replace(LEADING_JOIN, "").replace(MOUNTING, "") ?? "";
         const printed = (m.groups?.["profile"] ?? "")
             .split(";")
             .map((p) => p.trim())
             .filter((p) => !(mounted && FACING.test(p)));
         const classed = printed[0] !== undefined && parseWeaponClass(printed[0]) !== null;
-        const parts = classed || !mounted ? printed : [MOUNTED_CLASS, ...printed];
-        const [first, ...rest] = parts;
+        // A profile opens on its class; a craft's weapon is of the vehicle
+        // class; any other profile printing no class must print a damage and
+        // a labelled penetration to read as one.
+        const printedClass = classed ? printed[0] : mounted ? MOUNTED_CLASS : undefined;
+        const rest = classed ? printed.slice(1) : printed;
         const words = rawName.split(/\s+/u).filter((w) => w.length > 0).length;
         if (
-            first === undefined ||
-            parts.length < MIN_PARTS ||
-            parseWeaponClass(first) === null ||
+            rest.length + (printedClass === undefined ? 0 : 1) < MIN_PARTS ||
             words === 0 ||
             words > MAX_NAME_WORDS
         ) {
             continue;
         }
-        const cells: RowCells = { name: rawName, class: first };
+        const cells: RowCells = {
+            name: rawName,
+            ...(printedClass === undefined ? {} : { class: printedClass }),
+        };
         const loose: string[] = [];
         for (const part of rest) {
             const labelled = LABELLED.exec(part)?.groups;
@@ -105,8 +109,19 @@ export function inlineWeapons(text: string, mounted = false): InlineWeapon[] {
                 loose.push(part);
             }
         }
-        if (cells.damage === undefined) {
+        // A classless name joining words ("Either a Gun", "Gun or Knife", "Gun
+        // with Rounds") is a choice or a loadout, not one weapon.
+        const joined = printedClass === undefined && JOINING_WORD.test(rawName);
+        if (
+            cells.damage === undefined ||
+            joined ||
+            (printedClass === undefined && cells.penetration === undefined)
+        ) {
             continue;
+        }
+        // Printing neither range nor rate of fire, a classless profile is a melee weapon's.
+        if (cells.class === undefined && cells.range === undefined && cells.rof === undefined) {
+            cells.class = MELEE_CLASS;
         }
         if (loose.length > 0) {
             cells.special = loose.join(", ");
