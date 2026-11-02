@@ -109,6 +109,10 @@ export const EXCLUDED: readonly RegExp[] = [
  */
 export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
     "weapon:type": "primitive",
+    "trait:category": "general",
+    "gear:category": "general",
+    "talent:rank": 1,
+    "talent:isPassive": true,
 };
 
 /** The mechanically significant leaves per type key; every other compared leaf still counts in the full score. */
