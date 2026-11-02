@@ -23,7 +23,21 @@ import {
     parseWeaponClass,
     parseWeaponType,
     parseWeight,
+    splitTrailingClass,
 } from "../../src/infer/notation.ts";
+
+describe("splitTrailingClass", () => {
+    it("splits a class a header-less class column left in the name cell", () => {
+        expect(splitTrailingClass("Glow Blade Melee")).toEqual({ name: "Glow Blade", cls: "melee" });
+        expect(splitTrailingClass("Wick Caster Heavy")).toEqual({ name: "Wick Caster", cls: "heavy" });
+    });
+
+    it("keeps a name a class word belongs to, or that is one word", () => {
+        expect(splitTrailingClass("Lamp Pistol")).toBeNull();
+        expect(splitTrailingClass("Melee")).toBeNull();
+        expect(splitTrailingClass("Glow Blade")).toBeNull();
+    });
+});
 
 describe("parseShipComponentType", () => {
     it("reads the component type a caption or section row names by its key or label", () => {

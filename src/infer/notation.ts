@@ -592,6 +592,21 @@ export function captionWeaponClass(caption: string): WeaponClass | null {
     return found.length === 1 ? (found[0] ?? null) : null;
 }
 
+/**
+ * Classes that never close a weapon's own name, so a name cell closing on one
+ * holds a class column the table set without its header ("Bonesword Melee").
+ * A pistol is often named for its class ("Bolt Pistol"), so it is not one.
+ */
+const NAME_CLOSING_CLASSES: readonly WeaponClass[] = ["melee", "basic", "heavy", "thrown"];
+
+/** A weapon name cell that closes on its class → the name and the class; null otherwise. */
+export function splitTrailingClass(name: string): { name: string; cls: WeaponClass } | null {
+    const m = /^(?<name>.*\S)\s+(?<cls>\p{L}+)$/u.exec(name.trim());
+    const cls = NAME_CLOSING_CLASSES.find((c) => c === m?.groups?.["cls"]?.toLowerCase());
+    const base = m?.groups?.["name"];
+    return cls === undefined || base === undefined ? null : { name: base, cls };
+}
+
 function classWords(text: string): WeaponClass[] {
     const found: WeaponClass[] = [];
     for (const word of text.split(/[^a-z]+/u)) {

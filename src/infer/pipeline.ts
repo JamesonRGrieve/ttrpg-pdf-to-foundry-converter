@@ -41,6 +41,7 @@ import {
     parseGearCategory,
     parseShipComponentType,
     parseWeaponType,
+    splitTrailingClass,
 } from "./notation.ts";
 import { listedBase, parseNpc } from "./npc.ts";
 import {
@@ -490,7 +491,12 @@ function extractTables(
                 continue;
             }
             const rawName = row.cells.find((c) => c.colIndex === nameCol)?.text ?? "";
-            const name = cleanName(rawName);
+            const cleaned = cleanName(rawName);
+            // A weapon table set without a class column's header leaves each
+            // class in the name cell ("Bonesword Melee").
+            const hasClassColumn = roles.some((r) => r?.includes("class") === true);
+            const classInName = type === "weapon" && !hasClassColumn ? splitTrailingClass(cleaned) : null;
+            const name = classInName?.name ?? cleaned;
             // A name starts like a name (capital or digit, perhaps after an
             // opening quote) and reads like one; a lowercase start or a sentence
             // is prose that strayed into the column.
@@ -506,6 +512,9 @@ function extractTables(
             const cells = rowCells(row, roles);
             if (captionTier !== undefined && cells.tier === undefined) {
                 cells.tier = captionTier;
+            }
+            if (classInName !== null) {
+                cells.class = classInName.cls;
             }
             if (captionClass !== null && cells.class === undefined) {
                 cells.class = captionClass;
