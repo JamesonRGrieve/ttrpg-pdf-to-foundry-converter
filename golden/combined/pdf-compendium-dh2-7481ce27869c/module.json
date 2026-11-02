@@ -18,10 +18,10 @@
             "target": "dh2"
         }
     },
-    "id": "pdf-compendium-dh2-fdb3b966461a",
+    "id": "pdf-compendium-dh2-7481ce27869c",
     "packFolders": [
         {
-            "name": "PDF Compendium fdb3b966461a",
+            "name": "PDF Compendium 7481ce27869c",
             "packs": [
                 "dh2-wayfarers-field-manual-actors-bestiary",
                 "dh2-wayfarers-field-manual-items-armour",
@@ -63,7 +63,7 @@
                     "category": "armour",
                     "homebrew": false,
                     "line": "dh2",
-                    "startingEquipment": 1
+                    "startingEquipment": 1001
                 }
             },
             "label": "Wayfarers Field Manual Items Armour",
@@ -127,7 +127,7 @@
                     "category": "weapons",
                     "homebrew": false,
                     "line": "dh2",
-                    "startingEquipment": 2
+                    "startingEquipment": 1002
                 }
             },
             "label": "Wayfarers Field Manual Items Weapons",
