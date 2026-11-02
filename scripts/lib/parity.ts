@@ -401,11 +401,13 @@ const emptyType = (): TypeReport => ({
  * - `qualifier`: equal once bracketed and parenthesised qualifiers are dropped
  *   from both names (an editor's disambiguator such as a mount or a
  *   craftsmanship tag, or a printed profile label);
+ * - `words`: the same words of two or more in another order (an editor's
+ *   "Kind: Subject" form of a caption printed "Subject Kind");
  * - `suffix`: the reference name ends with the whole output name (an editor's
  *   prefix such as a faction); the output name must be one candidate only;
  * - `fuzzy`: name keys within a small edit distance (a misread name).
  */
-export type MatchTier = "exact" | "qualifier" | "suffix" | "fuzzy";
+export type MatchTier = "exact" | "qualifier" | "words" | "suffix" | "fuzzy";
 
 /** Levenshtein distance, stopping early once it exceeds `max`. */
 export function editDistance(a: string, b: string, max: number): number {
@@ -432,6 +434,17 @@ export function editDistance(a: string, b: string, max: number): number {
     }
     return prev[b.length] ?? max + 1;
 }
+
+/** A name's words, sorted: the same words in another order name one thing. */
+const wordBag = (name: string): string =>
+    name
+        .normalize("NFD")
+        .replace(/\p{M}+/gu, "")
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w !== "")
+        .sort()
+        .join(" ");
 
 const unqualified = (name: string): string =>
     nameKey(name.replace(/\([^)]*\)?|\[[^\]]*\]?/gu, " ").replace(/\s+/gu, " "));
@@ -468,6 +481,13 @@ export function matchDocuments(
         const hit = free(typeOf(key)).find((k) => unqualified(String(out.get(k)?.["name"] ?? "")) === want);
         if (hit !== undefined) {
             take(key, hit, "qualifier");
+        }
+    }
+    for (const key of pending()) {
+        const want = wordBag(String(ref.get(key)?.["name"] ?? ""));
+        const hit = free(typeOf(key)).find((k) => wordBag(String(out.get(k)?.["name"] ?? "")) === want);
+        if (want.includes(" ") && hit !== undefined) {
+            take(key, hit, "words");
         }
     }
     for (const key of pending()) {

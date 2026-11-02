@@ -167,6 +167,15 @@ describe("scoreBook", () => {
         expect(p.types["npc"]?.fields["name"]).toEqual({ checks: 2, score: 1 });
     });
 
+    it("matches the same words in another order", () => {
+        const p = scoreBook(
+            [{ name: "Effects: Glow – Arm", type: "RollTable", system: {} }],
+            [{ name: "Glow Effects - Arm", type: "RollTable", system: {} }],
+            "dh2",
+        );
+        expect(p.types["RollTable"]?.tiers).toEqual({ words: 1 });
+    });
+
     it("compares a leaf the output leaves out at the schema's initial value", () => {
         const p = scoreBook(
             [{ name: "Club", type: "weapon", system: { type: "primitive" } }],
