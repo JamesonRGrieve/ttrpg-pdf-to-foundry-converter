@@ -74,6 +74,7 @@ import {
 } from "../../src/infer/npc.ts";
 import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts";
 import {
+    ROLLED_ROW,
     citeFirstPage,
     embedNpcItems,
     fitModifications,
@@ -2950,6 +2951,20 @@ describe("consolidation helpers", () => {
         const row = { ...reading(14, "14"), blockId: "table:trait" };
         citeFirstPage(prose, [prose, reading(9, "9"), row], DEFAULT_LINE);
         expect(prose.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "14" } },
+        });
+
+        // A roll table's row points to the entity: its own entry is cited.
+        const entry = reading(16, "16");
+        const rolled = { ...reading(14, "14"), blockId: `table:mutation${ROLLED_ROW}` };
+        citeFirstPage(entry, [entry, rolled], DEFAULT_LINE);
+        expect(entry.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "16" } },
+        });
+        // Read nowhere else, the row is cited.
+        const alone = { ...reading(14, "14"), blockId: `table:mutation${ROLLED_ROW}` };
+        citeFirstPage(alone, [alone], DEFAULT_LINE);
+        expect(alone.fields["system"]).toEqual({
             source: { dh2: { provenance: "raw", book: "b", page: "14" } },
         });
     });

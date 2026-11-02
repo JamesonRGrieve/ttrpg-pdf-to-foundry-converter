@@ -674,6 +674,8 @@ function extractTables(
             }
             records.push({ name: fullName, itemType, cells, mapped });
         }
+        // A row keyed by a roll is a result the table points to, not where the item is catalogued.
+        const rolled = roles.some((r) => r?.includes("roll") === true);
         for (const { name, itemType, mapped } of withSubProfiles(records)) {
             out.add(
                 "Item",
@@ -689,7 +691,7 @@ function extractTables(
                     variantized: mapped.variantized,
                 }),
                 table.pageIndex,
-                `${TABLE_READING}${itemType}`,
+                `${TABLE_READING}${itemType}${rolled ? ROLLED_ROW : ""}`,
             );
         }
     }
@@ -2158,6 +2160,8 @@ function sourceOf(e: Entity, line: Line): JsonObject | null {
 
 const TABLE_READING = "table:";
 const ENTRY_READING = "entry:";
+/** Marks a table reading from a row keyed by a roll. */
+export const ROLLED_ROW = ":rolled";
 
 /** An entity's modification type, when it is one. */
 function modificationType(e: Entity): ItemType | null {
@@ -2255,10 +2259,14 @@ export function qualifiedBySection(table: DetectedTable, nameCol: number): Map<T
  * An entity printed in several places is cited where it is catalogued: the
  * page of its summary-table row when it has one (a table lists the entity as
  * such, wherever its rules prose falls), otherwise the page its span starts on.
+ * A roll table's row is a result the table points to, not a catalogue: it is
+ * cited only when nothing else reads the entity.
  */
 export function citeFirstPage(head: Entity, readings: readonly Entity[], line: Line): void {
-    const rows = readings.filter((e) => e.blockId.startsWith(TABLE_READING));
-    const pool = rows.length > 0 ? rows : readings;
+    const rolled = (e: Entity): boolean => e.blockId.endsWith(ROLLED_ROW);
+    const rows = readings.filter((e) => e.blockId.startsWith(TABLE_READING) && !rolled(e));
+    const own = readings.filter((e) => !rolled(e));
+    const pool = rows.length > 0 ? rows : own.length > 0 ? own : readings;
     const first = pool.reduce((a, b) => (b.provenance.pageIndex < a.provenance.pageIndex ? b : a));
     const target = sourceOf(head, line);
     const page = sourceOf(first, line)?.["page"];
