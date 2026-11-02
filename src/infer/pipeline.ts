@@ -1668,9 +1668,30 @@ export function preferTableBenefit(head: Entity, readings: readonly Entity[]): v
  * prose is also attached to a same-named item in any pack that has no
  * description of its own.
  */
+/** Fewest words a heading's prose needs to describe an item read elsewhere (a table row). */
+const MIN_PROSE_WORDS = 8;
+
+/**
+ * Each heading's prose by the heading's name: an item a table lists with no
+ * text of its own is described where a heading of its name prints it
+ * ("AUSPEX/SCANNER" under the gear chapter). The first heading of a name
+ * keeps it.
+ */
+export function headedProse(entries: readonly Entry[]): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const e of entries) {
+        const key = nameKey(cleanName(e.heading.text));
+        if (key !== "" && !out.has(key) && e.body.split(/\s+/u).length >= MIN_PROSE_WORDS) {
+            out.set(key, toHtml(e.body));
+        }
+    }
+    return out;
+}
+
 function consolidate(
     entities: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
+    prose: ReadonlyMap<string, string>,
     line: Line,
 ): Entity[] {
     const richness = (e: Entity): number => JSON.stringify(e.fields).length;
@@ -1699,7 +1720,8 @@ function consolidate(
 
     for (const e of merged) {
         const system = e.fields["system"];
-        const html = descriptions.get(nameKey(String(e.fields["name"])));
+        const key = nameKey(String(e.fields["name"]));
+        const html = descriptions.get(key) ?? (e.documentType === "Item" ? prose.get(key) : undefined);
         if (html !== undefined && isJsonObject(system) && isBlank(system["description"])) {
             system["description"] = { [line]: { value: html, chat: "", summary: "" } };
         }
@@ -1730,7 +1752,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
-    const entities = consolidate(out.entities, descriptions, line);
+    const entities = consolidate(out.entities, descriptions, headedProse(detected), line);
     embedNpcItems(entities);
     applyDefaultIcons(entities);
     applyIdentifiers(entities);

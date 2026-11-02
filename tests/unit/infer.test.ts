@@ -82,6 +82,7 @@ import {
     preferTableBenefit,
     modalHeadingSizes,
     carriedSections,
+    headedProse,
     nameKey,
     qualifiedBySection,
     siblingKinds,
@@ -2619,6 +2620,24 @@ describe("section-qualified table names", () => {
             "Candles: High Grade",
             "Oil: Low Grade",
         ]);
+    });
+
+    it("keeps each heading's prose by its name, for items a table lists without text", () => {
+        const at = (heading: string, body: string): Entry => ({
+            heading: { text: heading, size: 11, style: "h", pageIndex: 0 },
+            sections: [],
+            fields: [],
+            body,
+        });
+        const prose = headedProse([
+            at("GLOW-LAMP/LANTERN", "A small lamp that burns for a whole night on one wick."),
+            at("Glow-Lamp/Lantern", "A later mention of the same lamp, in other words entirely."),
+            at("WICK", "Short."),
+        ]);
+        expect(prose.get(nameKey("Glow-Lamp/Lantern"))).toBe(
+            "<p>A small lamp that burns for a whole night on one wick.</p>",
+        );
+        expect(prose.has(nameKey("Wick"))).toBe(false);
     });
 
     it("carries a section row closing one part of a split table to the next part", () => {
