@@ -44,6 +44,8 @@ import {
     readFieldedOrigins,
     readInlineOrigins,
     readOriginPaths,
+    pairsSteps,
+    readEffectOrigins,
     readOriginTable,
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
@@ -410,7 +412,10 @@ function extractTables(
         // lists origins of that step — unless a page column makes it an index
         // of origins described elsewhere, each read where it is printed.
         const originStep = originStepNamedBy(table.tableTitle ?? "", out.target.originSteps);
-        const index = table.headers.some((h) => PAGE_HEADER.test(h.trim()));
+        // So does a table pairing the caption's step with another.
+        const index =
+            table.headers.some((h) => PAGE_HEADER.test(h.trim())) ||
+            pairsSteps(originStep, table.headers, out.target.originSteps);
         if (originStep !== null && index) {
             unclassified += 1;
             continue;
@@ -1132,7 +1137,13 @@ function extractOriginPaths(
         ...out.entities.map((e) => /^(?:table:)?origin:(.+)$/u.exec(e.blockId)?.[1]),
     ]);
     const inline = readInlineOrigins(entries, out.target.originSteps).filter((o) => !read.has(o.step.key));
-    for (const origin of [...structured, ...inline]) {
+    // Steps read no other way may print each origin as a heading with its
+    // rules as fields.
+    const readInline = new Set(inline.map((o) => o.step.key));
+    const effects = readEffectOrigins(entries, out.target.originSteps).filter(
+        (o) => !read.has(o.step.key) && !readInline.has(o.step.key),
+    );
+    for (const origin of [...structured, ...inline, ...effects]) {
         addOrigin(out, origin);
     }
 }

@@ -2,7 +2,7 @@
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import { type Entry, PARAGRAPH_BREAK } from "./detect-entries.ts";
 import { CHARACTERISTICS } from "./entry-types.ts";
-import { FUNCTION_WORDS, readsAsProse, rejoinSplitWords, wordsOf } from "./names.ts";
+import { caseLost, FUNCTION_WORDS, readsAsProse, rejoinSplitWords, wordsOf } from "./names.ts";
 import type { OriginStepDef } from "./targets.ts";
 
 /**
@@ -124,6 +124,21 @@ export function originStepNamedBy(caption: string, steps: readonly OriginStepDef
     return stepNamedIn(caption, steps, true, true) ?? null;
 }
 
+/**
+ * Whether a table whose caption names `captionStep` has its name column
+ * headed by another step ("Career" under "Suggested Home Worlds"): its rows
+ * pair origins of the two steps, each described where it is printed, rather
+ * than being origins of the caption's step.
+ */
+export function pairsSteps(
+    captionStep: OriginStepDef | null,
+    headers: readonly string[],
+    steps: readonly OriginStepDef[],
+): boolean {
+    const nameStep = originStepNamedBy(headers[0] ?? "", steps);
+    return captionStep !== null && nameStep !== null && nameStep.key !== captionStep.key;
+}
+
 /** A roll-band cell: "01", "02-05", "100". */
 const ROLL_BAND = /^\d+(?:\s*[-–]\s*\d+)?$/u;
 
@@ -136,7 +151,7 @@ const ROLL_BAND = /^\d+(?:\s*[-–]\s*\d+)?$/u;
 export function characteristicChanges(effect: string): Record<string, number> {
     const out: Record<string, number> = {};
     const re =
-        /\b(?<verb>increase|reduce|decrease)\s+(?:(?:this character['’]s|his|her|their)\s+)?(?<name>[\p{L} ]+?)\s+(?:characteristic\s+)?by\s+(?<points>\d+)/giu;
+        /\b(?<verb>increase|reduce|decrease)\s+(?:(?:this character['’]s|his|her|their|your)\s+)?(?<name>[\p{L} ]+?)\s+(?:characteristic\s+)?by\s+(?<points>\d+)/giu;
     for (const m of effect.matchAll(re)) {
         const key = CHARACTERISTICS[m.groups?.["name"]?.trim().toLowerCase() ?? ""];
         if (key !== undefined) {
@@ -768,8 +783,15 @@ function stepOfSection(
     const parent = entries
         .slice(0, index)
         .findLast((e) => e.heading.text === parentText && e.sections.length === sections.length - 1);
+    // Else the nearest section naming a step anywhere in it ("Home World
+    // Options", "Career Paths").
+    const anywhere = (): OriginStepDef | undefined =>
+        [...sections]
+            .reverse()
+            .map((section) => stepNamedIn(section, steps, true, false))
+            .find((s) => s !== undefined);
     if (parent === undefined) {
-        return undefined;
+        return anywhere();
     }
     const siblingOf = (e: Entry): boolean =>
         e.heading.style === parent.heading.style &&
@@ -777,7 +799,7 @@ function stepOfSection(
         e.sections.every((s, k) => s === parent.sections[k]);
     for (const e of entries.slice(0, entries.indexOf(parent)).reverse()) {
         if (e.sections.length < parent.sections.length) {
-            return undefined;
+            return anywhere();
         }
         if (siblingOf(e)) {
             const named = stepNamedIn(e.heading.text, steps, true, true);
@@ -786,7 +808,7 @@ function stepOfSection(
             }
         }
     }
-    return undefined;
+    return anywhere();
 }
 
 /**
@@ -834,7 +856,18 @@ export function readInlineOrigins(
         const vocabulary = wordsOf(
             [section?.body ?? "", ...under.map((e) => `${e.heading.text} ${e.body}`)].join(" "),
         );
-        const name = rejoinSplitWords(own.length > 0 ? own : headingName(sectionText ?? ""), vocabulary);
+        // A heading that extends an earlier one ("Hive World" then "Hive World
+        // Characters") is named by the heading it extends.
+        const extended = entries
+            .slice(0, i)
+            .filter((e) => e.heading.pageIndex >= entry.heading.pageIndex - NAMING_HEADING_REACH)
+            .reverse()
+            .map((e) => ({ e, words: wordPrefix(headingName(e.heading.text), entry.heading.text) }))
+            .find(({ words }) => words !== null);
+        const name = rejoinSplitWords(
+            extended?.words ?? (own.length > 0 ? own : headingName(sectionText ?? "")),
+            vocabulary,
+        );
         if (letters(name).length === 0) {
             return;
         }
@@ -842,11 +875,56 @@ export function readInlineOrigins(
             name: capitalizeWords(name.toLowerCase()),
             step,
             pageIndex: entry.heading.pageIndex,
-            description: section?.body ?? entry.body,
+            description:
+                extended !== undefined && extended.e.body.length > 0
+                    ? extended.e.body
+                    : (section?.body ?? entry.body),
             ...read,
         });
     });
     return out;
+}
+
+/** How far up an entry's sections the step naming it may be (its own section, or its parent's). */
+const STEP_SECTION_DEPTH = 2;
+
+/**
+ * Origins printed as headings directly under a section naming a creation
+ * step, each with its prose and its rules as `Label: value` fields ("Effect:
+ * …", or named options), and no grant labels a rules block or an inline
+ * reading would take (`readOriginPaths`, `readInlineOrigins`). The fields are
+ * the origin's effect; characteristic changes printed in it are its modifiers.
+ */
+export function readEffectOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    return entries.flatMap((entry): OriginPathReading[] => {
+        if (entry.fields.length === 0 || stepNamedIn(entry.heading.text, steps, true, false) !== undefined) {
+            return [];
+        }
+        const step = entry.sections
+            .slice(-STEP_SECTION_DEPTH)
+            .reverse()
+            .map((section) => stepNamedIn(section, steps, true, false))
+            .find((s) => s !== undefined);
+        if (step === undefined) {
+            return [];
+        }
+        const effect = entry.fields.map(([label, value]) => `${label}: ${value}`).join(PARAGRAPH_BREAK);
+        const name = headingName(entry.heading.text).trim();
+        return [
+            {
+                name: caseLost(name) ? capitalizeWords(name.toLowerCase()) : name,
+                step,
+                pageIndex: entry.heading.pageIndex,
+                description: entry.body,
+                grants: {},
+                modifiers: { ...signedCharacteristicChanges(effect), ...characteristicChanges(effect) },
+                effect,
+            },
+        ];
+    });
 }
 
 /**

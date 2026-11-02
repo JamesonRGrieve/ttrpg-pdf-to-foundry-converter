@@ -7,6 +7,8 @@ import {
     equipmentItem,
     originCellName,
     originStepNamedBy,
+    pairsSteps,
+    readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
     readOriginPaths,
@@ -71,6 +73,12 @@ describe("origin list parsing", () => {
 
     it("recognises a caption naming a creation step", () => {
         expect(originStepNamedBy("Random Home World", STEPS)?.key).toBe("homeWorld");
+        // A table pairing the caption's step with another lists neither's origins.
+        const rt = TARGETS.rt.originSteps;
+        const homeWorld = originStepNamedBy("Suggested Home Worlds", rt);
+        expect(pairsSteps(homeWorld, ["Career", "Home Worlds"], rt)).toBe(true);
+        expect(pairsSteps(homeWorld, ["Home World", "Effect"], rt)).toBe(false);
+        expect(pairsSteps(homeWorld, ["Roll", "Result"], rt)).toBe(false);
         expect(originStepNamedBy("Omens", STEPS)).toBeNull();
         // The step must be the caption's head noun, not a modifier of another.
         expect(originStepNamedBy("Home World Hazards", STEPS)).toBeNull();
@@ -399,6 +407,55 @@ describe("origins granted by inline fields", () => {
             { name: "Dim Sight" },
             { name: "Lantern Bearer (+2)" },
         ]);
+    });
+
+    it("names an origin by the earlier heading it extends, its step by a section naming it anywhere", () => {
+        const rt = TARGETS.rt.originSteps;
+        const sections = ["Creation", "Home World Options"];
+        const origins = readInlineOrigins(
+            [
+                at("Home World Options", "display", ["Creation"], [], "Pick one."),
+                at("reed World", "name", sections, [], "Born among the reeds."),
+                at("Reed World Characters", "sub", sections, [
+                    ["Starting Skills", "Wading, Hush."],
+                    ["Starting Wounds", "Twice the Toughness bonus."],
+                ]),
+            ],
+            rt,
+        );
+        expect(origins.map((o) => [o.name, o.step.key, o.description])).toEqual([
+            ["Reed World", "homeWorld", "Born among the reeds."],
+        ]);
+    });
+
+    it("reads origins printed as headings with effect fields under a section naming a step", () => {
+        const rt = TARGETS.rt.originSteps;
+        const sections = ["Creation", "BIRTHRIGHT"];
+        const origins = readEffectOrigins(
+            [
+                at("BIRTHRIGHT", "display", ["Creation"], [], "Where you were raised."),
+                at(
+                    "lamp-born",
+                    "name",
+                    sections,
+                    [["Effect", "You gain +5 Perception but -5 Agility."]],
+                    "Raised by lamps.",
+                ),
+                at("WICKED", "name", sections, [
+                    ["Bright Eyes", "You gain the Keen Eye talent."],
+                    ["Dim Wits", "Reduce your Intelligence by 3."],
+                ]),
+                at("Prose Only", "name", sections, [], "No rules."),
+            ],
+            rt,
+        );
+        expect(origins.map((o) => [o.name, o.step.key, o.modifiers])).toEqual([
+            ["Lamp-born", "birthright", { perception: 5, agility: -5 }],
+            ["WICKED", "birthright", { intelligence: -3 }],
+        ]);
+        expect(origins[1]?.effect).toBe(
+            "Bright Eyes: You gain the Keen Eye talent.\n\nDim Wits: Reduce your Intelligence by 3.",
+        );
     });
 
     it("names an origin by its section when the heading is all labels, its step by a sibling heading", () => {
