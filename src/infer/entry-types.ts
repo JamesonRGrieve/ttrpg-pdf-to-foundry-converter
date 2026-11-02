@@ -387,6 +387,63 @@ export function structuredPrerequisites(printed: string): { prerequisites: JsonO
     };
 }
 
+/** A characteristic key from a printed name or abbreviation, or null. */
+function characteristicKey(name: string): string | null {
+    return CHARACTERISTICS[name.toLowerCase().replace(/\s+/gu, " ").trim()] ?? null;
+}
+
+/**
+ * A printed Focus Power test as the schema's `focusPower` (a SchemaField, not
+ * text): the characteristic tested — or the skill, as its key, when a skill
+ * is named instead — the printed modifier in brackets ("(–10)"), whether the
+ * test is opposed and by what ("opposed by the target's Toughness"), and the
+ * threshold a line prints apart ("Threshold: 8").
+ */
+export function focusPowerTest(printed: string | undefined, threshold: string | undefined): JsonObject {
+    const text = (printed ?? "").replace(/\s+/gu, " ").trim();
+    const modifier = /\(\s*([+\-−–—]?)\s*(\d+)\s*\)/u.exec(text);
+    const sign = modifier?.[1] !== undefined && modifier[1] !== "" && modifier[1] !== "+" ? -1 : 1;
+    const opposedBy = /\bopposed by (?:the )?(?:target(?:['’]s)? |its |his |her |their )?([a-z]+(?: [a-z]+)?)/iu.exec(
+        text,
+    );
+    // The tested name: what precedes "test" — past a bracketed modifier, which
+    // follows any difficulty word — or the whole value when it names no test.
+    const phrase =
+        /\)\s*([\p{L}][\p{L} ]*?)\s+tests?\b/iu.exec(text)?.[1] ??
+        /([\p{L}][\p{L} ]*?)\s+tests?\b/iu.exec(text)?.[1] ??
+        text;
+    const tested = phrase
+        .replace(/^opposed\s+/iu, "")
+        .split(" ")
+        .filter((w) => w.length > 0);
+    let characteristic: string | null = null;
+    // The longest trailing run of words naming a characteristic ("Weapon Skill", "Willpower").
+    for (let i = 0; i < tested.length && characteristic === null; i++) {
+        characteristic = characteristicKey(tested.slice(i).join(" "));
+    }
+    // A single other word tested is a skill, keyed as the schema keys skills
+    // (its name, lower camel case). A longer name may carry a difficulty word
+    // the engine cannot tell from the skill's own, so it is left unset.
+    const only = tested.length === 1 ? tested[0] : undefined;
+    const skill =
+        characteristic === null && /\btests?\b/iu.test(text) && only !== undefined && /^\p{Lu}\p{Ll}+$/u.test(only)
+            ? only.toLowerCase()
+            : "";
+    const thresholdValue = threshold === undefined ? null : /\d+/u.exec(threshold)?.[0];
+    const opposedName = opposedBy?.[1];
+    return {
+        characteristic: characteristic ?? "willpower",
+        modifier: modifier === null ? 0 : sign * Number(modifier[2]),
+        threshold: thresholdValue === null || thresholdValue === undefined ? null : Number(thresholdValue),
+        opposed: /\bopposed\b/iu.test(text),
+        opposedCharacteristic:
+            opposedName === undefined
+                ? ""
+                : (characteristicKey(opposedName) ?? characteristicKey(opposedName.split(" ")[0] ?? "") ?? ""),
+        skill,
+    };
+}
+
 /**
  * Whether a printed Sustained value says the power can be sustained (the
  * schema's `sustained` is a boolean): "No" or a dash says it cannot; "Yes" or
@@ -470,9 +527,13 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                     system["prCost"] = psyRating;
                 }
             }
+            const focus = text("focus power") ?? text("focus power test");
+            const threshold = text("threshold");
+            if (focus !== undefined || threshold !== undefined) {
+                system["focusPower"] = focusPowerTest(focus, threshold);
+            }
             for (const [label, field] of [
                 ["action", "action"],
-                ["focus power", "focusPower"],
                 ["range", "range"],
                 ["subtype", "subtype"],
             ] as const) {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Role } from "./columns.ts";
-import { isSustained, structuredPrerequisites } from "./entry-types.ts";
+import { focusPowerTest, isSustained, structuredPrerequisites } from "./entry-types.ts";
 import {
     isEmptyCell,
     parseArmourPoints,
@@ -291,7 +291,9 @@ function psychicPower(cells: RowCells): RowMapping {
             out.system[field] = value.trim();
         }
     };
-    text("focusPower", "focusPower");
+    if (cells.focusPower !== undefined && !isEmptyCell(cells.focusPower)) {
+        out.system["focusPower"] = focusPowerTest(cells.focusPower, undefined);
+    }
     text("action", "action");
     text("range", "range");
     text("subtype", "subtype");

@@ -28,6 +28,7 @@ import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer
 import {
     entryItem,
     entryType,
+    focusPowerTest,
     headingKindTag,
     isSustained,
     joinSkillCharacteristics,
@@ -1003,6 +1004,46 @@ describe("entry typing", () => {
         // The schema's sustained is a boolean: a printed "No" is false.
         expect(entryItem(sustain, "psychicPower").system["sustained"]).toBe(false);
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
+    });
+
+    it("reads a printed Focus Power test into the schema's focusPower object", () => {
+        const base = {
+            characteristic: "willpower",
+            modifier: 0,
+            threshold: null,
+            opposed: false,
+            opposedCharacteristic: "",
+            skill: "",
+        };
+        expect(focusPowerTest("Willpower", undefined)).toEqual(base);
+        expect(focusPowerTest("Difficult (–10) Willpower test", undefined)).toEqual({ ...base, modifier: -10 });
+        expect(focusPowerTest("Opposed (+0) Willpower test", undefined)).toEqual({ ...base, opposed: true });
+        expect(
+            focusPowerTest("Opposed (−10) Willpower test, opposed by the target's Toughness", undefined),
+        ).toEqual({ ...base, modifier: -10, opposed: true, opposedCharacteristic: "toughness" });
+        expect(focusPowerTest("Challenging (+0) Perception test", undefined)).toEqual({
+            ...base,
+            characteristic: "perception",
+        });
+        // A single other word tested is a skill, keyed in lower camel case.
+        expect(focusPowerTest("Ordinary (+10) Lampsense test", undefined)).toEqual({
+            ...base,
+            modifier: 10,
+            skill: "lampsense",
+        });
+        // A line printing its threshold apart.
+        expect(focusPowerTest(undefined, "8")).toEqual({ ...base, threshold: 8 });
+        const item = entryItem(
+            entry("SPARK", [
+                ["Threshold", "9"],
+                ["Focus Power", "Hard (–20) Willpower test"],
+            ]),
+            "psychicPower",
+        );
+        expect(item.system["focusPower"]).toEqual({ ...base, modifier: -20, threshold: 9 });
+        expect(mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"]).toEqual(
+            base,
+        );
     });
 
     it("reads a power's Sustained line as the schema's boolean", () => {
