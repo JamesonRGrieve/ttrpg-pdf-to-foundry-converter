@@ -207,10 +207,12 @@ export function packFlags(line: Line, segment: string): JsonObject {
  * The character builder reads a line's packs by a rank each pack declares:
  * `originBuilder` for the origins it offers (a divination is written in, not
  * picked, so its packs are not offered), `startingEquipment` for the kit it
- * offers. Ranks run 1..N per line and role, in pack-name order (book, then
- * category), which the system's schema gate requires; the builder keeps the
- * first copy of a document it meets twice.
+ * offers. The builder sorts every installed pack of the line by rank and
+ * keeps the first copy of a document it meets twice, so a converted module's
+ * packs rank after the system's own: their ranks run BUILDER_RANK_OFFSET + 1..N
+ * per line and role, in pack-name order (book, then category).
  */
+export const BUILDER_RANK_OFFSET = 1000;
 const BUILDER_ROLES: readonly { role: string; reads: (category: string) => boolean }[] = [
     {
         role: "originBuilder",
@@ -246,9 +248,9 @@ export function withBuilderRanks(
                 typeof category === "string" &&
                 reads(category)
             ) {
-                const rank = (next.get(line) ?? 0) + 1;
-                next.set(line, rank);
-                out.set(name, { ...flags, [role]: rank });
+                const position = (next.get(line) ?? 0) + 1;
+                next.set(line, position);
+                out.set(name, { ...flags, [role]: BUILDER_RANK_OFFSET + position });
             }
         }
     }

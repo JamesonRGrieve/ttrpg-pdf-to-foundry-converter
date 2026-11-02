@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { packCategory, packFlags, packSegment, withBuilderRanks } from "../../src/infer/schema.ts";
+import {
+    BUILDER_RANK_OFFSET,
+    packCategory,
+    packFlags,
+    packSegment,
+    withBuilderRanks,
+} from "../../src/infer/schema.ts";
 import {
     buildModule,
     MODULE_ASSET_PLACEHOLDER,
@@ -185,16 +191,35 @@ describe("module packaging", () => {
             line: "dh2",
             category: "origins-homeworlds",
             homebrew: false,
-            originBuilder: 1,
+            originBuilder: 1001,
         });
-        expect(ranked.get("dh2-wick-origins-roles")?.["originBuilder"]).toBe(2);
-        expect(ranked.get("rt-lamps-origins-homeworlds")?.["originBuilder"]).toBe(1);
+        expect(ranked.get("dh2-wick-origins-roles")?.["originBuilder"]).toBe(1002);
+        expect(ranked.get("rt-lamps-origins-homeworlds")?.["originBuilder"]).toBe(1001);
         // A divination is written in, never picked from a pack.
         expect(ranked.get("dh2-lamps-origins-divinations")).not.toHaveProperty("originBuilder");
-        expect(ranked.get("dh2-lamps-items-gear")?.["startingEquipment"]).toBe(1);
-        expect(ranked.get("dh2-lamps-items-weapons")?.["startingEquipment"]).toBe(2);
+        expect(ranked.get("dh2-lamps-items-gear")?.["startingEquipment"]).toBe(1001);
+        expect(ranked.get("dh2-lamps-items-weapons")?.["startingEquipment"]).toBe(1002);
         expect(ranked.get("dh2-lamps-items-talents")).toEqual(packFlags("dh2", "items-talents"));
+        // Force fields are not starting kit.
+        expect(
+            withBuilderRanks([
+                { name: "dh2-lamps-items-force-fields", flags: packFlags("dh2", "items-force-fields") },
+            ]).get("dh2-lamps-items-force-fields"),
+        ).not.toHaveProperty("startingEquipment");
         expect(ranked.size).toBe(7);
+    });
+
+    it("ranks a converted module's packs after every rank the system's own packs declare", () => {
+        // The system's private manifest ranks at most 14 origin packs and 30
+        // equipment packs per line (0.2.0, packs-private 70ca7041f); the builder
+        // keeps the first copy it meets in rank order, so the book's own packs win.
+        expect(BUILDER_RANK_OFFSET).toBeGreaterThan(30);
+        const ranks = [
+            ...withBuilderRanks([
+                { name: "dh2-lamps-items-ammo", flags: packFlags("dh2", "items-ammo") },
+            ]).values(),
+        ];
+        expect(ranks[0]?.["startingEquipment"]).toBe(BUILDER_RANK_OFFSET + 1);
     });
 
     it("names the module by its targets, several joined in order", () => {
