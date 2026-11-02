@@ -13,15 +13,15 @@
             "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
             "irVersion": 43,
             "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
-            "release": "2026-11-02-18-06",
+            "release": "2026-11-02-19-10",
             "renderer": "mupdf@1.28.1/300dpi/gray",
             "target": "dh2"
         }
     },
-    "id": "pdf-compendium-dh2-47d893c06c2e",
+    "id": "pdf-compendium-dh2-9340f3d8f6ee",
     "packFolders": [
         {
-            "name": "PDF Compendium 47d893c06c2e",
+            "name": "PDF Compendium 9340f3d8f6ee",
             "packs": [
                 "dh2-wayfarers-field-manual-actors-bestiary",
                 "dh2-wayfarers-field-manual-items-armour",
@@ -36,7 +36,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "actors-bestiary",
@@ -57,7 +57,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "armour",
@@ -79,7 +79,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "mutations",
@@ -100,7 +100,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "talents",
@@ -121,7 +121,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "weapons",
@@ -143,7 +143,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-02-18-06"
+                    "release": "2026-11-02-19-10"
                 },
                 "wh40k-rpg": {
                     "category": "rolltables",
@@ -170,6 +170,6 @@
             }
         ]
     },
-    "title": "PDF Compendium: wayfarers-field-manual (2026-11-02-18-06)",
-    "version": "2026-11-02-18-06"
+    "title": "PDF Compendium: wayfarers-field-manual (2026-11-02-19-10)",
+    "version": "2026-11-02-19-10"
 }
