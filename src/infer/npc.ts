@@ -3,6 +3,8 @@ import type { JsonObject } from "../types/entity.ts";
 import { splitTier } from "./names.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import type { DetectedNumericGrid } from "./types.ts";
+import { panelWeapons } from "./panel-weapons.ts";
+import { mapRow } from "./rows.ts";
 import { isVehicleLabel } from "./vehicle.ts";
 
 /**
@@ -49,6 +51,8 @@ export interface NpcItem {
     name: string;
     type: "talent" | "trait" | "weapon" | "gear";
     specialization?: string;
+    /** Fields the statblock prints for the item itself (a boxed weapon profile). */
+    system?: JsonObject;
 }
 
 export interface ParsedNpc {
@@ -258,7 +262,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     }
 
     const panel = rejoinSmallCaps(grid.associatedText.join(" "));
-    const fields = splitFields(panel);
+    // A field the panel sets apart under its own bold label is that block's
+    // text, whatever follows it (a named rule's label the field labels do
+    // not know); fields read only from the running text otherwise.
+    const fields = { ...splitFields(panel), ...blockFields(grid.blocks) };
     const int = (field: StatField): number | null => {
         const text = fields[field];
         if (text === undefined) {
@@ -322,10 +329,42 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
         system["skills"] = fields.skills;
     }
 
-    const items = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
+    const listed = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
         listedItems(fields[key] ?? "", LIST_ITEM_TYPE[key]),
     );
+    // Weapons boxed in the panel with their own profile, unless a weapons list names them.
+    const named = new Set(listed.filter((i) => i.type === "weapon").map((i) => itemKey(i.name)));
+    const boxed = panelWeapons(grid.associatedText.map(rejoinSmallCaps))
+        .filter((w) => !named.has(itemKey(w.name)))
+        .map((w): NpcItem => {
+            const profile = mapRow("weapon", w.cells).system;
+            return {
+                name: w.name,
+                type: "weapon",
+                system: w.count === null ? profile : { ...profile, quantity: w.count },
+            };
+        });
+    const items = [...listed, ...boxed];
     return { name, system, items, abilities: specialAbilities(grid.blocks), unparsed };
+}
+
+const itemKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** The statblock fields the panel prints as blocks under their own label. */
+export function blockFields(blocks: DetectedNumericGrid["blocks"]): Partial<Record<StatField, string>> {
+    const out: Partial<Record<StatField, string>> = {};
+    for (const { label, text } of blocks) {
+        if (label === null) {
+            continue;
+        }
+        const field = LABELS.find(([re]) =>
+            new RegExp(`^${re.source}$`, re.flags).test(`${bareLabel(label).trim()}:`),
+        )?.[1];
+        if (field !== undefined && out[field] === undefined && text.trim() !== "") {
+            out[field] = text.trim().replace(/[.;,]+$/u, "");
+        }
+    }
+    return out;
 }
 
 /** The Item type each statblock list names. */

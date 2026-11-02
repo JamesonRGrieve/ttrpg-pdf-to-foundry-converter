@@ -1336,10 +1336,10 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
             system,
         });
         // Bare until `embedNpcItems` finds the document's own copy of each.
-        actor["items"] = npc.items.map(({ name: itemName, type, specialization }) => ({
+        actor["items"] = npc.items.map(({ name: itemName, type, specialization, system: own }) => ({
             name: cleanName(itemName),
             type,
-            system: specialization === undefined ? {} : { specialization },
+            system: { ...own, ...(specialization === undefined ? {} : { specialization }) },
             effects: [],
             flags: {},
         }));
@@ -1394,10 +1394,17 @@ export function embedNpcItems(entities: readonly Entity[]): void {
         const resolved = embedded.filter(isJsonObject).map((bare, i) => {
             const printed = String(bare["name"]);
             const exact = find(nameKey(printed), bare["type"]);
-            const own = exact ?? find(nameKey(listedBase(printed)), bare["type"]);
+            // A statblock may print a plural for what it carries several of ("Frag Grenades").
+            const plural = items.find(
+                (e) =>
+                    listedAs(bare["type"], e.fields["type"]) &&
+                    singularKey(String(e.fields["name"])) === singularKey(printed),
+            );
+            const own = exact ?? find(nameKey(listedBase(printed)), bare["type"]) ?? plural;
             // The Item's own spelling where the whole name is its; a listed
             // specialisation or rating stays as printed.
-            const name = exact === undefined ? printed : String(exact.fields["name"]);
+            const whole = exact ?? plural;
+            const name = whole === undefined ? printed : String(whole.fields["name"]);
             const doc: JsonObject =
                 own === undefined
                     ? { ...bare }
