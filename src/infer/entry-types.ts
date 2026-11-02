@@ -508,8 +508,13 @@ export function structuredPrerequisites(printed: string): {
     };
 }
 
-/** A section heading naming the psychic-power catalogue as a whole. */
-const POWER_CATALOGUE = /\bpsychic (?:powers?|disciplines?)\b/iu;
+/**
+ * A section heading naming the psychic-power catalogue as a whole (a display
+ * heading's initial may be doubled by the text layer: "PPsychic Disciplines").
+ */
+const POWER_CATALOGUE = /psychic (?:powers?|disciplines?)\b/iu;
+/** A discipline heading closing on the kind of what it groups: "Lampcraft Powers". */
+const GROUP_NOUN = /\s+powers\s*$/iu;
 
 /**
  * A power's discipline as the book prints it (content#35): the heading of the
@@ -526,7 +531,8 @@ export function printedDiscipline(sections: readonly string[]): string {
     const named = under
         .map((s) => /^\s*(?:the\s+)?(?<name>\S.*?)\s+discipline\b/iu.exec(s)?.groups?.["name"])
         .findLast((n) => n !== undefined);
-    const own = named ?? under.at(-1);
+    // A section naming its powers ("Lampcraft Powers") names the discipline by the words before.
+    const own = named ?? under.at(-1)?.replace(GROUP_NOUN, "");
     return own === undefined ? "" : cleanName(own);
 }
 

@@ -1356,6 +1356,9 @@ describe("entry typing", () => {
         expect(printedDiscipline(["Psychic Disciplines", "Wick Lore", "Wick Rites"])).toBe("Wick Rites");
         // Printed straight under the catalogue, or outside one: no discipline, never the schema's default.
         expect(printedDiscipline(["Chapter Six", "Psychic Powers"])).toBe("");
+        // A doubled display initial still names the catalogue; "… Powers" names its discipline.
+        expect(printedDiscipline(["PPsychic Disciplines", "LAMPCRAFT"])).toBe("Lampcraft");
+        expect(printedDiscipline(["Psychic Powers", "Wick Powers"])).toBe("Wick");
         expect(printedDiscipline(["Equipment"])).toBe("");
         // A section naming its discipline as such names it by the words before the word.
         expect(printedDiscipline(["Psychic Disciplines", "Lampcraft Discipline: Wick Techniques"])).toBe(
