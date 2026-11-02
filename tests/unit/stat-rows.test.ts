@@ -6,6 +6,8 @@ import {
     detectStatRows,
     isLabelRow,
     rowValues,
+    textBlockRuns,
+    withMissingLabel,
 } from "../../src/infer/detect-stat-rows.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
@@ -128,6 +130,44 @@ describe("statblock rows", () => {
         expect(block?.caption).toBe("Lamp Warden");
         expect(block?.values).toEqual([30, 25, 35, 0, 30, 20, 35, 30, 25]);
         expect(block?.blocks.map((b) => b.label)).toEqual(["Wounds", "Talents"]);
+    });
+
+    it("reads a doubled dash as no characteristic", () => {
+        expect(rowValues("40 - 35 35 48 18 40 30 --", 9)).toEqual([40, 0, 35, 35, 48, 18, 40, 30, 0]);
+        expect(rowValues("40 --- 35", 3)).toBeNull();
+    });
+
+    it("puts back the one label a text layer dropped where the row leaves room for it", () => {
+        const at = (text: string, x: number) => ({ x, width: 10, text });
+        // "Fel" missing between "WP" and "Inf": a double gap.
+        const row = ["WS", "BS", "S", "T", "Ag", "Int", "Per", "WP"].map((t, i) => at(t, 100 + 22 * i));
+        const restored = withMissingLabel([...row, at("Inf", 100 + 22 * 9)]);
+        expect(restored.map((l) => l.text)).toEqual([...row.map((l) => l.text), "fel", "Inf"]);
+        expect(restored[8]?.x).toBe(100 + 22 * 8);
+        // A full row, a row missing two, or one whose gap leaves no room stays as it is.
+        const full = [...row, at("Fel", 276)];
+        expect(withMissingLabel(full)).toEqual(full);
+        const two = [at("WS", 100), at("S", 144), at("Ag", 188), ...row.slice(5)];
+        expect(withMissingLabel(two)).toEqual(two);
+        const tight = [...row, at("Inf", 276)];
+        expect(withMissingLabel(tight)).toEqual(tight);
+    });
+
+    it("keeps a row's last column set past the side margin's edge, not a tab set apart there", () => {
+        // A page 600 wide: its right margin starts at 558. Labels and values one run each, every 25 points.
+        const labels = LABELS.split(" ").map((text, i) => run(text, 360 + 25 * i, 680, { width: 12 }));
+        const values = ["30", "25", "35", "40", "30", "20", "35", "30", "25"].map((text, i) =>
+            run(text, 360 + 25 * i, 660, { size: 12, width: 12 }),
+        );
+        const ir = irOf([
+            run("Lamp Warden", 360, 700, { size: 11 }),
+            ...labels,
+            ...values,
+            run("TAB", 590, 700, { width: 8 }),
+        ]);
+        const [block] = detectStatRows(ir);
+        expect(block?.values).toEqual([30, 25, 35, 40, 30, 20, 35, 30, 25]);
+        expect(textBlockRuns(ir.runs, () => 600).map((r) => r.text)).not.toContain("TAB");
     });
 
     it("reads the values past a line of bracketed notes set over them", () => {

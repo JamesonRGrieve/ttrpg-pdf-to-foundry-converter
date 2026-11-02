@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { IR } from "../types/ir.ts";
+import type { IR, IRTextRun } from "../types/ir.ts";
 import { bodyStyle } from "../util/body-style.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { buildLines, endsSentence, type TextLine } from "./detect-entries.ts";
@@ -55,8 +55,8 @@ const SUPERSCRIPT_SHARE = 0.7;
 /** A line holding only bracketed numbers: notes set over a statblock's values. */
 const NOTES_ONLY = /^\s*(?:\(\d+\)\s*)+$/u;
 
-/** A lone dash printed where a creature has no such characteristic. */
-const ABSENT = /^[-–—]$/u;
+/** A dash (or a pair set as one, "--") printed where a creature has no such characteristic. */
+const ABSENT = /^[-–—]{1,2}$/u;
 
 /**
  * The row's values, one per label, or null when the line does not hold
@@ -113,6 +113,51 @@ export function cellValues(labels: readonly Placed[], values: readonly Placed[])
     return cells.map((c) => (/^\d/u.test(c) ? Number(c) : 0));
 }
 
+/** The labels in the schema's order, the influence label last. */
+const LABEL_ORDER: readonly string[] = [...SCHEMA_CHAR_ORDER, "inf"];
+/** A gap between two labels at least this many times their usual spacing leaves room for one the text layer dropped. */
+const MISSING_LABEL_GAP = 1.6;
+
+/**
+ * A row of labels with the one a text layer dropped put back: when the row
+ * reads in the schema's order with exactly one label missing between two it
+ * keeps, and those two stand about twice the row's usual spacing apart, the
+ * missing label is placed midway between them. Otherwise the row unchanged.
+ */
+export function withMissingLabel(labels: readonly Placed[]): Placed[] {
+    const heads = labels.filter((r) => r.text.trim().length > 0);
+    const tokens = heads.map((r) => r.text.trim().toLowerCase());
+    const order = tokens.map((t) => LABEL_ORDER.indexOf(t));
+    if (order.some((o, i) => o < 0 || (i > 0 && o <= (order[i - 1] ?? 0)))) {
+        return [...labels];
+    }
+    const skips = order.flatMap((o, i) => (i > 0 && o - (order[i - 1] ?? 0) === 2 ? [i] : []));
+    const jumps = order.filter((o, i) => i > 0 && o - (order[i - 1] ?? 0) > 1).length;
+    const [at] = skips;
+    if (at === undefined || skips.length !== 1 || jumps !== 1) {
+        return [...labels];
+    }
+    const centre = (r: Placed): number => r.x + r.width / 2;
+    const steps = heads.slice(1).map((h, i) => centre(h) - centre(heads[i] ?? h));
+    const usual = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)] ?? 0;
+    const before = heads[at - 1];
+    const after = heads[at];
+    if (
+        before === undefined ||
+        after === undefined ||
+        centre(after) - centre(before) < MISSING_LABEL_GAP * usual
+    ) {
+        return [...labels];
+    }
+    const width = (before.width + after.width) / 2;
+    const missing = {
+        x: (centre(before) + centre(after)) / 2 - width / 2,
+        width,
+        text: LABEL_ORDER[(order[at] ?? 0) - 1] ?? "",
+    };
+    return [...heads.slice(0, at), missing, ...heads.slice(at)];
+}
+
 /** A trailing bracketed note on a caption ("(Elite)"), perhaps set against the word before it. */
 const TRAILING_NOTE = /\s*(\([^()]*\))\s*$/u;
 
@@ -151,14 +196,48 @@ export function captionNames(captions: readonly string[], share = CAPTION_WORD_S
     });
 }
 
+/** Type sizes of gap within which a side-margin run carries on a line of the text block. */
+const MARGIN_CARRY_FACTOR = 1.5;
+/** Type sizes apart two runs' baselines may be and share a line. */
+const BASELINE_SHARE = 0.3;
+
+/**
+ * The runs of the text block: a run set wholly in a side margin (a thumb-index
+ * tab) is left out, unless it carries on a line of the text block at no more
+ * than a cell's spacing — a statblock row's last column set past the margin's
+ * edge ("Fel" and its value) — or carries on such a run in turn.
+ */
+export function textBlockRuns(runs: readonly IRTextRun[], pageWidth: (page: number) => number): IRTextRun[] {
+    const inMargin = (r: IRTextRun): boolean => inSideMargin(r.x, r.x + r.width, pageWidth(r.pageIndex));
+    const kept = runs.filter((r) => !inMargin(r));
+    const centre = (r: IRTextRun): number => Math.abs(r.x + r.width / 2 - pageWidth(r.pageIndex) / 2);
+    // Nearest the text block first, so a run carries on one kept before it.
+    const margin = runs
+        .filter(inMargin)
+        .sort((a, b) => centre(a) - centre(b) || a.renderOrder - b.renderOrder);
+    for (const m of margin) {
+        const reach = MARGIN_CARRY_FACTOR * m.size;
+        const carries = kept.some((o) => {
+            if (o.pageIndex !== m.pageIndex || Math.abs(o.y - m.y) > BASELINE_SHARE * m.size) {
+                return false;
+            }
+            const gap = o.x < m.x ? m.x - (o.x + o.width) : o.x - (m.x + m.width);
+            return gap >= -reach && gap <= reach && o.text.trim().length > 0;
+        });
+        if (carries && m.text.trim().length > 0) {
+            kept.push(m);
+        }
+    }
+    const order = new Map(runs.map((r, i) => [r, i] as const));
+    return kept.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+}
+
 export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     const bands = marginBandsOf(ir);
     const pages = new Map(ir.pages.map((p) => [p.pageIndex, p] as const));
     // Thumb-index tabs in a side margin share baselines with statblock lines;
     // they are dropped run by run, running heads and feet line by line.
-    const inText = ir.runs.filter(
-        (r) => !inSideMargin(r.x, r.x + r.width, pages.get(r.pageIndex)?.width ?? 0),
-    );
+    const inText = textBlockRuns(ir.runs, (page) => pages.get(page)?.width ?? 0);
     const lines = buildLines({ ...ir, runs: inText }).filter(
         (l) => !inMarginBand(l.y, pages.get(l.pageIndex)?.height ?? 0, bands),
     );
@@ -193,10 +272,16 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
         ) {
             return;
         }
-        const row = tokensOf(line.text);
-        const oneRunEach = line.runs.filter((r) => r.text.trim().length > 0).length === row.length;
+        const oneRunEach =
+            line.runs.filter((r) => r.text.trim().length > 0).length === tokensOf(line.text).length;
+        // A label the text layer dropped is put back where the row leaves room for it.
+        const labels = oneRunEach ? withMissingLabel(line.runs) : null;
+        const row =
+            labels === null
+                ? tokensOf(line.text)
+                : labels.filter((l) => l.text.trim().length > 0).map((l) => l.text.trim().toLowerCase());
         const numbers =
-            (oneRunEach ? cellValues(line.runs, below.runs) : null) ?? rowValues(below.text, row.length);
+            (labels === null ? null : cellValues(labels, below.runs)) ?? rowValues(below.text, row.length);
         // A caption names the creature; a sentence above a worked example does not.
         if (numbers !== null && !endsSentence(above.text)) {
             found.push({ labels: i, values: valuesAt, caption: i - 1, row, numbers });
