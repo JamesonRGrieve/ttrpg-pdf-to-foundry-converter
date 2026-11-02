@@ -100,6 +100,9 @@ export interface Entry {
     discipline?: string;
 }
 
+/** A capital set this much larger than the small letters before it opens a word of its own. */
+const SMALL_CAPS_INITIAL = 1.2;
+
 export function joinRuns(runs: readonly IRTextRun[]): string {
     let text = "";
     let prevEnd = Number.NEGATIVE_INFINITY;
@@ -108,10 +111,14 @@ export function joinRuns(runs: readonly IRTextRun[]): string {
         if (r.text.length === 0) {
             continue;
         }
-        // Adjacent runs without a gap continue one word.
+        // Adjacent runs without a gap continue one word — unless the next opens
+        // on a capital set larger than the letters before it: the initial of
+        // the next word in small capitals, whose space the text layer left out.
         const gap = r.x - prevEnd;
+        const initial =
+            r.size > SMALL_CAPS_INITIAL * prevSize && /^\p{Lu}/u.test(r.text) && /\p{Ll}$/u.test(text);
         text +=
-            text.length > 0 && wordBreakBetween(text, r.text, gap, wordSpace(prevSize, r.size))
+            text.length > 0 && (initial || wordBreakBetween(text, r.text, gap, wordSpace(prevSize, r.size)))
                 ? ` ${r.text}`
                 : r.text;
         prevEnd = r.x + r.width;

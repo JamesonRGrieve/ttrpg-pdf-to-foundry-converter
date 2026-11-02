@@ -13,6 +13,7 @@ import {
     endsSentence,
     type Entry,
     headingOf,
+    joinRuns,
     runningHeads,
     type TextLine,
     valueUnfinished,
@@ -2452,6 +2453,23 @@ describe("entry detection", () => {
         const shadow = { ...display, x: 104, y: 698, size: 18, width: 9 * 9, weight: "bold" as const };
         const word = { ...run("LAMPCRAFT", 700, "h", 20), x: 300 };
         expect(withoutShadows([display, shadow, word])).toEqual([display, word]);
+    });
+
+    it("opens a word at a small-caps initial the text layer set without a space", () => {
+        // "THE LAMP" in small capitals: each word's initial a larger run, the
+        // space between the words left out, the gap under a word space.
+        const at = (text: string, x: number, size: number): IRTextRun => ({
+            ...run(text, 700, "h", size),
+            x,
+            width: text.length * size * 0.5,
+        });
+        const t = at("T", 80, 16);
+        const he = at("he", 88, 11);
+        const l = at("L", 100.5, 16);
+        const amp = at("amp", 108.5, 11);
+        expect(joinRuns([t, he, l, amp])).toBe("The Lamp");
+        // A smaller capital after a larger one, or figures, run on.
+        expect(joinRuns([at("Mk", 80, 11), at("II", 91, 11)])).toBe("MkII");
     });
 
     it("continues a field set to a measure narrower than its column", () => {
