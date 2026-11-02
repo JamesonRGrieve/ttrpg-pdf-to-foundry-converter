@@ -153,7 +153,8 @@ function armour(cells: RowCells): RowMapping {
             points[loc] = covered.includes(loc) ? (ap.exceptions[loc] ?? ap.base) : 0;
         }
         out.variantized["armourPoints"] = points;
-        out.variantized["coverage"] = covered;
+        // A printed "All" is the schema's own `all` coverage choice.
+        out.variantized["coverage"] = /^\s*all\s*$/iu.test(cells.locations ?? "") ? ["all"] : covered;
     } else if (cells.armourPoints !== undefined && !filled(cells.armourPoints)) {
         // A dash for armour points: the item protects no location.
         out.variantized["armourPoints"] = Object.fromEntries(BODY_LOCATIONS.map((loc) => [loc, 0]));

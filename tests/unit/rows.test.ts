@@ -95,6 +95,14 @@ describe("weapon-table load rows", () => {
         expect(mapped.variantized).not.toHaveProperty("coverage");
     });
 
+    it("keeps a printed All as the schema's all coverage, and names listed locations", () => {
+        const all = mapRow("armour", { name: "Ward Plate", locations: "All", armourPoints: "4" });
+        expect(all.variantized["coverage"]).toEqual(["all"]);
+        expect(all.variantized["armourPoints"]).toMatchObject({ head: 4, leftLeg: 4 });
+        const some = mapRow("armour", { name: "Ward Coat", locations: "Body, Arms", armourPoints: "3" });
+        expect(some.variantized["coverage"]).toEqual(["body", "leftArm", "rightArm"]);
+    });
+
     it("drops armour-table rows that print no protective profile", () => {
         expect(rowType("armour", { name: "Padded Coat", armourPoints: "2", weight: "3kg" })).toBe("armour");
         expect(rowType("armour", { name: "Ward Plate", protection: "40" })).toBe("armour");
