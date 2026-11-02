@@ -1073,6 +1073,13 @@ describe("entry typing", () => {
         expect(entryType(sustain)).toBe("psychicPower");
         // The schema's sustained is a boolean: a printed "No" is false.
         expect(entryItem(sustain, "psychicPower").system["sustained"]).toBe(false);
+        // A power printing no Effect field states its effect as its text; one that does, as that field.
+        expect(entryItem(sustain, "psychicPower").variantized["effect"]).toBe("<p>Prose.</p>");
+        const printed = entry("SPARK", [
+            ["Threshold", "8"],
+            ["Effect", "A spark leaps."],
+        ]);
+        expect(entryItem(printed, "psychicPower").variantized["effect"]).toBe("<p>A spark leaps.</p>");
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
     });
 

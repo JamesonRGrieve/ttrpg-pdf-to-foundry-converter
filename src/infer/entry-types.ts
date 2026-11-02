@@ -840,10 +840,9 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             if (cost !== null) {
                 system["cost"] = cost;
             }
+            // A power printing no `Effect` field states its effect as its text.
             const effect = text("effect");
-            if (effect !== undefined) {
-                variantized["effect"] = toHtml(effect);
-            }
+            variantized["effect"] = effect === undefined ? html : toHtml(effect);
             break;
         }
         case "skill": {
