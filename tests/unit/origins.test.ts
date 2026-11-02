@@ -6,6 +6,7 @@ import {
     characteristicModifiers,
     equipmentItem,
     originCellName,
+    namesOriginStep,
     originStepNamedBy,
     pairsSteps,
     readEffectOrigins,
@@ -79,6 +80,10 @@ describe("origin list parsing", () => {
         expect(pairsSteps(homeWorld, ["Career", "Home Worlds"], rt)).toBe(true);
         expect(pairsSteps(homeWorld, ["Home World", "Effect"], rt)).toBe(false);
         expect(pairsSteps(homeWorld, ["Roll", "Result"], rt)).toBe(false);
+        // A name column headed by a step lists that step's origins, not items.
+        expect(namesOriginStep("Home World or Origin", TARGETS.ow.originSteps)).toBe(true);
+        expect(namesOriginStep("Chapter", TARGETS.dw.originSteps)).toBe(true);
+        expect(namesOriginStep("Name", TARGETS.ow.originSteps)).toBe(false);
         expect(originStepNamedBy("Omens", STEPS)).toBeNull();
         // The step must be the caption's head noun, not a modifier of another.
         expect(originStepNamedBy("Home World Hazards", STEPS)).toBeNull();

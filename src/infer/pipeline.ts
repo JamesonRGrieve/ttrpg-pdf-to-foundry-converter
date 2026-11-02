@@ -50,6 +50,7 @@ import {
     readFieldedOrigins,
     readInlineOrigins,
     readOriginPaths,
+    namesOriginStep,
     pairsSteps,
     readEffectOrigins,
     readOriginTable,
@@ -437,6 +438,12 @@ function extractTables(
                 }
                 continue;
             }
+        }
+        // A name column headed by a creation step ("Home World or Origin")
+        // lists that step's origins (their costs, say), not catalogue items.
+        if (namesOriginStep(table.headers[0] ?? "", out.target.originSteps)) {
+            unclassified += 1;
+            continue;
         }
         // A caption naming a catalogue type ("… Force Fields") outranks what
         // the headers alone suggest; a captioned roll table of `Name: effect`

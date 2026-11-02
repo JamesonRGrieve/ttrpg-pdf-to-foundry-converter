@@ -124,6 +124,11 @@ export function originStepNamedBy(caption: string, steps: readonly OriginStepDef
     return stepNamedIn(caption, steps, true, true) ?? null;
 }
 
+/** Whether `text` names one of the target's creation steps anywhere in it ("Home World or Origin"). */
+export function namesOriginStep(text: string, steps: readonly OriginStepDef[]): boolean {
+    return stepNamedIn(text, steps, true, false) !== undefined;
+}
+
 /**
  * Whether a table whose caption names `captionStep` has its name column
  * headed by another step ("Career" under "Suggested Home Worlds"): its rows
