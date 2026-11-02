@@ -2427,6 +2427,50 @@ describe("entry detection", () => {
         );
     });
 
+    it("continues a field whose sentence ends at a full line when the next line closes up under it", () => {
+        const full = (text: string, y: number): IRTextRun => run(text.padEnd(body.length, " "), y, "b", 10);
+        const fielded = (rest: IRTextRun[]): Entry | undefined =>
+            detectEntries(
+                irOf(
+                    [0],
+                    [
+                        run("DIM WARD", 720, "h", 14),
+                        ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                        { ...run("Effect:", 450, "b", 10), weight: "bold" },
+                        { ...run("The lamp dims until the end of the night.", 450, "b", 10), x: 100 },
+                        ...rest,
+                    ],
+                ),
+                new Set(),
+            ).find((e) => e.heading.text === "DIM WARD");
+        // The value's line reaches the measure (padded), the next follows at line spacing.
+        const ended = { ...run("Effect:", 450, "b", 10), weight: "bold" as const };
+        const value = {
+            ...run("The lamp dims until the end of the night.".padEnd(body.length - 15, " "), 450, "b", 10),
+            x: 135,
+        };
+        const entry = detectEntries(
+            irOf(
+                [0],
+                [
+                    run("DIM WARD", 720, "h", 14),
+                    ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                    ended,
+                    value,
+                    run("When it does, each ally sees.", 438, "b", 10),
+                ],
+            ),
+            new Set(),
+        ).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields[0]?.[1]).toBe(
+            "The lamp dims until the end of the night. When it does, each ally sees.",
+        );
+        // After a paragraph's gap, or under a short line, the text is the entry's own.
+        const apart = fielded([full("A new paragraph of the entry's own text begins.", 420)]);
+        expect(apart?.fields[0]?.[1]).toBe("The lamp dims until the end of the night.");
+        expect(apart?.body).toContain("A new paragraph");
+    });
+
     it("continues a field that reaches the text measure despite a stray run past it", () => {
         const label = "Requires:";
         const value = "Glow Lore (Lamps) +10 or Dim";

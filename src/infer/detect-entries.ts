@@ -742,6 +742,8 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
     const stack: Heading[] = [];
     let current: Entry | null = null;
     let lastFieldWrapped = false;
+    /** The line a field value last ended on, while nothing else has followed it. */
+    let lastFieldLine: TextLine | null = null;
     let lastValueX: number | null = null;
     let setApartFields = 0;
     let bodyLines: string[] = [];
@@ -759,6 +761,20 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         current = null;
         bodyLines = [];
         lastBody = null;
+    };
+    /** `line` follows `above` at line spacing, in its column and at its left edge. */
+    const closesUp = (above: TextLine, line: TextLine): boolean => {
+        if (above.pageIndex !== line.pageIndex || above.column !== line.column) {
+            return false;
+        }
+        const size = Math.max(...line.runs.map((r) => r.size));
+        const gap = above.y - line.y;
+        return (
+            gap > 0 &&
+            gap <= PARAGRAPH_GAP_FACTOR * size &&
+            Math.abs((visibleRuns(line)[0]?.x ?? Number.NaN) - (visibleRuns(above)[0]?.x ?? Number.NaN)) <=
+                JUSTIFIED_TOLERANCE
+        );
     };
     /** A wider gap than line spacing above a body line opens a new paragraph. */
     const opensParagraph = (line: TextLine): boolean => {
@@ -811,6 +827,7 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             current = { heading, sections: stack.map((h) => h.text), fields: [], body: "" };
             stack.push(heading);
             lastFieldWrapped = false;
+            lastFieldLine = null;
             lastValueX = null;
             setApartFields = 0;
             continue;
@@ -823,6 +840,7 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
         if (field !== null) {
             entry.fields.push(field);
             lastFieldWrapped = continues(line, field[1]);
+            lastFieldLine = line;
             lastValueX = setApartValueX(line);
             setApartFields += lastValueX === null ? 0 : 1;
             continue;
@@ -835,12 +853,24 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             lastValueX !== null &&
             setApartFields >= MIN_SET_APART_FIELDS &&
             (visibleRuns(line)[0]?.x ?? 0) < lastValueX - SET_APART_SLACK;
-        if (lastFieldWrapped && last !== undefined && !atMargin) {
+        // A value whose sentence ends just at the line's end may still run on:
+        // the next line follows at line spacing in the same column and within
+        // the value's own measure (text set wider is the entry's own).
+        const runsOn =
+            lastFieldLine !== null &&
+            last !== undefined &&
+            wrapped(lastFieldLine) &&
+            endsSentence(last[1]) &&
+            closesUp(lastFieldLine, line) &&
+            line.right <= lastFieldLine.right + WRAP_SLACK;
+        if ((lastFieldWrapped || runsOn) && last !== undefined && !atMargin) {
             last[1] = `${last[1]} ${line.text}`.trim();
             lastFieldWrapped = continues(line, last[1]);
+            lastFieldLine = line;
             continue;
         }
         lastFieldWrapped = false;
+        lastFieldLine = null;
         if (opensParagraph(line)) {
             bodyLines.push(PARAGRAPH_BREAK);
         }

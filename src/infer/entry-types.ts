@@ -855,7 +855,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 system["cost"] = Number(price.replace(/,/gu, ""));
             }
             const effect = text("effect");
-            system["benefit"] = effect === undefined ? html : toHtml([effect, entry.body].join("\n\n"));
+            system["benefit"] = effect === undefined ? html : toHtml(effect);
             const use = text("type");
             if (use !== undefined && TAKES_ACTION.test(use)) {
                 system["isPassive"] = /^\s*passive/iu.test(use);
