@@ -710,6 +710,18 @@ describe("npc statblocks", () => {
         ]);
     });
 
+    it("takes a count set before a listed weapon's or gear's name as its quantity", () => {
+        expect(listedItems("Wick Pistol, 3 glim bombs", "weapon")).toEqual([
+            { name: "Wick Pistol", type: "weapon" },
+            { name: "glim bombs", type: "weapon", system: { quantity: 3 } },
+        ]);
+        expect(listedItems("2× oil flasks, 1d5 lamp coins, 2nd-best cloak", "gear")).toEqual([
+            { name: "oil flasks", type: "gear", system: { quantity: 2 } },
+            { name: "1d5 lamp coins", type: "gear" },
+            { name: "2nd-best cloak", type: "gear" },
+        ]);
+    });
+
     it("embeds a statblock's items as copies of the document's own, else bare", () => {
         const entity = (documentType: "Item" | "Actor", fields: Record<string, JsonValue>): Entity => ({
             blockId: "b",

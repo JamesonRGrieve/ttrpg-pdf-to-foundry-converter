@@ -438,6 +438,17 @@ export function listedBase(name: string): string {
  * A talent keeps its parenthetical as its specialisation; a weapon's is its
  * printed profile, no part of its name.
  */
+/** A count set before a listed item's name ("3 frag grenades", "2× flasks"). */
+const LEADING_COUNT = /^(?<n>\d+)\s*[x×]?\s+(?<name>\p{L}.*)$/u;
+
+/** A listed item's name without a count set before it, and that count as its quantity (null when none). */
+export function countedName(entry: string): { name: string; quantity: number | null } {
+    const m = LEADING_COUNT.exec(entry.trim())?.groups;
+    return m?.["name"] === undefined
+        ? { name: entry, quantity: null }
+        : { name: m["name"], quantity: Number(m["n"]) };
+}
+
 export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
     return splitTopLevel(text.replace(/\.\s*$/u, ""), /^[,;]\s*/u)
         .filter((entry) => /\p{L}/u.test(entry) && !NO_ENTRY.test(entry))
@@ -446,11 +457,21 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
             if (type === "weapon") {
                 // The name ends where its profile opens, however the line runs on;
                 // a profile printed in the brackets is the weapon's own.
-                const name = /^[^(:]+/u.exec(entry)?.[0].trim() ?? entry;
+                const counted = countedName(/^[^(:]+/u.exec(entry)?.[0].trim() ?? entry);
                 const [profile] = inlineWeapons(entry);
-                return profile === undefined
-                    ? { name, type }
-                    : { name, type, system: mapRow("weapon", profile.cells).system };
+                const system = {
+                    ...(profile === undefined ? {} : mapRow("weapon", profile.cells).system),
+                    ...(counted.quantity === null ? {} : { quantity: counted.quantity }),
+                };
+                return Object.keys(system).length === 0
+                    ? { name: counted.name, type }
+                    : { name: counted.name, type, system };
+            }
+            if (type === "gear") {
+                const counted = countedName(entry);
+                return counted.quantity === null
+                    ? { name: entry, type }
+                    : { name: counted.name, type, system: { quantity: counted.quantity } };
             }
             // A talent's specialisation and a trait's rating are the schema's
             // own fields of the item, no part of its name.
