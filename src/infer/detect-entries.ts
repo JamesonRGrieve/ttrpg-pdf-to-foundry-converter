@@ -55,6 +55,8 @@ const HEADING_MAX_GAP_FACTOR = 1.3;
  * pieces of text; a letter-spaced display heading spaces far tighter.
  */
 const DISPLAY_MAX_GAP_FACTOR = 2.5;
+/** A line at this many times the body size is a display title, even when it breaks off mid-phrase. */
+const BROKEN_TITLE_FACTOR = 2;
 /** A heading line within this many heading-sizes below another continues it. */
 const HEADING_WRAP_FACTOR = 1.6;
 /** A gap above a body line wider than this many font-sizes opens a paragraph. */
@@ -254,7 +256,11 @@ export function headingOf(
     const caseLostDisplay =
         !/\p{Lu}/u.test(line.text) && headingFaces.has(face) && size > body.size + LEVEL_STEP;
     const lastWord = line.text.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "";
-    const brokenOff = /,$/u.test(line.text.trim()) || FUNCTION_WORDS.has(lastWord);
+    // A title set at display size may wrap on a connecting word ("Rules of
+    // the" / "Road"); running text is never set that large.
+    const brokenOff =
+        (/,$/u.test(line.text.trim()) || FUNCTION_WORDS.has(lastWord)) &&
+        size < BROKEN_TITLE_FACTOR * body.size;
     // Table header labels (bold) sit spread across columns; a display heading
     // may be letter-spaced wide, so only a bold line is read as spread labels.
     // A gap holding a space glyph is a word space however wide it measures (a

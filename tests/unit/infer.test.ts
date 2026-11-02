@@ -35,6 +35,7 @@ import {
     headingKindTag,
     isSustained,
     joinSkillCharacteristics,
+    mutationCategory,
     powerXpCost,
     printedDiscipline,
     structuredPrerequisites,
@@ -1094,6 +1095,27 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types a section headed by the gift category's label as mutations, with their riders", () => {
+        const gift = entry(
+            "GLOWING VEINS",
+            [
+                ["Khorne", "The veins burn red."],
+                ["Note", "Not a rider."],
+            ],
+            ["Corruption", "Gifts of the Gods"],
+            "The character's veins shine through his skin.",
+        );
+        expect(entryType(gift)).toBe("mutation");
+        const item = entryItem(gift, "mutation");
+        expect(item.system["category"]).toBe("gift");
+        expect(item.system["gift"]).toEqual({
+            riders: [{ alignment: "khorne", description: "<p>The veins burn red.</p>" }],
+        });
+        expect(mutationCategory(["Mutations", "Major Mutations"])).toBe("major");
+        expect(mutationCategory(["Mutations"])).toBeNull();
+        expect(entryItem(entry("SCALES", [], ["Mutations"]), "mutation").system["category"]).toBeUndefined();
+    });
+
     it("gives a power the discipline its section prints, or none", () => {
         expect(printedDiscipline(["Chapter Six", "Psychic Powers", "LAMPCRAFT"])).toBe("Lampcraft");
         expect(printedDiscipline(["Psychic Disciplines", "Wick Lore", "Wick Rites"])).toBe("Wick Rites");
@@ -1731,6 +1753,24 @@ describe("headings", () => {
         expect(headingOf(italic, body, false)?.text).toBe("Captain Vane’s Lantern");
         const mixed = { ...line, runs: [roman, { ...name, font: "other" }] };
         expect(headingOf(mixed, body, false)).toBeNull();
+    });
+
+    it("keeps a display title that wraps on a connecting word, not running text that does", () => {
+        const title = heading(
+            [
+                ["Rules", 100, 70],
+                ["of", 175, 25],
+                ["the", 205, 40],
+            ],
+            30,
+        );
+        expect(headingOf(title, body, false)?.text).toBe("Rules of the");
+        const subheading = heading([
+            ["Rules", 100, 30],
+            ["of", 134, 10],
+            ["the", 148, 20],
+        ]);
+        expect(headingOf(subheading, body, false)).toBeNull();
     });
 
     it("keeps a name ending in its rank, not a line carrying other values", () => {

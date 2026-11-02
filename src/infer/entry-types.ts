@@ -12,6 +12,27 @@ import { toHtml, type ItemType } from "./schema.ts";
  * a schema type. Field labels and type words are the system's own vocabulary.
  */
 
+/** The system's label for its `gift` mutation category ("Gift of the Gods"). */
+const GIFT_LABEL = /\bgifts? of the gods\b/iu;
+
+/**
+ * A mutation's schema category from the nearest enclosing section naming one
+ * by the system's category labels: a Gift of the Gods, or a major or minor
+ * mutation. Null when none does (the schema's initial applies).
+ */
+export function mutationCategory(sections: readonly string[]): string | null {
+    for (const section of [...sections].reverse()) {
+        if (GIFT_LABEL.test(section)) {
+            return "gift";
+        }
+        const size = /\b(major|minor)\b/iu.exec(section)?.[1];
+        if (size !== undefined) {
+            return size.toLowerCase();
+        }
+    }
+    return null;
+}
+
 /**
  * Section-heading words → the item type catalogued beneath. Only for kinds
  * printed WITHOUT a field block; talents, skills and psychic powers identify
@@ -22,6 +43,7 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bmental disorders?\b|\bdisorders?\b/iu, "mentalDisorder"],
     [/\bmalignanc(?:y|ies)\b/iu, "malignancy"],
     [/\bmutations?\b/iu, "mutation"],
+    [GIFT_LABEL, "mutation"],
     [/\bconditions?\b/iu, "condition"],
     [/\bcriticals?\b/iu, "criticalInjury"],
     [/\bcybernetics?\b/iu, "cybernetic"],
@@ -648,6 +670,22 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "mutation": {
+            const category = mutationCategory(entry.sections);
+            if (category !== null) {
+                system["category"] = category;
+            }
+            // A field labelled by a Chaos alignment is that power's rider.
+            const riders = entry.fields.flatMap(([label, value]) => {
+                const alignment = PREREQUISITE_ALIGNMENTS.find((a) => a === label.trim().toLowerCase());
+                return alignment === undefined ? [] : [{ alignment, description: toHtml(value) }];
+            });
+            if (riders.length > 0) {
+                system["gift"] = { riders };
+            }
+            variantized["effect"] = toHtml(text("effect") ?? entry.body);
+            break;
+        }
         case "order": {
             // The printed kind and action ("Sweeping Order (Free Action)"),
             // qualified by an `Order:` line when the kind is printed apart.
