@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
-import { ALL_HULLS, HULL_TYPES, SHIP_WEAPON_TYPES, WEAPON_TYPES } from "./schema.ts";
+import { ALL_HULLS, GEAR_CATEGORIES, HULL_TYPES, SHIP_WEAPON_TYPES, WEAPON_TYPES } from "./schema.ts";
 
 /**
  * Parsers for the generic d100 stat notation printed in stat tables — dice
@@ -251,6 +251,25 @@ export function parseWeaponType(raw: string): string | null {
         return words.some((_, i) => parts.every((p, j) => names(words[i + j] ?? "", p)));
     });
     return found.length === 1 ? (found[0] ?? null) : null;
+}
+
+/**
+ * The gear category a table's caption names ("Tools", "Clothing and Personal
+ * Gear", "Drugs & Consumables") → the first of the schema's gear categories
+ * it names, singular or plural; null when it names none.
+ */
+export function parseGearCategory(raw: string): string | null {
+    const words = clean(raw)
+        .toLowerCase()
+        .split(/[^a-z]+/u)
+        .filter((w) => w.length > 0);
+    for (const word of words) {
+        const hit = GEAR_CATEGORIES.find((c) => c === word || `${c}s` === word || c === `${word}s`);
+        if (hit !== undefined && hit !== "general") {
+            return hit;
+        }
+    }
+    return null;
 }
 
 /** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */

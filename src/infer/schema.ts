@@ -105,6 +105,23 @@ export const WEAPON_TYPES = [
     "xenos",
 ] as const;
 
+/** The system's gear categories (the gear `category` choices; `general` is the initial value). */
+export const GEAR_CATEGORIES = [
+    "general",
+    "tools",
+    "drugs",
+    "consumable",
+    "clothing",
+    "survival",
+    "communications",
+    "detection",
+    "medical",
+    "tech",
+    "religious",
+    "luxury",
+    "contraband",
+] as const;
+
 export const ACTOR_SEGMENT = "actors-bestiary";
 
 /** The system's ship hull types (the ship component `hullType` choices). */

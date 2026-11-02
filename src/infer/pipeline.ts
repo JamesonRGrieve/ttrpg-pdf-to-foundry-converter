@@ -36,7 +36,7 @@ import {
     stripHeadingLabel,
     wordsOf,
 } from "./names.ts";
-import { captionWeaponClass, parseWeaponType } from "./notation.ts";
+import { captionWeaponClass, parseGearCategory, parseWeaponType } from "./notation.ts";
 import { listedBase, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
@@ -516,6 +516,13 @@ function extractTables(
                     parseWeaponType(table.tableTitle ?? "");
                 if (weaponType !== null) {
                     mapped.system["type"] = weaponType;
+                }
+            }
+            // A gear table's caption names its items' category ("Tools").
+            if (itemType === "gear" && mapped.system["category"] === undefined) {
+                const category = parseGearCategory(table.tableTitle ?? "");
+                if (category !== null) {
+                    mapped.system["category"] = category;
                 }
             }
             for (const u of mapped.unparsed) {

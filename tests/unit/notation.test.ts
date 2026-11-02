@@ -8,6 +8,7 @@ import {
     parseAvailabilityByPlace,
     parseCoverage,
     parseDamage,
+    parseGearCategory,
     parseHullTypes,
     parseInteger,
     parseQualities,
@@ -22,6 +23,20 @@ import {
     parseWeaponType,
     parseWeight,
 } from "../../src/infer/notation.ts";
+
+describe("parseGearCategory", () => {
+    it("reads the first schema gear category a caption names", () => {
+        expect(parseGearCategory("Tools")).toBe("tools");
+        expect(parseGearCategory("Clothing and Personal Gear")).toBe("clothing");
+        expect(parseGearCategory("Drugs & Consumables")).toBe("drugs");
+        expect(parseGearCategory("Consumable Supplies")).toBe("consumable");
+    });
+
+    it("names none for a caption naming no category but the initial one", () => {
+        expect(parseGearCategory("Gear")).toBeNull();
+        expect(parseGearCategory("General Equipment")).toBeNull();
+    });
+});
 
 describe("parseWeaponType", () => {
     it("reads the one schema weapon type a section row or caption names", () => {
