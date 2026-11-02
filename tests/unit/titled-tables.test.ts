@@ -5,7 +5,9 @@ import {
     cutAtEdges,
     detectTitledTables,
     splitHeaderRuns,
+    withRepeatedHeaders,
 } from "../../src/infer/detect-titled-tables.ts";
+import type { TableRow } from "../../src/infer/types.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun {
@@ -602,5 +604,40 @@ describe("tables with no caption", () => {
             ...record(655, "Ember Hook"),
         ]);
         expect(detectTitledTables(ir)).toEqual([]);
+    });
+});
+
+describe("withRepeatedHeaders", () => {
+    const row = (...texts: string[]): TableRow => ({
+        cells: texts.map((text, colIndex) => ({ colIndex, text, isHeader: false })),
+        isHeaderRow: false,
+        isSectionHeader: false,
+        sectionName: null,
+    });
+    const headers = ["Name", "Locations Covered", "AP"];
+
+    it("reads a repeat of the header as one, and words before its first label as a section", () => {
+        const rows = withRepeatedHeaders(
+            [
+                row("Glow Hood", "Head", "2"),
+                row("Name", "Locations Covered", "AP"),
+                row("Ember Plate Name", "Locations Covered", "AP"),
+                row("Ember Vest", "Body", "4"),
+            ],
+            headers,
+        );
+        expect(rows.map((r) => [r.isHeaderRow, r.isSectionHeader, r.sectionName])).toEqual([
+            [false, false, null],
+            [true, false, null],
+            [false, true, "Ember Plate"],
+            [true, false, null],
+            [false, false, null],
+        ]);
+    });
+
+    it("keeps a record whose other cells are not the header's labels", () => {
+        const rows = withRepeatedHeaders([row("Lamp Name", "Head", "2")], headers);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.isHeaderRow).toBe(false);
     });
 });

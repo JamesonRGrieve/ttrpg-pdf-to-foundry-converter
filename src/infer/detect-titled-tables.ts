@@ -1103,7 +1103,7 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
                 ).filter(inCopy),
             }))
             .filter((line) => line.runs.length > 0);
-        dataRows.push(...readRows(copy, bounds));
+        dataRows.push(...withRepeatedHeaders(readRows(copy, bounds), headers.slice(start, start + period)));
     }
 
     // A section row set above the header names the first part's section.
@@ -1156,6 +1156,34 @@ export function leadSection(lines: readonly RawRow[], header: RawRow): string | 
         above.y - header.y > LEAD_SECTION_FACTOR * size
         ? null
         : text;
+}
+
+/**
+ * A row repeating the table's header labels, column for column, is the header
+ * printed again over the next part of the table, not a record. Words set
+ * before the first label in its first cell ("Carapace Armour Name" over
+ * "Name") are that part's section row.
+ */
+export function withRepeatedHeaders(rows: readonly TableRow[], headers: readonly string[]): TableRow[] {
+    const labels = headers.map(normalizeHeader);
+    const first = labels[0] ?? "";
+    return rows.flatMap((row): TableRow[] => {
+        if (row.isHeaderRow || row.isSectionHeader || labels.length < MIN_COLUMNS || first === "") {
+            return [row];
+        }
+        const text = (col: number): string => row.cells.find((c) => c.colIndex === col)?.text ?? "";
+        const repeats = labels.every((label, col) => col === 0 || normalizeHeader(text(col)) === label);
+        const key = normalizeHeader(text(0));
+        if (!repeats || !(key === first || key.endsWith(` ${first}`))) {
+            return [row];
+        }
+        const header: TableRow = { ...row, isHeaderRow: true };
+        const words = text(0).trim().split(/\s+/u);
+        const section = words.slice(0, words.length - first.split(" ").length).join(" ");
+        return key === first
+            ? [header]
+            : [{ cells: [], isHeaderRow: false, isSectionHeader: true, sectionName: section }, header];
+    });
 }
 
 /**
