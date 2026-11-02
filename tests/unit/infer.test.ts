@@ -1359,6 +1359,11 @@ describe("entry typing", () => {
         // A doubled display initial still names the catalogue; "… Powers" names its discipline.
         expect(printedDiscipline(["PPsychic Disciplines", "LAMPCRAFT"])).toBe("Lampcraft");
         expect(printedDiscipline(["Psychic Powers", "Wick Powers"])).toBe("Wick");
+        // A section of disciplines is a catalogue; a catalogue qualified by its powers' kind is their discipline.
+        expect(printedDiscipline(["the Lamp disciplines", "bright LAMPCRAFT"])).toBe("Bright Lampcraft");
+        expect(printedDiscipline(["Lesser Psychic Powers", "Lesser Psychic Power Descriptions"])).toBe(
+            "Lesser Psychic Powers",
+        );
         expect(printedDiscipline(["Equipment"])).toBe("");
         // A section naming its discipline as such names it by the words before the word.
         expect(printedDiscipline(["Psychic Disciplines", "Lampcraft Discipline: Wick Techniques"])).toBe(

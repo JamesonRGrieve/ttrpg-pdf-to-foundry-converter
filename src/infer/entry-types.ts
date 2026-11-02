@@ -512,7 +512,9 @@ export function structuredPrerequisites(printed: string): {
  * A section heading naming the psychic-power catalogue as a whole (a display
  * heading's initial may be doubled by the text layer: "PPsychic Disciplines").
  */
-const POWER_CATALOGUE = /psychic (?:powers?|disciplines?)\b/iu;
+const POWER_CATALOGUE = /psychic (?:powers?|disciplines?)\b|\bdisciplines\b/iu;
+/** A catalogue heading qualified by what its powers are ("Minor Psychic Powers"): itself a discipline. */
+const QUALIFIED_CATALOGUE = /^\s*(?!the\b)\p{L}[\p{L}\s-]*\s+psychic\s+powers\s*$/iu;
 /** A discipline heading closing on the kind of what it groups: "Lampcraft Powers". */
 const GROUP_NOUN = /\s+powers\s*$/iu;
 
@@ -532,7 +534,8 @@ export function printedDiscipline(sections: readonly string[]): string {
         .map((s) => /^\s*(?:the\s+)?(?<name>\S.*?)\s+discipline\b/iu.exec(s)?.groups?.["name"])
         .findLast((n) => n !== undefined);
     // A section naming its powers ("Lampcraft Powers") names the discipline by the words before.
-    const own = named ?? under.at(-1)?.replace(GROUP_NOUN, "");
+    const qualified = sections.findLast((s) => QUALIFIED_CATALOGUE.test(s));
+    const own = named ?? under.at(-1)?.replace(GROUP_NOUN, "") ?? qualified;
     return own === undefined ? "" : cleanName(own);
 }
 
