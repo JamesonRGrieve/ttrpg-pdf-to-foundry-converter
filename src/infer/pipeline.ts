@@ -23,6 +23,7 @@ import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import { entryItem, entryType, joinSkillCharacteristics, typeNamedBy } from "./entry-types.ts";
 import { applyDefaultIcons } from "./icons.ts";
+import { applyCuePresets } from "./cue-presets.ts";
 import { applyIdentifiers } from "./identifiers.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
 import {
@@ -1703,6 +1704,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     embedNpcItems(entities);
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
+    applyCuePresets(entities);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
