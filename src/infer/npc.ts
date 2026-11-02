@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject } from "../types/entity.ts";
 import { diagramArmour, HIT_LOCATIONS, type HitLocation, type LocationArmour } from "./armour-diagram.ts";
+import { inlineWeapons } from "./inline-weapons.ts";
 import { splitTier } from "./names.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import { panelWeapons } from "./panel-weapons.ts";
@@ -403,8 +404,13 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
         .map((entry) => {
             const inner = CLOSING_PARENTHETICAL.exec(entry)?.groups?.["inner"]?.trim() ?? "";
             if (type === "weapon") {
-                // The name ends where its profile opens, however the line runs on.
-                return { name: /^[^(:]+/u.exec(entry)?.[0].trim() ?? entry, type };
+                // The name ends where its profile opens, however the line runs on;
+                // a profile printed in the brackets is the weapon's own.
+                const name = /^[^(:]+/u.exec(entry)?.[0].trim() ?? entry;
+                const [profile] = inlineWeapons(entry);
+                return profile === undefined
+                    ? { name, type }
+                    : { name, type, system: mapRow("weapon", profile.cells).system };
             }
             // A talent's specialisation and a trait's rating are the schema's
             // own fields of the item, no part of its name.

@@ -672,12 +672,15 @@ describe("npc statblocks", () => {
             { name: "Keen Eye", type: "talent" },
             { name: "Hatred", type: "talent", specialization: "Moths, Gnats" },
         ]);
-        expect(
-            listedItems("Wick Lance (1d10+2 R; Pen 2), Lamp Staff: (1d5 I). Trailing prose.", "weapon"),
-        ).toEqual([
-            { name: "Wick Lance", type: "weapon" },
-            { name: "Lamp Staff", type: "weapon" },
-        ]);
+        const weapons = listedItems(
+            "Wick Lance (1d10+2 R; Pen 2), Lamp Staff: (1d5 I). Trailing prose.",
+            "weapon",
+        );
+        expect(weapons.map((w) => w.name)).toEqual(["Wick Lance", "Lamp Staff"]);
+        // A profile printed in the brackets is the weapon's own.
+        const lance = weapons[0]?.system;
+        expect([lance?.["class"], Object(lance?.["damage"])["formula"]]).toEqual(["melee", "1d10"]);
+        expect(weapons[1]?.system).toBeUndefined();
         // A trait's rating is its level; any other parenthetical stays in its name.
         expect(listedItems("Dim Sight (+2); lantern; Glow (Bright)", "trait")).toEqual([
             { name: "Dim Sight", type: "trait", system: { level: 2 } },
