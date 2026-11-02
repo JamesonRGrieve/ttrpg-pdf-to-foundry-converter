@@ -476,6 +476,29 @@ describe("titled tables", () => {
         const [table] = detectTitledTables(ir);
         expect(table?.rows[0]?.cells.find((c) => c.colIndex === 2)?.text).toBe("†");
     });
+
+    it("takes no display heading sharing a baseline with another heading for a header", () => {
+        // A caption whose own rows print no header; further down, a display
+        // heading and the next entry's heading in the other column share a
+        // baseline. They are two headings, not a table's column labels.
+        const field = (label: string, value: string, x: number, y: number): IRTextRun[] => [
+            run(label, x, y, bold),
+            run(value, x + 70, y),
+        ];
+        const ir = irOf([
+            run("Table 7-1: Lantern Omens", 60, 740, bold),
+            run("A gutter of the wick bodes well for the road ahead.", 60, 720),
+            run("WICKCRAFT", 60, 487, { ...bold, size: 18 }),
+            run("GLIM", 300, 483, { ...bold, size: 11.25 }),
+            run("SHIELD", 330, 483, { ...bold, size: 11.25 }),
+            ...field("Value:", "300xp", 300, 471),
+            ...field("Action:", "Half Action", 300, 459),
+            ...field("Range:", "10m", 300, 447),
+            run("The lamp-wright bends flame to the will.", 60, 470),
+            run("Each glim answers to its keeper alone.", 60, 458),
+        ]);
+        expect(detectTitledTables(ir).flatMap((t) => t.headers)).not.toContain("WICKCRAFT");
+    });
 });
 
 describe("header runs holding two labels", () => {

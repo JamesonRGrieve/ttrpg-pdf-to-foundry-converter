@@ -750,6 +750,12 @@ const TABLE_END_GAP_FACTOR = 3;
 const PROSE_RUN_LENGTH = 40;
 /** A run this many times the records' median size is a heading set below the table. */
 const DISPLAY_SIZE_FACTOR = 1.15;
+/**
+ * Labels of one header differ in size by less than this ratio (a small-caps
+ * label's initial is set a little larger); a run this much larger than another
+ * on the line is a display heading sharing its baseline.
+ */
+const DISPLAY_HEADING_FACTOR = 1.5;
 
 /** A line opening with a bold `Label:` — a field line of prose, not a table record. */
 function opensWithLabel(line: RawRow): boolean {
@@ -852,8 +858,16 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
  */
 function isHeaderRow(row: RawRow, edges: readonly number[]): boolean {
     const labels = mergeAdjacentText(headerLabels(row).runs, edges);
-    // `Label:` runs are field labels in prose, not column headings.
-    return labels.length >= MIN_COLUMNS && !labels.some((l) => l.text.trim().endsWith(":"));
+    // `Label:` runs are field labels in prose, not column headings; nor is a
+    // display heading set on another's baseline (sizes no header mixes).
+    const sizes = headerLabels(row)
+        .runs.filter((r) => r.text.trim().length > 0)
+        .map((r) => r.size);
+    return (
+        labels.length >= MIN_COLUMNS &&
+        !labels.some((l) => l.text.trim().endsWith(":")) &&
+        Math.max(...sizes) < DISPLAY_HEADING_FACTOR * Math.min(...sizes)
+    );
 }
 
 /**
