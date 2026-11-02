@@ -11,6 +11,8 @@
  * Manifest:
  *   { "referenceRoot": "<compendium tree: <group>/<pack>/_source/*.json>",
  *     "cacheDir": "<optional IR/OCR cache>",
+ *     "systemRoot": "<optional wh40k-rpg system checkout: its Foundry-free NPC
+ *                    migrations then read both sides as the system loads them>",
  *     "books": [{ "name": "<id>", "pdf": "<path>", "target": "<target id>",
  *                 "line": "<line key>", "reference": "<source.book label>" }] }
  *
@@ -23,7 +25,15 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { moduleDocuments } from "./lib/modules.mjs";
-import { type BookReport, citesBook, type Doc, scoreBook } from "./lib/parity.ts";
+import {
+    asLoaded,
+    type BookReport,
+    citesBook,
+    type Doc,
+    type Json,
+    type Loader,
+    scoreBook,
+} from "./lib/parity.ts";
 
 const { values } = parseArgs({
     options: {
@@ -52,9 +62,46 @@ interface Book {
 interface Manifest {
     referenceRoot: string;
     cacheDir?: string;
+    systemRoot?: string;
     books: Book[];
 }
 const manifest = JSON.parse(readFileSync(values.manifest, "utf8")) as Manifest;
+
+type Migration = (source: Record<string, unknown>) => void;
+/** The system's own legacy NPC migrations, in the order its NPC model applies them. */
+const NPC_MIGRATIONS = [
+    "migrateArmourPoints",
+    "migrateArmour",
+    "migrateMove",
+    "migrateCharacteristics",
+    "migrateWeapons",
+    "migrateSkills",
+] as const;
+
+/** A loader applying the system's Foundry-free NPC migrations, or the built-in reading without a system checkout. */
+async function systemLoader(root: string | undefined): Promise<Loader> {
+    if (root === undefined) {
+        return asLoaded;
+    }
+    const module = (await import(join(root, "src/module/data/actor/npc-import-migration.ts"))) as Record<
+        string,
+        Migration | undefined
+    >;
+    const migrations = NPC_MIGRATIONS.map((name) => module[name]).filter(
+        (m): m is Migration => m !== undefined,
+    );
+    return (type, system) => {
+        if (type !== "npc" || typeof system !== "object" || system === null || Array.isArray(system)) {
+            return system;
+        }
+        const source = structuredClone(system) as Record<string, unknown>;
+        for (const migrate of migrations) {
+            migrate(source);
+        }
+        return source as Json;
+    };
+}
+const load = await systemLoader(manifest.systemRoot);
 const outRoot = resolve(values.out ?? ".tmp/parity");
 const SHOW = Number(values.show ?? "8");
 const only = values.only === undefined ? null : new Set(values.only.split(","));
@@ -109,7 +156,7 @@ for (const book of books) {
     const refs = reference.filter(
         (d) => typeof d["type"] === "string" && d["type"] !== "" && citesBook(d, book.line, book.reference),
     );
-    reports[book.name] = scoreBook(refs, output, book.line);
+    reports[book.name] = scoreBook(refs, output, book.line, load);
 }
 
 const pct = (x: number): string => `${(100 * x).toFixed(1)}`;

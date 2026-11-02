@@ -625,8 +625,21 @@ export function matchDocuments(
 
 const show = (v: Json | undefined): string => (v === undefined ? "∅" : JSON.stringify(v));
 
-/** Score one book's output documents against its reference documents for `line`. */
-export function scoreBook(reference: readonly Doc[], output: readonly Doc[], line: string): BookReport {
+/** A document's `system` as the system loads it, for a type key. */
+export type Loader = (type: string, system: Json | undefined) => Json | undefined;
+
+/**
+ * Score one book's output documents against its reference documents for
+ * `line`. `load` reads each side's `system` as the system loads it (default:
+ * the built-in `asLoaded`; the runner passes the system's own migrations when
+ * it can import them).
+ */
+export function scoreBook(
+    reference: readonly Doc[],
+    output: readonly Doc[],
+    line: string,
+    load: Loader = asLoaded,
+): BookReport {
     const ref = keyed(reference);
     const out = keyed(output);
     const byName = new Map<string, string>();
@@ -669,8 +682,8 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
         }
         r.matched += 1;
         r.tiers[match.tier] = (r.tiers[match.tier] ?? 0) + 1;
-        const wantLeaves = leaves(asLoaded(type, want["system"]), line);
-        const gotLeaves = leaves(asLoaded(type, got["system"]), line);
+        const wantLeaves = leaves(load(type, want["system"]), line);
+        const gotLeaves = leaves(load(type, got["system"]), line);
         for (const path of [...wantLeaves.keys()]) {
             if (NOT_IN_SCHEMA.has(`${type}:${path}`)) {
                 wantLeaves.delete(path);
