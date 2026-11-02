@@ -79,6 +79,8 @@ import {
     namingEntry,
     listsCaption,
     weaponProfileText,
+    vehicleParts,
+    ownProfileText,
     isBlank,
     actionGroupsOf,
     criticalEffects,
@@ -2659,6 +2661,38 @@ describe("statblock prose", () => {
             "RNG 60M ROF S/-/- DMG 2D10 (E)",
             "SPECIAL: TEARING",
         ]);
+    });
+
+    it("takes a craft's weapons heading, even set like its name, and the weapon profiles headed under it", () => {
+        const entry = (text: string, style: string, body = "", fields: [string, string][] = []): Entry => ({
+            heading: { text, size: 9, style, pageIndex: 0 },
+            sections: [],
+            fields,
+            body,
+        });
+        const entries = [
+            entry("LAMP CRAWLER", "craft", "A lumbering lamp.\n\nFRONT: 12 SIDE: 10 REAR: 8"),
+            entry("weapons", "craft", "One hull-mounted gun:"),
+            entry("Glow Gun CLASS HEAVY", "profile", "RNG 30M ROF S/-/- DMG 1D10 (E)", [
+                ["SPECIAL", "FLAME"],
+            ]),
+            entry("WICK CRAWLER", "craft", "Another lamp."),
+        ];
+        expect(vehicleParts(entries, 0, new Set()).map((e) => e.heading.text)).toEqual([
+            "weapons",
+            "Glow Gun CLASS HEAVY",
+        ]);
+        // A weapons heading set like the craft's name but after another part ends the parts.
+        const later = [entries[0], entry("Wick Rules", "rule"), entries[1]].filter((e) => e !== undefined);
+        expect(vehicleParts(later, 0, new Set()).map((e) => e.heading.text)).toEqual(["Wick Rules"]);
+        // A profile in the craft's own text.
+        const own = entry(
+            "LAMP CRAWLER",
+            "craft",
+            "A lumbering lamp.\n\nGlow Gun CLASS HEAVY\n\nRNG 30M ROF S/-/-",
+        );
+        expect(ownProfileText(own)).toBe("Glow Gun CLASS HEAVY\nRNG 30M ROF S/-/-");
+        expect(ownProfileText(entries[3] ?? own)).toBeNull();
     });
 
     it("knows a heading listing several creatures names none of them more fully", () => {

@@ -853,6 +853,13 @@ function isWeaponProfile(entry: Entry): boolean {
     );
 }
 
+/** A boxed weapon profile printed in a craft's own text, under no weapons heading: its lines from the first name line on. */
+export function ownProfileText(entry: Entry): string | null {
+    const lines = entry.body.split(/\n+/u);
+    const first = lines.findIndex((line) => isWeaponNameLine(rejoinSmallCaps(line)));
+    return first < 0 ? null : lines.slice(first).join("\n");
+}
+
 /**
  * A boxed weapon profile entry as panel lines: each weapon's name line and
  * profile lines, then its qualities. The entry's qualities fields are dealt
@@ -881,7 +888,7 @@ export function weaponProfileText(entry: Entry): string {
  * in its style, the next profile, an entry typed as an item by its own fields,
  * or a heading in another style.
  */
-function vehicleParts(entries: readonly Entry[], index: number, claimed: ReadonlySet<Entry>): Entry[] {
+export function vehicleParts(entries: readonly Entry[], index: number, claimed: ReadonlySet<Entry>): Entry[] {
     const head = entries[index];
     if (head === undefined) {
         return [];
@@ -900,9 +907,11 @@ function vehicleParts(entries: readonly Entry[], index: number, claimed: Readonl
             parts.push(entry);
             continue;
         }
+        // Its weapons heading may be set like its own name; no craft is named "Weapons".
+        const ownWeapons = parts.length === 0 && headsWeapons(entry);
         if (
             claimed.has(entry) ||
-            entry.heading.style === head.heading.style ||
+            (entry.heading.style === head.heading.style && !ownWeapons) ||
             (style !== undefined && entry.heading.style !== style) ||
             entry.heading.pageIndex - head.heading.pageIndex > PART_PAGE_REACH ||
             entryType(entry) !== null ||
@@ -974,6 +983,10 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
         }),
     ].filter(([label]) => isProse(label) || WEAPONS_LABEL.test(label));
     const isWeapons = ([label]: [string, string]): boolean => WEAPONS_LABEL.test(label);
+    const own = ownProfileText(entry);
+    if (own !== null) {
+        rules.push([WEAPONS_RULE, own]);
+    }
     const carried = mountedWeapons(
         out,
         name,
