@@ -84,6 +84,7 @@ import {
     namingEntry,
     listsCaption,
     weaponProfileText,
+    weaponsPartRules,
     vehicleParts,
     ownProfileText,
     isBlank,
@@ -2856,6 +2857,27 @@ describe("statblock prose", () => {
             "RNG 60M ROF S/-/- DMG 2D10 (E)",
             "SPECIAL: TEARING",
         ]);
+    });
+
+    it("deals a weapons heading's Special lines to the profiles it prints, its other fields rules", () => {
+        const part: Entry = {
+            heading: { text: "weapons", size: 9, style: "craft", pageIndex: 0 },
+            sections: [],
+            fields: [
+                ["Special", "FLAME"],
+                ["Special", "TEARING"],
+                ["Huge Wheels", "It crosses anything."],
+            ],
+            body: "It carries two guns:\n\nGlow Gun Class HEAVY\n\nRNG 30M DMG 1D10 (E)\n\nWick Gun Class HEAVY\n\nRNG 20M DMG 1D5 (E)",
+        };
+        expect(weaponsPartRules(part)).toEqual([
+            [
+                "weapons",
+                "It carries two guns:\nGlow Gun Class HEAVY\nRNG 30M DMG 1D10 (E)\nSpecial: FLAME\nWick Gun Class HEAVY\nRNG 20M DMG 1D5 (E)\nSpecial: TEARING",
+            ],
+            ["Huge Wheels", "It crosses anything."],
+        ]);
+        expect(weaponsPartRules({ ...part, fields: [] })).toEqual([["weapons", part.body]]);
     });
 
     it("takes a craft's weapons heading, even set like its name, and the weapon profiles headed under it", () => {

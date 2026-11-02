@@ -894,6 +894,19 @@ export function weaponProfileText(entry: Entry): string {
 }
 
 /**
+ * A craft's weapons heading as rules: its text under the heading's label, the
+ * `Special` lines of the boxed profiles it prints dealt to them in order (as
+ * `weaponProfileText` does), and its other fields as the craft's own rules.
+ */
+export function weaponsPartRules(part: Entry): [string, string][] {
+    const special = ([label]: readonly [string, string]): boolean => QUALITIES_LABEL.test(label.trim());
+    const text = part.fields.some(special)
+        ? weaponProfileText({ ...part, heading: { ...part.heading, text: "" } }).trim()
+        : part.body.trim();
+    return [[part.heading.text.trim(), text], ...part.fields.filter((f) => !special(f))];
+}
+
+/**
  * The entries printed as parts of the entry at `index`: those after it, all in
  * one heading style other than its own, within a page — up to the next heading
  * in its style, the next profile, an entry typed as an item by its own fields,
@@ -975,7 +988,7 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
         ...entry.fields,
         ...parts.flatMap((part): [string, string][] => {
             if (headsWeapons(part)) {
-                return [[part.heading.text.trim(), part.body.trim()]];
+                return weaponsPartRules(part);
             }
             if (profiles.has(part)) {
                 return [
