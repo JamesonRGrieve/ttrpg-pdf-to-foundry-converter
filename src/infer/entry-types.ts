@@ -54,6 +54,8 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     // "Weapon Qualities", "Weapon Special Qualities" (a text layer may drop the space).
     [/\bweapons?\s*(?:special\s*)?qualit(?:y|ies)\b/iu, "weaponQuality"],
     [/\borders\b/iu, "order"],
+    // (a text layer may run the word before on: "Usingnavigator Powers")
+    [/navigator\s*powers?\b/iu, "navigatorPower"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -210,15 +212,15 @@ const SHIP = /\b(?:star|void)?ships?\b|\bvoidcraft\b/iu;
  * names a catalogue kind. A nearest kind that is a fielded one (a "Talents"
  * section) gives none: its field-less headings are section furniture.
  */
-function sectionType(sections: readonly string[]): ItemType | null {
+function sectionType(sections: readonly string[]): { type: ItemType; section: string } | null {
     for (const [i, section] of [...sections.entries()].reverse()) {
         const type = typeNamedBy(section);
         if (type !== null) {
-            return type;
+            return { type, section };
         }
         // A ship's actions are the schema's orders (ship orders and commands).
         if (ACTIONS.test(section) && sections.slice(0, i).some((outer) => SHIP.test(outer))) {
-            return "order";
+            return { type: "order", section };
         }
         if (FIELDED_KINDS.some(([re]) => re.test(section))) {
             return null;
@@ -226,6 +228,14 @@ function sectionType(sections: readonly string[]): ItemType | null {
     }
     return null;
 }
+
+const lastWord = (text: string): string =>
+    text
+        .trim()
+        .split(/[^\p{L}]+/u)
+        .filter((w) => w.length > 0)
+        .at(-1)
+        ?.toLowerCase() ?? "";
 
 /**
  * The fielded kind an entry's own text refers to itself as ("… each time the
@@ -336,13 +346,19 @@ export function entryType(entry: Entry): ItemType | null {
     if (KIND_WORD.test(heading)) {
         return null;
     }
-    const type = sectionType(entry.sections);
+    const typed = sectionType(entry.sections);
+    if (typed === null) {
+        return null;
+    }
+    const { type, section } = typed;
     // A heading naming a group of actions ("Extended Actions") heads part of
-    // an orders section, as one naming its own kind does.
+    // an orders section, as one naming its own kind does — or closing on the
+    // plural its section closes on ("Initial Powers" under "… Powers").
+    const groupNoun = lastWord(section);
     if (
-        type === null ||
         typeNamedBy(heading) === type ||
-        (type === "order" && /\bactions\b/iu.test(heading))
+        (type === "order" && /\bactions\b/iu.test(heading)) ||
+        (groupNoun.endsWith("s") && lastWord(heading) === groupNoun)
     ) {
         return null;
     }
@@ -710,6 +726,24 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "navigatorPower": {
+            // Each mastery level's effect is printed under its level's name.
+            const levels: JsonObject = {};
+            for (const level of ["novice", "adept", "master"]) {
+                const effect = text(level);
+                if (effect !== undefined) {
+                    levels[level] = { effect: toHtml(effect) };
+                }
+            }
+            if (Object.keys(levels).length > 0) {
+                system["levels"] = levels;
+            }
+            const sustain = text("sustain") ?? text("sustained");
+            if (sustain !== undefined) {
+                system["sustain"] = toHtml(sustain);
+            }
+            break;
+        }
         case "weaponQuality":
             // A quality printed with a rating placeholder ("Blast (X)") takes a level.
             system["hasLevel"] = /\(\s*x\s*\)/iu.test(name);

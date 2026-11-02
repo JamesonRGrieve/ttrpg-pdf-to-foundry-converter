@@ -49,7 +49,8 @@ export type ItemType =
     | "shipComponent"
     | "shipWeapon"
     | "order"
-    | "weaponQuality";
+    | "weaponQuality"
+    | "navigatorPower";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -74,6 +75,7 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     shipWeapon: "items-ship-weapons",
     order: "items-orders",
     weaponQuality: "items-weapon-qualities",
+    navigatorPower: "items-navigator-powers",
 };
 
 /** The system's ship weapon types (the ship weapon `weaponType` choices). */

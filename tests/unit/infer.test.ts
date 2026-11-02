@@ -1095,6 +1095,27 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types navigator powers with their mastery levels; a heading closing on the section's plural is furniture", () => {
+        const sections = ["Navigators", "Navigator Powers"];
+        const glance = entry(
+            "The Long GLANCE",
+            [
+                ["Novice", "See far."],
+                ["Adept", "See farther."],
+                ["Master", "See all."],
+            ],
+            sections,
+        );
+        expect(entryType(glance)).toBe("navigatorPower");
+        expect(entryItem(glance, "navigatorPower").system["levels"]).toEqual({
+            novice: { effect: "<p>See far.</p>" },
+            adept: { effect: "<p>See farther.</p>" },
+            master: { effect: "<p>See all.</p>" },
+        });
+        expect(entryType(entry("Initial Powers", [], sections))).toBeNull();
+        expect(entryType(entry("Usingnavigator Powers", [], ["Navigators"]))).toBeNull();
+    });
+
     it("types a ship's actions and an orders section's entries as orders", () => {
         const ship = ["Starships", "Starship Combat", "ACtions"];
         expect(entryType(entry("drift slowly", [], ship))).toBe("order");
