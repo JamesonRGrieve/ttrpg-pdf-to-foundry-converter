@@ -55,6 +55,23 @@ const all = (v: string): Record<string, string> =>
     Object.fromEntries(["H", "AR", "AL", "B", "LR", "LL"].map((k) => [k, v]));
 
 describe("armourDiagram", () => {
+    it("sums the smaller figures a location sets side by side, a run set twice counting once", () => {
+        const runs = diagram({ ...all("1"), H: "-" }, all("9"));
+        // A second small figure beside each armour figure (a natural armour).
+        const extra = runs
+            .filter((r) => r.size === 7 && r.text !== "01-10")
+            .map((r) => ({ ...r, x: r.x + 8, text: "3" }));
+        const twice = extra.slice(0, 1);
+        expect(armourDiagram([...runs, ...extra, ...twice])?.figures).toEqual({
+            head: 3,
+            body: 4,
+            leftArm: 4,
+            rightArm: 4,
+            leftLeg: 4,
+            rightLeg: 4,
+        });
+    });
+
     it("reads the smaller figure where a location prints armour and soak", () => {
         const armour = { ...all("4"), H: "-", B: "6" };
         expect(armourDiagram(diagram(armour, all("9")))).toEqual({

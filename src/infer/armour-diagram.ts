@@ -83,12 +83,44 @@ function words(runs: readonly IRTextRun[]): Placed[] {
 const isFigure = (w: Placed): boolean => /^(?:\d{1,2}|[-–—])$/u.test(w.text);
 const figureValue = (w: Placed): number => (/^\d+$/u.test(w.text) ? Number(w.text) : 0);
 
+/** Most points between the armour figures a location prints side by side. */
+const PAIR_REACH = 12;
+/** Baseline difference within which two figures sit on one line. */
+const LINE_TOLERANCE = 1.5;
+/** Figures this close on a line are one figure (a text layer may set a run twice). */
+const SAME_PLACE = 0.5;
+
+/**
+ * A location's armour where the diagram sets its smaller figures side by
+ * side ("1 3": worn armour beside a natural or machine armour figure): their
+ * sum — the location's armour points — with a dash counting none.
+ */
+function pairedArmour(figure: Placed, small: readonly Placed[]): number {
+    return small
+        .filter((f) => Math.abs(f.y - figure.y) <= LINE_TOLERANCE && Math.abs(f.x - figure.x) <= PAIR_REACH)
+        .reduce((sum, f) => sum + figureValue(f), 0);
+}
+
 /**
  * The armour at each location of a diagram among `runs` (a statblock's runs
  * beside its characteristics); null when they print no such diagram.
  */
 export function armourDiagram(runs: readonly IRTextRun[]): ArmourDiagram | null {
-    const placed = groupByBaseline([...runs], 2).flatMap((line) => words(line.runs));
+    // A text layer may set a run twice at one place; it is one run.
+    const once: IRTextRun[] = [];
+    for (const r of runs) {
+        if (
+            !once.some(
+                (o) =>
+                    o.text === r.text &&
+                    Math.abs(o.x - r.x) <= SAME_PLACE &&
+                    Math.abs(o.y - r.y) <= SAME_PLACE,
+            )
+        ) {
+            once.push(r);
+        }
+    }
+    const placed = groupByBaseline(once, 2).flatMap((line) => words(line.runs));
     const labels = placed.flatMap((w) => {
         const location = LOCATION_TOKENS[w.text.toLowerCase()];
         return location === undefined ? [] : [{ location, at: w }];
@@ -114,7 +146,7 @@ export function armourDiagram(runs: readonly IRTextRun[]): ArmourDiagram | null 
     for (const { location, at } of labels) {
         const figure = nearest(at, twoKinds ? small : big);
         if (figure !== undefined) {
-            figuresAt[location] = figureValue(figure);
+            figuresAt[location] = twoKinds ? pairedArmour(figure, small) : figureValue(figure);
             read += 1;
         }
     }
