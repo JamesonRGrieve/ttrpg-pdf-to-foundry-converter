@@ -78,6 +78,7 @@ import {
     namingEntry,
     isBlank,
     kindEntry,
+    kindNamed,
     mergeInto,
     preferTableBenefit,
     modalHeadingSizes,
@@ -2648,6 +2649,18 @@ describe("section-qualified table names", () => {
         expect(carried.get(second)).toBe("Ember Weapons");
         expect(carried.has(first)).toBe(false);
         expect(carriedSections([first, other]).size).toBe(0);
+        // A captioned table's sub-table may set fewer columns of its own.
+        const narrower = { ...table([row(["Spark", "1"])]), headers: ["Name", "Cost"] };
+        expect(carriedSections([first, narrower]).get(narrower)).toBe("Ember Weapons");
+    });
+
+    it("names a variety under a kind section by the full name the document prints", () => {
+        const text = "the wick grenade burns; a fire pot is thrown. two glow grenades lit.";
+        expect(kindNamed("Wick", "grenade", text)).toBe("Wick Grenade");
+        expect(kindNamed("Glow", "grenade", text)).toBe("Glow Grenade");
+        expect(kindNamed("Fire Pot", "grenade", text)).toBe("Fire Pot");
+        expect(kindNamed("Ember Grenade", "grenade", text)).toBe("Ember Grenade");
+        expect(kindNamed("Wick", "las", text)).toBe("Wick");
     });
 
     it("leaves a catalogue that repeats a name or two", () => {

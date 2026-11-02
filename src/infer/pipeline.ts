@@ -425,6 +425,16 @@ function extractTables(
     const tables = [...titled, ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex))];
     let unclassified = 0;
     const carried = carriedSections(tables);
+    // The document's running text, lower-cased, read once when a row needs it.
+    let text: string | undefined;
+    const documentText = (): string => {
+        text ??= ir.runs
+            .map((r) => r.text)
+            .join(" ")
+            .replace(/\s+/gu, " ")
+            .toLowerCase();
+        return text;
+    };
     for (const table of tables) {
         // A captioned roll table is a RollTable, whatever items its rows also define.
         addRollTable(table, out);
@@ -531,6 +541,7 @@ function extractTables(
                 continue;
             }
             const cells = rowCells(row, roles);
+            let fullName = name;
             if (captionTier !== undefined && cells.tier === undefined) {
                 cells.tier = captionTier;
             }
@@ -557,6 +568,11 @@ function extractTables(
                 if (weaponType !== null) {
                     mapped.system["type"] = weaponType;
                 }
+            }
+            // A row naming only its kind's variety ("Frag" under "Grenades")
+            // takes the full name the document prints for it.
+            if (itemType === "weapon") {
+                fullName = kindNamed(name, mapped.system["type"], documentText());
             }
             // An armour's type is named by its section row ("Carapace Armour"),
             // else the caption, else its own name ("Flak Cloak").
@@ -589,7 +605,7 @@ function extractTables(
             for (const u of mapped.unparsed) {
                 out.warnings.push(`p${out.page(table.pageIndex)} ${name}: unparsed ${u}`);
             }
-            records.push({ name, itemType, cells, mapped });
+            records.push({ name: fullName, itemType, cells, mapped });
         }
         for (const { name, itemType, mapped } of withSubProfiles(records)) {
             out.add(
@@ -612,6 +628,32 @@ function extractTables(
     }
     log.info(`tables: ${tables.length} detected, ${unclassified} unclassified`);
     return { tables: tables.length, unclassified, tableRuns: new Set(titled.flatMap((t) => t.runs)) };
+}
+
+/**
+ * The schema's weapon types that name a kind of object rather than a
+ * technology: a row under them may print only its variety ("Frag" under
+ * "Grenades").
+ */
+const KIND_WEAPON_TYPES: ReadonlySet<string> = new Set(["grenade"]);
+
+/**
+ * A weapon row naming only its variety under a section of a kind (`type`
+ * "grenade"): its name with the kind's noun, when the document prints that
+ * full name ("frag grenade(s)") — a variety whose own name ends on another
+ * noun ("Fire Bomb") is never printed so, and keeps its name.
+ */
+export function kindNamed(name: string, type: JsonValue | undefined, text: string): string {
+    if (typeof type !== "string" || !KIND_WEAPON_TYPES.has(type)) {
+        return name;
+    }
+    const words = name.toLowerCase().split(/[^\p{L}]+/u);
+    if (words.includes(type) || words.includes(`${type}s`)) {
+        return name;
+    }
+    const escaped = name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    const printed = new RegExp(`(?:^|[^\\p{L}])${escaped}\\s+${type}s?(?![\\p{L}])`, "u");
+    return printed.test(text) ? `${name} ${type.charAt(0).toUpperCase()}${type.slice(1)}` : name;
 }
 
 /** One table row read as an item. */
@@ -1683,10 +1725,13 @@ export function fitModifications(entities: readonly Entity[], line: Line, book: 
 /**
  * A section row closing one part of a table the layout split into parts
  * heads the part after it (the next table, under the same caption and
- * headers): the section each such part opens under.
+ * headers): the section each such part opens under. A captioned table's
+ * sub-tables may each set their own columns ("Grenades" closing the part
+ * before, its records under fewer headers): the caption alone keys those.
  */
 export function carriedSections(tables: readonly DetectedTable[]): Map<DetectedTable, string> {
-    const keyOf = (t: DetectedTable): string => `${t.tableTitle ?? ""}\u0000${t.headers.join("\u0000")}`;
+    const keyOf = (t: DetectedTable): string =>
+        t.tableTitle === null ? `\u0000${t.headers.join("\u0000")}` : t.tableTitle;
     const out = new Map<DetectedTable, string>();
     tables.forEach((table, i) => {
         const next = tables[i + 1];
