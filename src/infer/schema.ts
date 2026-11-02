@@ -278,6 +278,30 @@ export function descriptionContainer(line: Line, html: string): JsonObject {
     return variant(line, { value: html, chat: "", summary: "" });
 }
 
+/**
+ * Each line's short label, as the system's source records lead a book's
+ * title with it ("DH2: <title>"; the first line's records read "DH").
+ * Labels of the line ids, not product names.
+ */
+const LINE_LABELS: Readonly<Record<Line, string>> = {
+    dh1: "DH",
+    dh2: "DH2",
+    rt: "RT",
+    dw: "DW",
+    bc: "BC",
+    ow: "OW",
+    im: "IM",
+};
+
+/**
+ * The `book` of a source record: the line's label and the book's own title
+ * ("DH2: <title>"), the standardized string the system's source records
+ * carry, so a sheet cites "DH2: <title>, p.12" rather than a pack slug.
+ */
+export function sourceBookLabel(line: Line, title: string): string {
+    return `${LINE_LABELS[line]}: ${title}`;
+}
+
 /** A `raw` provenance record: rules-as-written from `book`, printed `page`. */
 export function sourceRecord(line: Line, book: string, page: string): JsonObject {
     return variant(line, { provenance: "raw", book, page });

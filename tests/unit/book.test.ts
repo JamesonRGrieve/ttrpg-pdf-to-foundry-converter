@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { inferBookSlug, MAX_BOOK_SLUG } from "../../src/infer/book.ts";
+import { inferBookSlug, inferBookTitle, MAX_BOOK_SLUG, MAX_BOOK_TITLE } from "../../src/infer/book.ts";
+import { sourceBookLabel } from "../../src/infer/schema.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 const run = (text: string, pageIndex: number, x: number, y: number, size: number): IRTextRun => ({
@@ -64,5 +65,24 @@ describe("inferBookSlug", () => {
 
     it("is untitled with no title and no text", () => {
         expect(inferBookSlug(ir(null, []))).toBe("untitled");
+    });
+});
+
+describe("inferBookTitle", () => {
+    it("keeps the title as the PDF gives it, whitespace collapsed, for source records", () => {
+        expect(inferBookTitle(ir("  The  Lantern\nCodex ", []))).toBe("The Lantern Codex");
+        expect(inferBookTitle(ir(null, [run("Codex", 1, 200, 700, 24), run("Lantern", 1, 100, 700, 24)]))).toBe(
+            "Lantern Codex",
+        );
+        expect(inferBookTitle(ir(null, []))).toBe("Untitled");
+        const long = inferBookTitle(ir(Array.from({ length: 40 }, (_, i) => `word${i}`).join(" "), []));
+        expect(long.length).toBeLessThanOrEqual(MAX_BOOK_TITLE);
+        expect(long.endsWith(" ")).toBe(false);
+    });
+
+    it("cites the book in a source record as the line's label and its title", () => {
+        expect(sourceBookLabel("dh2", "The Lantern Codex")).toBe("DH2: The Lantern Codex");
+        expect(sourceBookLabel("dh1", "The Lantern Codex")).toBe("DH: The Lantern Codex");
+        expect(sourceBookLabel("rt", "Wick")).toBe("RT: Wick");
     });
 });

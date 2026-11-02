@@ -5,7 +5,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
-import { inferBookSlug } from "./book.ts";
+import { inferBookSlug, inferBookTitle } from "./book.ts";
 import { classifyTable } from "./classify.ts";
 import {
     headerRole,
@@ -56,6 +56,7 @@ import {
     CRAFT_SEGMENT,
     itemSegment,
     packName,
+    sourceBookLabel,
     toHtml,
     type ItemType,
     type Line,
@@ -163,8 +164,11 @@ class EntityCollector {
 
     constructor(
         readonly target: TargetSchema,
+        /** The book's slug: names the packs. */
         readonly book: string,
         readonly numbering: PageNumbering,
+        /** The book as its documents' source records cite it ("DH2: <title>"). */
+        readonly sourceBook: string,
     ) {
         this.line = target.line;
     }
@@ -328,7 +332,7 @@ function extractTableItem(table: DetectedTable, type: ItemType, out: EntityColle
             type,
             name,
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             page: out.page(table.pageIndex),
             description: "",
             system: {},
@@ -370,7 +374,7 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
                     type,
                     name,
                     line: out.line,
-                    book: out.book,
+                    book: out.sourceBook,
                     page: out.page(table.pageIndex),
                     description: effect,
                     system: {},
@@ -508,7 +512,7 @@ function extractTables(
                     type: itemType,
                     name,
                     line: out.line,
-                    book: out.book,
+                    book: out.sourceBook,
                     page: out.page(table.pageIndex),
                     description: "",
                     system: mapped.system,
@@ -746,7 +750,7 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
             actorType: out.target.actorTypes[kind],
             name,
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             page: out.page(entry.heading.pageIndex),
             description: toHtml(prose),
             system,
@@ -796,7 +800,7 @@ function addShip(
             actorType: out.target.actorTypes.voidcraft,
             name,
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             page: out.page(entry.heading.pageIndex),
             description: toHtml(
                 [entry.body, ...rules.map(([label, value]) => `${label}: ${value}`)].join("\n\n"),
@@ -993,7 +997,7 @@ function extractEntries(
                 type,
                 name: item.name,
                 line: out.line,
-                book: out.book,
+                book: out.sourceBook,
                 page: out.page(entry.heading.pageIndex),
                 description: item.description,
                 system: item.system,
@@ -1015,7 +1019,7 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
             name: cleanName(origin.name),
             step: origin.step,
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             page: out.page(origin.pageIndex),
             description: toHtml(origin.description),
             grants: origin.grants,
@@ -1069,7 +1073,7 @@ function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): 
                     type: "weapon",
                     name: weapon.name,
                     line: out.line,
-                    book: out.book,
+                    book: out.sourceBook,
                     page: out.page(entry.heading.pageIndex),
                     description: "",
                     system: mapped.system,
@@ -1151,7 +1155,7 @@ function addRollTable(table: DetectedTable, out: EntityCollector): void {
         buildRollTable({
             name: cleanName(table.tableTitle),
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             page: out.page(table.pageIndex),
             die: roll.die,
             results: roll.results,
@@ -1277,7 +1281,7 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
             name,
             actorType: out.target.actorTypes.npc,
             line: out.line,
-            book: out.book,
+            book: out.sourceBook,
             // Cited where its statblock is printed; its introduction may
             // begin a page earlier.
             page: out.page(grid.pageIndex),
@@ -1302,7 +1306,7 @@ function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector):
                     type: "trait",
                     name: cleanName(ability.name),
                     line: out.line,
-                    book: out.book,
+                    book: out.sourceBook,
                     page: out.page(ability.pageIndex),
                     description: toHtml(ability.text),
                     system: { benefit: toHtml(ability.text) },
@@ -1516,7 +1520,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const numbering = inferPageNumbering(ir);
     log.info(`book "${book}", page offset ${numbering.offset}, target ${line}`);
 
-    const out = new EntityCollector(target, book, numbering);
+    const out = new EntityCollector(target, book, numbering, sourceBookLabel(line, inferBookTitle(ir)));
     const descriptions = new Map<string, string>();
     const { tables, unclassified, tableRuns } = extractTables(ir, out, log);
     const detected = detectEntries(ir, tableRuns);
