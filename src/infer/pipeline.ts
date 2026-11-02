@@ -51,7 +51,7 @@ import {
     parseWeaponType,
     splitTrailingClass,
 } from "./notation.ts";
-import { listedBase, parseNpc } from "./npc.ts";
+import { listedBase, type NpcItem, type ParsedNpc, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
     originStepNamedBy,
@@ -64,6 +64,7 @@ import {
     readOriginTable,
 } from "./origin-paths.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
+import { variantGrid } from "./profile-variants.ts";
 import { buildRollTable, rollResults } from "./roll-tables.ts";
 import { mapRow, NO_DAMAGE, type RowCells, type RowMapping, rowType } from "./rows.ts";
 import {
@@ -1403,13 +1404,7 @@ function extractActors(
             system,
         });
         // Bare until `embedNpcItems` finds the document's own copy of each.
-        actor["items"] = npc.items.map(({ name: itemName, type, specialization, system: own }) => ({
-            name: cleanName(itemName),
-            type,
-            system: { ...own, ...(specialization === undefined ? {} : { specialization }) },
-            effects: [],
-            flags: {},
-        }));
+        actor["items"] = npc.items.map(bareItem);
         out.add("Actor", ACTOR_SEGMENT, actor, grid.pageIndex, "grid:npc");
         // A statblock's named rules are traits of their own.
         for (const ability of npc.abilities) {
@@ -1430,7 +1425,59 @@ function extractActors(
             );
         }
     }
-    return grids.length;
+    return grids.length + extractProfileVariants(grids, npcs, entries, out);
+}
+
+const bareItem = ({ name, type, specialization, system }: NpcItem): JsonObject => ({
+    name: cleanName(name),
+    type,
+    system: { ...system, ...(specialization === undefined ? {} : { specialization }) },
+    effects: [],
+    flags: {},
+});
+
+/**
+ * Statblocks printed as variants of a profile beside them (see
+ * `profile-variants.ts`): each is the profile's NPC with the variant's own
+ * values, fields and items written over it. Returns how many were read.
+ */
+function extractProfileVariants(
+    grids: readonly DetectedNumericGrid[],
+    npcs: readonly ParsedNpc[],
+    entries: readonly Entry[],
+    out: EntityCollector,
+): number {
+    const profiles = [...grids].sort((a, b) => a.pageIndex - b.pageIndex);
+    let count = 0;
+    for (const entry of entries) {
+        const variant = variantGrid(entry, profiles);
+        const base = variant === null ? undefined : npcs[grids.indexOf(variant.profile)];
+        if (variant === null || base === undefined) {
+            continue;
+        }
+        const own = parseNpc(variant.grid);
+        const listed = new Set(own.items.map((i) => nameKey(i.name)));
+        const heading = entry.heading.text.trim();
+        // A name set in small capitals whose case was lost is capitalised.
+        const name = /\p{Lu}/u.test(heading)
+            ? heading
+            : heading.replace(/(^|\s)(\p{Ll})/gu, (_, s, c: string) => `${s}${c.toUpperCase()}`);
+        const actor = buildActor({
+            name: cleanName(name),
+            actorType: out.target.actorTypes.npc,
+            line: out.line,
+            book: out.sourceBook,
+            page: out.page(entry.heading.pageIndex),
+            description: toHtml(entry.body),
+            system: { ...structuredClone(base.system), ...own.system },
+        });
+        actor["items"] = [...own.items, ...base.items.filter((i) => !listed.has(nameKey(i.name)))].map(
+            bareItem,
+        );
+        out.add("Actor", ACTOR_SEGMENT, actor, entry.heading.pageIndex, "variant:npc");
+        count += 1;
+    }
+    return count;
 }
 
 /** The Item types a statblock's gear list may name: physical items other than weapons. */
