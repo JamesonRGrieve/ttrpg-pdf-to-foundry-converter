@@ -307,6 +307,36 @@ function modificationFor(fields: ReadonlyMap<string, string>): ItemType | null {
     return /\b(?:weapons?|ammunition|ammo)\b/iu.test(usedWith) ? "weaponModification" : null;
 }
 
+/**
+ * Whether a printed Sustained value says the power can be sustained (the
+ * schema's `sustained` is a boolean): "No" or a dash says it cannot; "Yes" or
+ * the action it costs to sustain ("Free Action") says it can.
+ */
+export function isSustained(printed: string): boolean {
+    return !/^\s*(?:no|none|n\/a|[-–—])?\s*\.?\s*$/iu.test(printed);
+}
+
+/**
+ * The experience a power costs as printed: a `Value` or `Cost` line naming xp
+ * ("300 xp"), or a bare number under a label that names xp ("XP Cost: 400").
+ * Null when the entry prints none.
+ */
+export function powerXpCost(fields: ReadonlyMap<string, string>): number | null {
+    const number = (value: string): number | null => {
+        const digits = /\d[\d,]*/u.exec(value)?.[0];
+        return digits === undefined ? null : Number(digits.replace(/,/gu, ""));
+    };
+    for (const [label, value] of fields) {
+        if (/\bxp\b|\bexperience\b/iu.test(label) && /\b(?:cost|value)\b/iu.test(label)) {
+            return number(value);
+        }
+        if (/^(?:value|cost)$/u.test(label) && /\d\s*xp\b/iu.test(value)) {
+            return number(value);
+        }
+    }
+    return null;
+}
+
 export interface EntryItem {
     type: ItemType;
     name: string;
@@ -358,14 +388,20 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 ["action", "action"],
                 ["focus power", "focusPower"],
                 ["range", "range"],
-                ["sustained", "sustained"],
-                ["sustain", "sustained"],
                 ["subtype", "subtype"],
             ] as const) {
                 const value = text(label);
                 if (value !== undefined && system[field] === undefined) {
                     system[field] = value;
                 }
+            }
+            const sustained = text("sustained") ?? text("sustain");
+            if (sustained !== undefined) {
+                system["sustained"] = isSustained(sustained);
+            }
+            const cost = powerXpCost(fields);
+            if (cost !== null) {
+                system["cost"] = cost;
             }
             const effect = text("effect");
             if (effect !== undefined) {

@@ -29,7 +29,9 @@ import {
     entryItem,
     entryType,
     headingKindTag,
+    isSustained,
     joinSkillCharacteristics,
+    powerXpCost,
     typeNamedBy,
 } from "../../src/infer/entry-types.ts";
 import {
@@ -997,8 +999,41 @@ describe("entry typing", () => {
             ["Sustain", "No"],
         ]);
         expect(entryType(sustain)).toBe("psychicPower");
-        expect(entryItem(sustain, "psychicPower").system["sustained"]).toBe("No");
+        // The schema's sustained is a boolean: a printed "No" is false.
+        expect(entryItem(sustain, "psychicPower").system["sustained"]).toBe(false);
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
+    });
+
+    it("reads a power's Sustained line as the schema's boolean", () => {
+        expect(isSustained("No")).toBe(false);
+        expect(isSustained("—")).toBe(false);
+        expect(isSustained("")).toBe(false);
+        expect(isSustained("Yes")).toBe(true);
+        expect(isSustained("Free Action")).toBe(true);
+        expect(isSustained("Half Action")).toBe(true);
+    });
+
+    it("reads a power's printed experience cost into system.cost, keeping it out of the text", () => {
+        const spark = entry(
+            "SPARK",
+            [
+                ["Value", "300 xp"],
+                ["Prerequisites", "Willpower 40"],
+                ["Focus Power", "Challenging (+0) Willpower test"],
+                ["Sustained", "No"],
+            ],
+            [],
+            "A spark leaps from the hand of the psyker.",
+        );
+        const item = entryItem(spark, "psychicPower");
+        expect(item.system["cost"]).toBe(300);
+        // The description is the printed text, never the cost line (content#30).
+        expect(item.description).toBe("<p>A spark leaps from the hand of the psyker.</p>");
+        expect(powerXpCost(new Map([["xp cost", "1,200"]]))).toBe(1200);
+        expect(powerXpCost(new Map([["cost", "200 xp"]]))).toBe(200);
+        // A cost in coin is not experience.
+        expect(powerXpCost(new Map([["cost", "50"]]))).toBeNull();
+        expect(powerXpCost(new Map([["value", "rare"]]))).toBeNull();
     });
 
     it("keeps a talent's printed alignment where its aptitudes go", () => {
