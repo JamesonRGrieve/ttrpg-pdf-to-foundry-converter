@@ -22,7 +22,13 @@ import { detectNumericGrids } from "./detect-grids.ts";
 import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
-import { entryItem, entryType, joinSkillCharacteristics, typeNamedBy } from "./entry-types.ts";
+import {
+    entryItem,
+    entryType,
+    joinPactGroups,
+    joinSkillCharacteristics,
+    typeNamedBy,
+} from "./entry-types.ts";
 import { applyDefaultIcons } from "./icons.ts";
 import { applyIdentifiers } from "./identifiers.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
@@ -1718,7 +1724,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     // A statblock's panel is no running prose: its lines join no entry.
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
-    const entries = extractEntries(joinSkillCharacteristics(detected), out, descriptions);
+    const entries = extractEntries(joinPactGroups(joinSkillCharacteristics(detected)), out, descriptions);
     const grids = extractActors(ir, numeric, detected, out);
     extractOriginPaths(detected, runningHeads(ir), out);
     const inline = extractInlineWeapons(detected, out);

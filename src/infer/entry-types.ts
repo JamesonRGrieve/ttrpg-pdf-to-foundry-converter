@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Entry } from "./detect-entries.ts";
+import { identifierFromName } from "./identifiers.ts";
 import { caseLost, cleanName } from "./names.ts";
 import { parseAvailability, parseAvailabilityByPlace, parseWeight } from "./notation.ts";
 import { toHtml, type ItemType } from "./schema.ts";
@@ -295,6 +296,10 @@ export function entryType(entry: Entry): ItemType | null {
     // the entry (statblocks are read from their characteristic grids).
     if (has(fields, "skills") && has(fields, "talents", "traits")) {
         return null;
+    }
+    // A pact under a section of dark pacts (the schema's kind, by its label).
+    if (/\bpact\b/iu.test(entry.heading.text) && entry.sections.some((s) => DARK_PACTS.test(s))) {
+        return "darkPact";
     }
     const tagged = headingKindTag(entry.heading.text);
     if (tagged !== null) {
@@ -643,6 +648,42 @@ const splitList = (s: string): string[] =>
         .map((x) => x.trim())
         .filter((x) => x.length > 0);
 
+/** A section of dark pacts (the schema's `darkPact` kind by its label). */
+const DARK_PACTS = /\bdark pacts?\b/iu;
+
+/** Sub-headings naming a dark pact's schema lists, each field beneath one an entry of it. */
+const PACT_GROUPS: Readonly<Record<string, "boons" | "banes">> = {
+    boon: "boons",
+    boons: "boons",
+    bane: "banes",
+    banes: "banes",
+};
+
+/**
+ * A heading's sub-headings that name a dark pact's lists ("Boons", "Banes")
+ * fold into it: each field beneath one joins the heading's fields labelled
+ * with its list ("boons: Name").
+ */
+export function joinPactGroups(entries: readonly Entry[]): Entry[] {
+    const out: Entry[] = [];
+    for (const entry of entries) {
+        const parent = out.at(-1);
+        const group = PACT_GROUPS[entry.heading.text.trim().toLowerCase()];
+        if (parent !== undefined && group !== undefined && entry.sections.at(-1) === parent.heading.text) {
+            out[out.length - 1] = {
+                ...parent,
+                fields: [
+                    ...parent.fields,
+                    ...entry.fields.map(([label, value]): [string, string] => [`${group}: ${label}`, value]),
+                ],
+            };
+            continue;
+        }
+        out.push(entry);
+    }
+    return out;
+}
+
 /** The schema's medal honour types, matched in the medal's sections ("Campaign Honours"). */
 const MEDAL_HONOURS = ["imperial", "campaign", "regimental"] as const;
 
@@ -767,6 +808,29 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "darkPact": {
+            // Its boons and banes, each a named entry of the schema's lists.
+            for (const list of ["boons", "banes"] as const) {
+                const items = entry.fields.flatMap(([label, value]) => {
+                    const named = new RegExp(`^${list}:\\s*(.+)$`, "iu").exec(label)?.[1]?.trim();
+                    return named === undefined
+                        ? []
+                        : [
+                              {
+                                  identifier: identifierFromName(named),
+                                  name: named,
+                                  description: toHtml(value),
+                                  modifiers: {},
+                                  grants: [],
+                              },
+                          ];
+                });
+                if (items.length > 0) {
+                    system[list] = items;
+                }
+            }
+            break;
+        }
         case "medal": {
             // What it is awarded for and the bonus its squad gains, as printed.
             for (const [label, key] of [

@@ -34,6 +34,7 @@ import {
     targetType,
     headingKindTag,
     isSustained,
+    joinPactGroups,
     joinSkillCharacteristics,
     mutationCategory,
     powerXpCost,
@@ -1101,6 +1102,31 @@ describe("entry typing", () => {
         expect(
             mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"],
         ).toEqual(base);
+    });
+
+    it("types pacts under a dark pacts section, their boons folded in from the sub-heading", () => {
+        const sections = ["Lore", "dark pacts", "pacts and their effects"];
+        const joined = joinPactGroups([
+            entry("pact OF EMBERS", [], sections, "A pact for warmth."),
+            entry("BOOns", [["Warm Hands", "Never cold."]], [...sections, "pact OF EMBERS"], "Banes text."),
+            entry("DRAWING ATTENTION", [], ["Lore", "dark pacts"]),
+        ]);
+        expect(joined.map((e) => e.heading.text)).toEqual(["pact OF EMBERS", "DRAWING ATTENTION"]);
+        const [pact, other] = joined;
+        if (pact === undefined || other === undefined) {
+            throw new Error("two entries expected");
+        }
+        expect(entryType(pact)).toBe("darkPact");
+        expect(entryType(other)).toBeNull();
+        expect(entryItem(pact, "darkPact").system["boons"]).toEqual([
+            {
+                identifier: "warm-hands",
+                name: "Warm Hands",
+                description: "<p>Never cold.</p>",
+                modifiers: {},
+                grants: [],
+            },
+        ]);
     });
 
     it("types medals with what they are awarded for and their squad bonus", () => {
