@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
-import { ALL_HULLS, GEAR_CATEGORIES, HULL_TYPES, SHIP_WEAPON_TYPES, WEAPON_TYPES } from "./schema.ts";
+import {
+    ALL_HULLS,
+    GEAR_CATEGORIES,
+    HULL_TYPES,
+    SHIP_COMPONENT_TYPES,
+    SHIP_WEAPON_TYPES,
+    WEAPON_TYPES,
+} from "./schema.ts";
 
 /**
  * Parsers for the generic d100 stat notation printed in stat tables — dice
@@ -270,6 +277,31 @@ export function parseGearCategory(raw: string): string | null {
         }
     }
     return null;
+}
+
+/**
+ * A table caption or section row naming a kind of ship component ("Plasma
+ * Drives", "Crew Quarters", "Xeno-tech Components") → the schema's component
+ * type: the choice whose key or label words all appear in it (a plural
+ * allowed, hyphens closed up). The longest such match wins; null when none.
+ */
+export function parseShipComponentType(raw: string): string | null {
+    const words = new Set(
+        clean(raw)
+            .toLowerCase()
+            .replace(/-/gu, "")
+            .split(/[^a-z]+/u)
+            .filter((w) => w.length > 0)
+            .flatMap((w) => [w, w.replace(/s$/u, ""), w.replace(/es$/u, "")]),
+    );
+    const keyWords = (key: string): string[] => key.split(/(?=[A-Z])/u).map((w) => w.toLowerCase());
+    const named = (wordsOf: readonly string[]): boolean =>
+        wordsOf.length > 0 && wordsOf.every((w) => words.has(w));
+    const hits = SHIP_COMPONENT_TYPES.flatMap(([key, label]) => {
+        const forms = [keyWords(key), label.toLowerCase().split(/\s+/u)].filter(named);
+        return forms.length === 0 ? [] : [{ key, length: Math.max(...forms.map((f) => f.length)) }];
+    });
+    return [...hits].sort((a, b) => b.length - a.length)[0]?.key ?? null;
 }
 
 /** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */

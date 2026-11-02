@@ -36,7 +36,12 @@ import {
     stripHeadingLabel,
     wordsOf,
 } from "./names.ts";
-import { captionWeaponClass, parseGearCategory, parseWeaponType } from "./notation.ts";
+import {
+    captionWeaponClass,
+    parseGearCategory,
+    parseShipComponentType,
+    parseWeaponType,
+} from "./notation.ts";
 import { listedBase, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
@@ -521,6 +526,16 @@ function extractTables(
                     parseWeaponType(table.tableTitle ?? "");
                 if (weaponType !== null) {
                     mapped.system["type"] = weaponType;
+                }
+            }
+            // A ship component's type is named by its section row ("Plasma
+            // Drives"), else by the caption ("Supplemental Components").
+            if (itemType === "shipComponent" && mapped.system["componentType"] === undefined) {
+                const componentType =
+                    (section === null ? null : parseShipComponentType(section)) ??
+                    parseShipComponentType(table.tableTitle ?? "");
+                if (componentType !== null) {
+                    mapped.system["componentType"] = componentType;
                 }
             }
             // A gear table's caption names its items' category ("Tools").

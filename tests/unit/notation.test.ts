@@ -17,12 +17,30 @@ import {
     parseReload,
     parseRenown,
     parseSecondaryClass,
+    parseShipComponentType,
     parseShipPower,
     parseShipWeaponType,
     parseWeaponClass,
     parseWeaponType,
     parseWeight,
 } from "../../src/infer/notation.ts";
+
+describe("parseShipComponentType", () => {
+    it("reads the component type a caption or section row names by its key or label", () => {
+        expect(parseShipComponentType("Plasma Drives")).toBe("plasmaDrive");
+        expect(parseShipComponentType("Crew Quarters")).toBe("quarters");
+        expect(parseShipComponentType("Ship’s Bridge")).toBe("bridge");
+        expect(parseShipComponentType("Augments and Upgrades")).toBe("augment");
+        expect(parseShipComponentType("Xeno-tech Components")).toBe("xenotech");
+        expect(parseShipComponentType("Supplemental Components")).toBe("supplemental");
+        expect(parseShipComponentType("Gellar Fields")).toBe("gellarField");
+    });
+
+    it("names none for a row naming no component type", () => {
+        expect(parseShipComponentType("Holds and Compartments")).toBeNull();
+        expect(parseShipComponentType("Drives")).toBeNull();
+    });
+});
 
 describe("parseGearCategory", () => {
     it("reads the first schema gear category a caption names", () => {

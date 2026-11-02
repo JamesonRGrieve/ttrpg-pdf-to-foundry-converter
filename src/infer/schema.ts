@@ -126,6 +126,28 @@ export const GEAR_CATEGORIES = [
 
 export const ACTOR_SEGMENT = "actors-bestiary";
 
+/**
+ * The system's ship component types (the ship component `componentType`
+ * choices) with the labels the system shows for them.
+ */
+export const SHIP_COMPONENT_TYPES: readonly (readonly [string, string])[] = [
+    ["essential", "Essential"],
+    ["supplemental", "Supplemental"],
+    ["weapons", "Weapons"],
+    ["auger", "Auger Array"],
+    ["gellarField", "Gellar Field"],
+    ["voidShields", "Void Shields"],
+    ["warpDrive", "Warp Drive"],
+    ["lifeSupport", "Life Support"],
+    ["quarters", "Crew Quarters"],
+    ["bridge", "Bridge"],
+    ["generatorum", "Generatorum"],
+    ["plasmaDrive", "Plasma Drive"],
+    ["augment", "Augmentation"],
+    ["archeotech", "Archeotech"],
+    ["xenotech", "Xenotech"],
+];
+
 /** The system's ship hull types (the ship component `hullType` choices). */
 export const HULL_TYPES = [
     "transport",
