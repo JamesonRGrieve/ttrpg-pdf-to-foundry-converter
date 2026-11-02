@@ -7,6 +7,7 @@ import {
     editDistance,
     embeddedByType,
     isLinksOnly,
+    knowableLines,
     leafScore,
     leaves,
     nameKey,
@@ -219,6 +220,24 @@ describe("scoreBook", () => {
         );
         expect(r.types["armour"]?.fields["availability"]).toEqual({ checks: 1, score: 1 });
         expect(r.types["armour"]?.fields["modificationSlots"]).toEqual({ checks: 1, score: 1 });
+    });
+
+    it("compares gameSystems as far as one PDF can know it", () => {
+        expect(knowableLines(["dh2", "bc", "ow"], ["dh2"], "dh2")).toEqual(["dh2"]);
+        expect(knowableLines(["dh2", "bc"], ["dh2", "bc"], "dh2")).toEqual(["dh2", "bc"]);
+        expect(knowableLines(["bc"], ["dh2"], "dh2")).toEqual([]);
+        const r = scoreBook(
+            [
+                { name: "Ward Coat", type: "armour", system: { gameSystems: ["dh1", "dh2", "rt"] } },
+                { name: "Grey Cloak", type: "armour", system: { gameSystems: ["dh2"] } },
+            ],
+            [
+                { name: "Ward Coat", type: "armour", system: { gameSystems: ["dh2"] } },
+                { name: "Grey Cloak", type: "armour", system: { gameSystems: ["dh2", "ow"] } },
+            ],
+            "dh2",
+        );
+        expect(r.types["armour"]?.fields["gameSystems"]).toEqual({ checks: 2, score: 1.5 });
     });
 
     it("leaves out a leaf holding only links into the reference's own packs", () => {

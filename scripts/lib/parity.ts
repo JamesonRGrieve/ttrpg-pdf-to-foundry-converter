@@ -13,7 +13,8 @@ import { f1, markdownToText, scoreBag, tokens } from "./bag-score.ts";
  * - A reference document's leaves are every primitive or array under
  *   `system`, with per-line (`{dh2: …}`) and per-book (`__books`) containers
  *   collapsed to the target line. Leaves under `EXCLUDED` (authored editorial
- *   data a converter cannot read off a page) are not compared.
+ *   data a converter cannot read off a page) are not compared. `gameSystems`
+ *   is compared as one PDF can know it (`knowableLines`).
  * - A leaf scores 1 when the values agree (strings ignore case, dash glyphs and
  *   runs of whitespace; a numeric string equals its number), 0 when not; an
  *   array scores the Jaccard index of its members. A leaf the output omits
@@ -394,6 +395,21 @@ export function isLinksOnly(v: Json | undefined): boolean {
         (typeof v === "string" && COMPENDIUM_LINK.test(v)) ||
         (Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && COMPENDIUM_LINK.test(x)))
     );
+}
+
+/**
+ * The reference's `gameSystems` as far as a conversion of one PDF can know it:
+ * the book's own line (printed there, so RAW), and any other line only where
+ * the output names it too. The reference also lists the other lines that print
+ * the document RAW (and, for actors, lines it was ported to by hand); which
+ * other books print it is what one PDF never shows.
+ */
+export function knowableLines(want: Json, got: Json | undefined, line: string): Json {
+    if (!Array.isArray(want)) {
+        return want;
+    }
+    const named = new Set((Array.isArray(got) ? got : []).map(String));
+    return want.filter((l) => String(l) === line || named.has(String(l)));
 }
 
 function sortKeys(v: Json): Json {
@@ -806,8 +822,9 @@ export function scoreBook(
                 got: show(got["name"]),
             });
         }
-        for (const [path, value] of wantLeaves) {
+        for (const [path, authored] of wantLeaves) {
             const gotValue = gotLeaves.get(path) ?? SCHEMA_INITIAL[`${type}:${path}`];
+            const value = path === "gameSystems" ? knowableLines(authored, gotValue, line) : authored;
             const s = leafScore(value, gotValue);
             scores.set(path, s);
             if (s < 1) {
