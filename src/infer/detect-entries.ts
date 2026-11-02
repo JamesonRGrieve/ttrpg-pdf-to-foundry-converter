@@ -109,6 +109,33 @@ export function joinRuns(runs: readonly IRTextRun[]): string {
     return text.replace(/\s+/gu, " ").trim();
 }
 
+/** Share of the narrower run two runs of one text must overlap by to be one printed text. */
+const SHADOW_OVERLAP = 0.5;
+
+/**
+ * A line's runs without the copies a page sets of its own text over it — a
+ * display heading printed twice for an outline or shadow ("TITLE" over
+ * "TITLE"): a run of the same text overlapping a kept run by half its width.
+ */
+export function withoutShadows(runs: readonly IRTextRun[]): IRTextRun[] {
+    const kept: IRTextRun[] = [];
+    for (const r of runs) {
+        const text = r.text.trim();
+        const shadow = kept.some((k) => {
+            const overlap = Math.min(k.x + k.width, r.x + r.width) - Math.max(k.x, r.x);
+            return (
+                text.length > 0 &&
+                k.text.trim() === text &&
+                overlap >= SHADOW_OVERLAP * Math.min(k.width, r.width)
+            );
+        });
+        if (!shadow) {
+            kept.push(r);
+        }
+    }
+    return kept;
+}
+
 export function buildLines(ir: IR): TextLine[] {
     const byColumn = new Map<string, IRTextRun[]>();
     for (const r of ir.runs) {
@@ -118,7 +145,7 @@ export function buildLines(ir: IR): TextLine[] {
     const out: TextLine[] = [];
     for (const columnRuns of byColumn.values()) {
         for (const group of groupByBaseline(columnRuns, BASELINE_TOLERANCE, true)) {
-            const runs = [...group.runs].sort((a, b) => numAsc(a.x, b.x));
+            const runs = withoutShadows([...group.runs].sort((a, b) => numAsc(a.x, b.x)));
             const text = joinRuns(runs);
             const [first] = runs;
             if (text.length === 0 || first === undefined) {

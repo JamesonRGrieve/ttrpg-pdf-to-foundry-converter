@@ -17,6 +17,7 @@ import {
     type TextLine,
     valueUnfinished,
     withoutFigures,
+    withoutShadows,
 } from "../../src/infer/detect-entries.ts";
 import {
     detectNumericGrids,
@@ -2270,6 +2271,13 @@ describe("entry detection", () => {
             ["Range", "You"],
         ]);
         expect(entry?.body).toContain("You dim every lamp in sight.");
+    });
+
+    it("reads a heading a page sets twice over itself once", () => {
+        const display = { ...run("LAMPCRAFT", 700, "h", 20), x: 100 };
+        const shadow = { ...display, x: 104, y: 698, size: 18, width: 9 * 9, weight: "bold" as const };
+        const word = { ...run("LAMPCRAFT", 700, "h", 20), x: 300 };
+        expect(withoutShadows([display, shadow, word])).toEqual([display, word]);
     });
 
     it("continues a field set to a measure narrower than its column", () => {
