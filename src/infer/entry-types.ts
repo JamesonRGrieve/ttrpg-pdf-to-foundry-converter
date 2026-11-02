@@ -298,6 +298,9 @@ const TAKES_ACTION = /^\s*(?:passive|(?:[\p{L}-]+\s+)?action)\s*\.?\s*$/iu;
 const ACTION_TYPE = /^\s*[\p{L}-]+\s+action\s*$/iu;
 
 export function entryType(entry: Entry): ItemType | null {
+    if (entry.listedAs !== undefined) {
+        return entry.listedAs;
+    }
     const fields = fieldMap(entry);
     // A creature's statblock lists its skills beside its talents or traits;
     // any power or ability fields beneath belong to rules inside it, not to
@@ -735,6 +738,48 @@ export function joinPactGroups(entries: readonly Entry[]): Entry[] {
         out.push(entry);
     }
     return out;
+}
+
+/** A talent's own field labels (the schema's): a talent entry, not a list of talents. */
+const TALENT_FIELD_LABELS =
+    /^(?:tier|aptitudes?|prerequisites?|benefits?|effects?|cost|type|alignment|specialisations?|specializations?)$/iu;
+/** A run-in label that names something: capitalised words, some lower case, no figures. */
+const NAMING_LABEL = /^\p{Lu}[\p{L}'’\s-]*$/u;
+/** Fewest named `Name: rules` lines that make a heading a list of what it names. */
+const MIN_LISTED = 2;
+
+/**
+ * A heading closing on the plural of the talent kind ("… Faith Talents") over
+ * nothing but run-in `Name: rules` lines lists talents: each line is a talent
+ * of its own, its rules its text, read out after the heading (which keeps its
+ * introduction). Labels that are a talent's own fields, set in capitals
+ * (a table's header) or opening on a creation step ("Starting …") are no list.
+ */
+export function splitTalentLists(entries: readonly Entry[]): Entry[] {
+    return entries.flatMap((entry) => {
+        const labels = entry.fields.map(([label]) => label.trim());
+        const lists =
+            lastWord(entry.heading.text) === "talents" &&
+            labels.length >= MIN_LISTED &&
+            labels.every(
+                (label) =>
+                    NAMING_LABEL.test(label) &&
+                    /\p{Ll}/u.test(label) &&
+                    !TALENT_FIELD_LABELS.test(label) &&
+                    !/^starting\b/iu.test(label),
+            );
+        if (!lists) {
+            return [entry];
+        }
+        const listed = entry.fields.map(([label, value]): Entry => ({
+            heading: { ...entry.heading, text: label.trim() },
+            sections: [...entry.sections, entry.heading.text],
+            fields: [],
+            body: value,
+            listedAs: "talent",
+        }));
+        return [{ ...entry, fields: [] }, ...listed];
+    });
 }
 
 /** The schema's medal honour types, matched in the medal's sections ("Campaign Honours"). */

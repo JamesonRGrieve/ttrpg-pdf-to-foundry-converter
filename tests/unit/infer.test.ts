@@ -41,6 +41,7 @@ import {
     powerXpCost,
     printedDiscipline,
     skillSpecialisations,
+    splitTalentLists,
     structuredPrerequisites,
     typeNamedBy,
 } from "../../src/infer/entry-types.ts";
@@ -1214,6 +1215,69 @@ describe("entry typing", () => {
             failure: "<p>The candles go out.</p>",
         });
         expect(entryType({ ...ritual, sections: ["Gear"] })).toBeNull();
+    });
+
+    it("reads a heading listing talents as run-in name lines into one talent per line", () => {
+        const sections = ["Allies", "WARDEN CAPTAIN"];
+        const split = splitTalentLists([
+            entry(
+                "WARDEN VIGIL TALENTS",
+                [
+                    ["Lantern Ward", "Allies within 5 metres ignore darkness."],
+                    ["The Quiet Step", "Movement makes no sound."],
+                ],
+                sections,
+                "Spend a point to use one.",
+            ),
+        ]);
+        expect(split.map((e) => e.heading.text)).toEqual([
+            "WARDEN VIGIL TALENTS",
+            "Lantern Ward",
+            "The Quiet Step",
+        ]);
+        const [list, first] = split;
+        if (list === undefined || first === undefined) {
+            throw new Error("three entries expected");
+        }
+        expect(list.fields).toEqual([]);
+        expect(list.body).toBe("Spend a point to use one.");
+        expect(entryType(first)).toBe("talent");
+        expect(first.sections).toEqual([...sections, "WARDEN VIGIL TALENTS"]);
+        const item = entryItem(first, "talent");
+        expect(item.name).toBe("Lantern Ward");
+        expect(item.system["benefit"]).toBe("<p>Allies within 5 metres ignore darkness.</p>");
+    });
+
+    it("keeps a talents heading whose lines are fields, steps or a table header", () => {
+        const unsplit = (fields: [string, string][]): number =>
+            splitTalentLists([entry("STARTING TALENTS", fields)]).length;
+        expect(
+            unsplit([
+                ["Prerequisites", "None."],
+                ["Aptitudes", "Finesse"],
+            ]),
+        ).toBe(1);
+        expect(
+            unsplit([
+                ["Starting Skills", "Awareness"],
+                ["Starting Talents", "Dodge"],
+            ]),
+        ).toBe(1);
+        expect(
+            unsplit([
+                ["NAME", "x"],
+                ["RNG", "y"],
+            ]),
+        ).toBe(1);
+        expect(unsplit([["Lantern Ward", "One alone is no list."]])).toBe(1);
+        expect(
+            splitTalentLists([
+                entry("WARDEN TRAITS", [
+                    ["Lantern Ward", "a"],
+                    ["Quiet Step", "b"],
+                ]),
+            ]).length,
+        ).toBe(1);
     });
 
     it("types pacts under a dark pacts section, their boons folded in from the sub-heading", () => {

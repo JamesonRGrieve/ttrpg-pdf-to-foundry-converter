@@ -8,6 +8,7 @@ import { percentile } from "../util/stats.ts";
 import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import { isTableCaption } from "./detect-titled-tables.ts";
 import { FUNCTION_WORDS, NUMBERED_LABEL, readsAsProse, scrambledCase } from "./names.ts";
+import type { ItemType } from "./schema.ts";
 
 /**
  * Catalogue entries (talents, traits, powers, conditions, …) found by
@@ -87,6 +88,11 @@ export interface Entry {
     /** `Label: value` fields in printed order (label without the colon). */
     fields: [string, string][];
     body: string;
+    /**
+     * The kind a list heading names its run-in entries as ("… Talents" over
+     * `Name: rules` lines): an entry read out of such a list is one of them.
+     */
+    listedAs?: ItemType;
 }
 
 export function joinRuns(runs: readonly IRTextRun[]): string {

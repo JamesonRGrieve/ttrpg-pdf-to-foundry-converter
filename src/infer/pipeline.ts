@@ -28,6 +28,7 @@ import {
     entryType,
     joinPactGroups,
     joinSkillCharacteristics,
+    splitTalentLists,
     typeNamedBy,
 } from "./entry-types.ts";
 import { applyDefaultIcons } from "./icons.ts";
@@ -1303,8 +1304,11 @@ function extractEntries(
             ...entry,
             heading: { ...entry.heading, text: stripHeadingLabel(entry.heading.text, labels) },
         };
+        // A list's run-in entry is set as the list sets it, never a component.
         const component =
-            entry.fields.length === 0 && entry.heading.size < (modal.get(type) ?? 0) - SUBHEADING_STEP;
+            entry.listedAs === undefined &&
+            entry.fields.length === 0 &&
+            entry.heading.size < (modal.get(type) ?? 0) - SUBHEADING_STEP;
         if (component) {
             const kind = kindEntry(entry, headingTypes.get(entry.sections.at(-1) ?? ""), type);
             if (kind === null) {
@@ -2223,7 +2227,11 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     // A statblock's panel is no running prose: its lines join no entry.
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
-    const entries = extractEntries(joinPactGroups(joinSkillCharacteristics(detected)), out, descriptions);
+    const entries = extractEntries(
+        splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected))),
+        out,
+        descriptions,
+    );
     const grids = extractActors(ir, numeric, detected, out);
     extractOriginPaths(detected, runningHeads(ir), out);
     const inline = extractInlineWeapons(detected, out);
