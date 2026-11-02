@@ -513,6 +513,29 @@ describe("origins granted by inline fields", () => {
         );
     });
 
+    it("reads an effect's bulleted options, set among the prose, as rules offered as a choice", () => {
+        const rt = TARGETS.rt.originSteps;
+        const sections = ["Creation", "BIRTHRIGHT"];
+        const [origin] = readEffectOrigins(
+            [
+                at(
+                    "Wick-born",
+                    "name",
+                    sections,
+                    [["Effect", "Choose one of the following results."]],
+                    "Raised by wicks.\n\n• Smoky: You gain +3 Perception. • Waxen Hands: You suffer -3 Agility.",
+                ),
+            ],
+            rt,
+        );
+        expect(origin?.description).toBe("Raised by wicks.");
+        expect(origin?.rules).toEqual([
+            { name: "Smoky", description: "You gain +3 Perception.", choice: "Effect" },
+            { name: "Waxen Hands", description: "You suffer -3 Agility.", choice: "Effect" },
+        ]);
+        expect(origin?.effect).toContain("• Waxen Hands: You suffer -3 Agility.");
+    });
+
     it("names an origin by its section when the heading is all labels, its step by a sibling heading", () => {
         const origins = readInlineOrigins(
             [

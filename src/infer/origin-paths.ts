@@ -125,6 +125,8 @@ export interface OriginPathReading {
 export interface OriginRule {
     name: string;
     description: string;
+    /** The label of the field offering it as one of a choice ("Effect"), when it is an option. */
+    choice?: string;
 }
 
 /** Most words a field label naming a rule of its own may have. */
@@ -987,6 +989,9 @@ export function sameOrigin(a: string, b: string): boolean {
     return letters(a) === letters(b);
 }
 
+/** A bulleted named option: "• Name: rules", up to the next bullet. */
+const BULLETED_RULE = /•\s*(?<name>[^:•\n]{2,60}?):\s*(?<rules>[^•]+)/gu;
+
 /** How far up an entry's sections the step naming it may be (its own section, or its parent's). */
 const STEP_SECTION_DEPTH = 2;
 
@@ -1013,17 +1018,36 @@ export function readEffectOrigins(
         if (step === undefined) {
             return [];
         }
-        const effect = entry.fields.map(([label, value]) => `${label}: ${value}`).join(PARAGRAPH_BREAK);
+        // A field offering a choice ("Effect: Choose one of the following …")
+        // lists its options as bulleted `Name: rules` items, which a layout
+        // may set apart from the field, among the entry's prose.
+        const offering = entry.fields.find(([, value]) => CHOOSE_ONE.test(value));
+        const options =
+            offering === undefined
+                ? []
+                : [...entry.body.matchAll(BULLETED_RULE)].flatMap((m) => {
+                      const ruleName = m.groups?.["name"]?.trim() ?? "";
+                      const rules = m.groups?.["rules"]?.replace(/\s+/gu, " ").trim() ?? "";
+                      return namesRule(ruleName) && rules.length > 0
+                          ? [{ name: ruleName, description: rules, choice: offering[0].trim(), whole: m[0] }]
+                          : [];
+                  });
+        const body = options.reduce((text, o) => text.replace(o.whole, ""), entry.body).trim();
+        const effect = [
+            ...entry.fields.map(([label, value]) => `${label}: ${value}`),
+            ...options.map((o) => `• ${o.name}: ${o.description}`),
+        ].join(PARAGRAPH_BREAK);
         const name = headingName(entry.heading.text).trim();
         return [
             {
                 name: caseLost(name) ? capitalizeWords(name.toLowerCase()) : name,
                 step,
                 pageIndex: entry.heading.pageIndex,
-                description: entry.body,
+                description: body,
                 grants: {},
                 modifiers: { ...signedCharacteristicChanges(effect), ...characteristicChanges(effect) },
                 effect,
+                ...(options.length === 0 ? {} : { rules: options.map(({ whole: _whole, ...rule }) => rule) }),
             },
         ];
     });

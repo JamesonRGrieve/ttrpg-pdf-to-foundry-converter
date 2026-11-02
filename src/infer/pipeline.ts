@@ -1344,7 +1344,23 @@ function extractOriginPaths(
     for (const { origin, pageIndex, rules, owner } of ruled) {
         for (const rule of rules) {
             const name = addOriginRule(out, rule, origin, pageIndex);
-            if (owner !== undefined) {
+            if (owner !== undefined && rule.choice !== undefined) {
+                // An option of a choice: the origin offers the talent among the others.
+                const choices = Array.isArray(owner.grants["choices"]) ? owner.grants["choices"] : [];
+                const label = rule.choice;
+                const group = choices.find(
+                    (c): c is JsonObject => isJsonObject(c) && c["type"] === "talent" && c["label"] === label,
+                );
+                const option = { name, label: name, value: name };
+                if (group === undefined) {
+                    owner.grants["choices"] = [
+                        ...choices,
+                        { type: "talent", label, count: 1, options: [option] },
+                    ];
+                } else {
+                    group["options"] = [...(Array.isArray(group["options"]) ? group["options"] : []), option];
+                }
+            } else if (owner !== undefined) {
                 const talents = owner.grants["talents"];
                 owner.grants["talents"] = [
                     ...(Array.isArray(talents) ? talents : []),
