@@ -382,8 +382,10 @@ const LIST_ITEM_TYPE = { talents: "talent", traits: "trait", weapons: "weapon", 
 /** A parenthetical closing a listed name: a talent's specialisation, a weapon's profile. */
 const CLOSING_PARENTHETICAL = /^(?<base>[^(]+?)\s*\((?<inner>.*)\)\s*$/su;
 
-/** A trait's rating in its closing parenthetical: "(2)", "(+3)". */
-const TRAIT_RATING = /^\+?\s*(?<n>\d{1,3})$/u;
+/** A trait's rating in its closing parenthetical: "(2)", "(+3)", or with the short label of what it rates ("(PR 3)"). */
+const TRAIT_RATING = /^(?:\p{L}{1,3}\s*)?\+?\s*(?<n>\d{1,3})$/u;
+/** A trait's rating set after its name: "Fear 3". */
+const TRAILING_RATING = /^(?<base>.*\p{L})\s+\+?(?<n>\d{1,3})$/u;
 
 /** A list entry recording that the statblock has none of the kind. */
 const NO_ENTRY = /^\s*(?:none|n\/a|[-–—]+)\s*$/iu;
@@ -417,9 +419,21 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
             if (type === "talent" && inner.length > 0) {
                 return { name: listedBase(entry), type, specialization: inner };
             }
-            const rating = type === "trait" ? TRAIT_RATING.exec(inner)?.groups?.["n"] : undefined;
-            return rating === undefined
+            if (type !== "trait") {
+                return { name: entry, type };
+            }
+            // A trait's rating is bracketed ("(2)", "(PR 3)") or set after its
+            // name ("Fear 3"); any other bracketed word is its specialisation.
+            const rating = TRAIT_RATING.exec(inner)?.groups?.["n"];
+            if (rating !== undefined) {
+                return { name: listedBase(entry), type, system: { level: Number(rating) } };
+            }
+            if (inner.length > 0) {
+                return { name: listedBase(entry), type, specialization: inner };
+            }
+            const trailing = TRAILING_RATING.exec(entry.trim())?.groups;
+            return trailing?.["base"] === undefined
                 ? { name: entry, type }
-                : { name: listedBase(entry), type, system: { level: Number(rating) } };
+                : { name: trailing["base"], type, system: { level: Number(trailing["n"]) } };
         });
 }

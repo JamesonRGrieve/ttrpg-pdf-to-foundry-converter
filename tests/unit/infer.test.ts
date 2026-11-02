@@ -688,11 +688,16 @@ describe("npc statblocks", () => {
         const lance = weapons[0]?.system;
         expect([lance?.["class"], Object(lance?.["damage"])["formula"]]).toEqual(["melee", "1d10"]);
         expect(weapons[1]?.system).toBeUndefined();
-        // A trait's rating is its level; any other parenthetical stays in its name.
-        expect(listedItems("Dim Sight (+2); lantern; Glow (Bright)", "trait")).toEqual([
+        // A trait's rating is its level, bracketed (perhaps with its short label) or set
+        // after its name; any other parenthetical is its specialisation.
+        expect(
+            listedItems("Dim Sight (+2); lantern; Glow (Bright); Wick Sense (WR 4); Dread 3", "trait"),
+        ).toEqual([
             { name: "Dim Sight", type: "trait", system: { level: 2 } },
             { name: "lantern", type: "trait" },
-            { name: "Glow (Bright)", type: "trait" },
+            { name: "Glow", type: "trait", specialization: "Bright" },
+            { name: "Wick Sense", type: "trait", system: { level: 4 } },
+            { name: "Dread", type: "trait", system: { level: 3 } },
         ]);
     });
 
