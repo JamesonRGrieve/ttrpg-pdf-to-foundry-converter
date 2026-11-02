@@ -1096,6 +1096,17 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types vehicle traits apart from traits, and nothing under an umbrella naming a fielded kind", () => {
+        const vehicles = ["Armoury", "Vehicles", "VEHICLE TRAITS"];
+        expect(entryType(entry("HOVERING", [], vehicles))).toBe("vehicleTrait");
+        expect(entryItem(entry("PLATED (X)", [], vehicles), "vehicleTrait").system["hasLevel"]).toBe(true);
+        // "Talents and Traits" heads both kinds: its other headings are no traits.
+        expect(entryType(entry("CREATING FOLLOWERS", [], ["Talents and Traits", "Followers"]))).toBeNull();
+        expect(entryType(entry("GLOWING", [], ["Talents and Traits", "Traits", "Trait Descriptions"]))).toBe(
+            "trait",
+        );
+    });
+
     it("types navigator powers with their mastery levels; a heading closing on the section's plural is furniture", () => {
         const sections = ["Navigators", "Navigator Powers"];
         const glance = entry(

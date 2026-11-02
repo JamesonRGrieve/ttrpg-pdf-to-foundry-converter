@@ -56,6 +56,7 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\borders\b/iu, "order"],
     // (a text layer may run the word before on: "Usingnavigator Powers")
     [/navigator\s*powers?\b/iu, "navigatorPower"],
+    [/\bvehicle traits?\b/iu, "vehicleTrait"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -214,6 +215,11 @@ const SHIP = /\b(?:star|void)?ships?\b|\bvoidcraft\b/iu;
  */
 function sectionType(sections: readonly string[]): { type: ItemType; section: string } | null {
     for (const [i, section] of [...sections.entries()].reverse()) {
+        // A section naming a fielded kind ("Talents"), even beside a
+        // field-less one ("Talents and Traits"), types none of its headings.
+        if (FIELDED_KINDS.some(([re]) => re.test(section))) {
+            return null;
+        }
         const type = typeNamedBy(section);
         if (type !== null) {
             return { type, section };
@@ -221,9 +227,6 @@ function sectionType(sections: readonly string[]): { type: ItemType; section: st
         // A ship's actions are the schema's orders (ship orders and commands).
         if (ACTIONS.test(section) && sections.slice(0, i).some((outer) => SHIP.test(outer))) {
             return { type: "order", section };
-        }
-        if (FIELDED_KINDS.some(([re]) => re.test(section))) {
-            return null;
         }
     }
     return null;
@@ -745,7 +748,8 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             break;
         }
         case "weaponQuality":
-            // A quality printed with a rating placeholder ("Blast (X)") takes a level.
+        case "vehicleTrait":
+            // A quality or trait printed with a rating placeholder ("Blast (X)") takes a level.
             system["hasLevel"] = /\(\s*x\s*\)/iu.test(name);
             variantized["effect"] = toHtml(text("effect") ?? entry.body);
             break;
