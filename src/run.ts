@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { inferDnd5e } from "./infer/dnd5e/index.ts";
 import { infer } from "./infer/pipeline.ts";
-import { type Line, LINES, packFlags, packSegment } from "./infer/schema.ts";
+import { type Line, LINES, packFlags, packSegment, withBuilderRanks } from "./infer/schema.ts";
 import { type SystemId, type Target, TARGET_IDS, targetId } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
@@ -253,12 +253,20 @@ export async function runModule(
         const segment = line === undefined ? null : packSegment(pack, line, booksOf(line));
         return line === undefined || segment === null ? undefined : packFlags(line, segment);
     };
+    const declared = grouped.flatMap(({ group, packs }) =>
+        packs.flatMap((p) => {
+            const flags = system === "wh40k-rpg" ? flagsOf(group, p.pack) : undefined;
+            return flags === undefined ? [] : [{ name: p.pack, flags }];
+        }),
+    );
+    // Ranked once over the whole module: the builder's ranks run 1..N per line.
+    const systemFlagsOf = withBuilderRanks(declared);
     const module = buildModule({
         system,
         targets,
         packs: grouped.flatMap(({ group, packs }) =>
             packs.map((p) => {
-                const systemFlags = system === "wh40k-rpg" ? flagsOf(group, p.pack) : undefined;
+                const systemFlags = systemFlagsOf.get(p.pack);
                 return {
                     name: p.pack,
                     label: packLabel(p.pack, group),

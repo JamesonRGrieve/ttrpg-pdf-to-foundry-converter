@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { packCategory, packFlags, packSegment } from "../../src/infer/schema.ts";
+import { packCategory, packFlags, packSegment, withBuilderRanks } from "../../src/infer/schema.ts";
 import {
     buildModule,
     MODULE_ASSET_PLACEHOLDER,
@@ -163,6 +163,34 @@ describe("module packaging", () => {
         expect(packCategory("origins-elite-advances")).toBe("origins-elite-advances");
         expect(packCategory("vehicles-terracraft")).toBe("vehicles-terracraft");
         expect(packFlags("rt", "rolltables")).toEqual({ line: "rt", category: "rolltables", homebrew: false });
+    });
+
+    it("ranks the packs the character builder reads 1..N per line, in pack-name order", () => {
+        const ranked = withBuilderRanks([
+            { name: "dh2-wick-origins-roles", flags: packFlags("dh2", "origins-roles") },
+            { name: "dh2-lamps-origins-homeworlds", flags: packFlags("dh2", "origins-homeworlds") },
+            { name: "dh2-lamps-origins-divinations", flags: packFlags("dh2", "origins-divinations") },
+            { name: "rt-lamps-origins-homeworlds", flags: packFlags("rt", "origins-homeworlds") },
+            { name: "dh2-lamps-items-weapons", flags: packFlags("dh2", "items-weapons") },
+            { name: "dh2-lamps-items-gear", flags: packFlags("dh2", "items-gear") },
+            { name: "dh2-lamps-items-talents", flags: packFlags("dh2", "items-talents") },
+            // A pack read from two documents is ranked once.
+            { name: "dh2-lamps-items-gear", flags: packFlags("dh2", "items-gear") },
+        ]);
+        expect(ranked.get("dh2-lamps-origins-homeworlds")).toEqual({
+            line: "dh2",
+            category: "origins-homeworlds",
+            homebrew: false,
+            originBuilder: 1,
+        });
+        expect(ranked.get("dh2-wick-origins-roles")?.["originBuilder"]).toBe(2);
+        expect(ranked.get("rt-lamps-origins-homeworlds")?.["originBuilder"]).toBe(1);
+        // A divination is written in, never picked from a pack.
+        expect(ranked.get("dh2-lamps-origins-divinations")).not.toHaveProperty("originBuilder");
+        expect(ranked.get("dh2-lamps-items-gear")?.["startingEquipment"]).toBe(1);
+        expect(ranked.get("dh2-lamps-items-weapons")?.["startingEquipment"]).toBe(2);
+        expect(ranked.get("dh2-lamps-items-talents")).toEqual(packFlags("dh2", "items-talents"));
+        expect(ranked.size).toBe(7);
     });
 
     it("names the module by its targets, several joined in order", () => {

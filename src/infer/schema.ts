@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
+import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml } from "../util/text.ts";
 
 /**
@@ -183,6 +184,51 @@ export function packCategory(segment: string): string {
  */
 export function packFlags(line: Line, segment: string): JsonObject {
     return { line, category: packCategory(segment), homebrew: false };
+}
+
+/**
+ * The character builder reads a line's packs by a rank each pack declares:
+ * `originBuilder` for the origins it offers (a divination is written in, not
+ * picked, so its packs are not offered), `startingEquipment` for the kit it
+ * offers. Ranks run 1..N per line and role, in pack-name order (book, then
+ * category), which the system's schema gate requires; the builder keeps the
+ * first copy of a document it meets twice.
+ */
+const BUILDER_ROLES: readonly { role: string; reads: (category: string) => boolean }[] = [
+    {
+        role: "originBuilder",
+        reads: (category) => category.startsWith("origins-") && category !== "origins-divinations",
+    },
+    {
+        role: "startingEquipment",
+        reads: (category) =>
+            ["weapons", "armour", "ammo", "gear", "cybernetics", "weapon-mods", "armor-mods"].includes(category),
+    },
+];
+
+/** Each pack's flags with the builder ranks the system reads added, by pack name. */
+export function withBuilderRanks(
+    packs: readonly { name: string; flags: JsonObject }[],
+): Map<string, JsonObject> {
+    const out = new Map<string, JsonObject>();
+    for (const { name, flags } of packs) {
+        out.set(name, { ...(out.get(name) ?? {}), ...flags });
+    }
+    const names = [...out.keys()].sort(byteCompare);
+    for (const { role, reads } of BUILDER_ROLES) {
+        const next = new Map<string, number>();
+        for (const name of names) {
+            const flags = out.get(name);
+            const line = flags?.["line"];
+            const category = flags?.["category"];
+            if (flags !== undefined && typeof line === "string" && typeof category === "string" && reads(category)) {
+                const rank = (next.get(line) ?? 0) + 1;
+                next.set(line, rank);
+                out.set(name, { ...flags, [role]: rank });
+            }
+        }
+    }
+    return out;
 }
 
 /** Item types carrying a physical acquisition cost (the standard cost shape). */
