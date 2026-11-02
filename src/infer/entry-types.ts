@@ -534,7 +534,7 @@ const GROUP_NOUN = /\s+powers\s*$/iu;
  * none ("") rather than the schema's default, which would name a discipline
  * the book never gave it.
  */
-export function printedDiscipline(sections: readonly string[]): string {
+export function printedDiscipline(sections: readonly string[], inForce?: string): string {
     const catalogue = sections.findLastIndex((s) => POWER_CATALOGUE.test(s));
     // Under no catalogue section (a display title set larger than the chapter's
     // heading has closed it), a section naming a discipline's powers
@@ -548,13 +548,37 @@ export function printedDiscipline(sections: readonly string[]): string {
     const under = anchor < 0 ? [] : sections.slice(anchor + 1);
     // A section naming its discipline as such ("Lampcraft Discipline: Wick
     // Techniques") names it by the words before the word.
-    const named = under
-        .map((s) => /^\s*(?:the\s+)?(?<name>\S.*?)\s+discipline\b/iu.exec(s)?.groups?.["name"])
-        .findLast((n) => n !== undefined);
+    const named = under.map(disciplineNamed).findLast((n) => n !== undefined);
     // A section naming its powers ("Lampcraft Powers") names the discipline by the words before.
     const qualified = sections.findLast((s) => QUALIFIED_CATALOGUE.test(s));
-    const own = named ?? under.at(0)?.replace(GROUP_NOUN, "") ?? qualified;
+    // Under the catalogue, a discipline heading set apart from its powers (a
+    // panel of its basic rules, set smaller than the groups of powers after
+    // it) still names theirs until another does.
+    const own =
+        named ?? (catalogue >= 0 ? inForce : undefined) ?? under.at(0)?.replace(GROUP_NOUN, "") ?? qualified;
     return own === undefined ? "" : cleanName(own);
+}
+
+/** The discipline a heading names as such ("The Lampcraft Discipline", "Lampcraft Discipline: Wick Techniques"). */
+function disciplineNamed(heading: string): string | undefined {
+    return /^\s*(?:the\s+)?(?<name>\S.*?)\s+discipline\b/iu.exec(heading)?.groups?.["name"];
+}
+
+/**
+ * Each entry under the psychic-power catalogue takes the discipline the
+ * latest heading there named as such (`Entry.discipline`), read in printed
+ * order; leaving the catalogue ends it.
+ */
+export function withDisciplines(entries: readonly Entry[]): Entry[] {
+    let current: string | undefined;
+    return entries.map((entry) => {
+        if (!entry.sections.some((s) => POWER_CATALOGUE.test(s))) {
+            current = undefined;
+            return entry;
+        }
+        current = disciplineNamed(entry.heading.text) ?? current;
+        return current === undefined ? entry : { ...entry, discipline: current };
+    });
 }
 
 /** A characteristic key from a printed name or abbreviation, or null. */
@@ -872,7 +896,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                     system["prCost"] = psyRating;
                 }
             }
-            system["discipline"] = printedDiscipline(entry.sections);
+            system["discipline"] = printedDiscipline(entry.sections, entry.discipline);
             const focus = text("focus power") ?? text("focus power test");
             const threshold = text("threshold");
             if (focus !== undefined || threshold !== undefined) {

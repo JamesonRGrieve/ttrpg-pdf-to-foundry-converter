@@ -44,6 +44,7 @@ import {
     splitTalentLists,
     structuredPrerequisites,
     typeNamedBy,
+    withDisciplines,
 } from "../../src/infer/entry-types.ts";
 import {
     cleanName,
@@ -1519,6 +1520,34 @@ describe("entry typing", () => {
             "psychicPower",
         );
         expect(spark.system["discipline"]).toBe("Lampcraft");
+    });
+
+    it("gives powers the discipline an earlier heading under the catalogue names as such", () => {
+        // The discipline's heading heads a panel of its basic rules, set smaller
+        // than the groups of powers after it, so it is on none of their stacks.
+        const catalogue = ["Psychic Powers", "Psychic Disciplines"];
+        const read = withDisciplines([
+            entry("The Lampcraft Discipline", [["Activation Time", "Free Action"]], catalogue),
+            entry("Wick Techniques", [], catalogue),
+            entry("Spark", [["Focus Power Test", "Willpower"]], [...catalogue, "Wick Techniques"]),
+            entry("Iron Discipline", [["Prerequisites", "Willpower 30"]], ["Talents"]),
+            entry("Glare", [["Focus Power Test", "Willpower"]], [...catalogue, "Glare Techniques"]),
+        ]);
+        expect(read.map((e) => e.discipline)).toEqual([
+            "Lampcraft",
+            "Lampcraft",
+            "Lampcraft",
+            undefined,
+            undefined,
+        ]);
+        const [, , spark, , glare] = read;
+        expect(spark === undefined ? null : entryItem(spark, "psychicPower").system["discipline"]).toBe(
+            "Lampcraft",
+        );
+        // Leaving the catalogue (a talent's heading) ends it: the group heading names the next.
+        expect(glare === undefined ? null : entryItem(glare, "psychicPower").system["discipline"]).toBe(
+            "Glare Techniques",
+        );
     });
 
     it("reads a power's Sustained line as the schema's boolean", () => {

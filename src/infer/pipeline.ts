@@ -30,6 +30,7 @@ import {
     joinSkillCharacteristics,
     splitTalentLists,
     typeNamedBy,
+    withDisciplines,
 } from "./entry-types.ts";
 import { applyDefaultIcons } from "./icons.ts";
 import { applyIdentifiers } from "./identifiers.ts";
@@ -2313,7 +2314,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
     const entries = extractEntries(
-        splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected))),
+        withDisciplines(splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected)))),
         out,
         descriptions,
     );

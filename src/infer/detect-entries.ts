@@ -93,6 +93,11 @@ export interface Entry {
      * `Name: rules` lines): an entry read out of such a list is one of them.
      */
     listedAs?: ItemType;
+    /**
+     * The discipline a heading printed earlier in the power catalogue names
+     * as such ("The Lampcraft Discipline"), when one is in force here.
+     */
+    discipline?: string;
 }
 
 export function joinRuns(runs: readonly IRTextRun[]): string {
