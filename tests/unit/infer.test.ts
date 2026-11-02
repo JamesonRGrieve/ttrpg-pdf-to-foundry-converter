@@ -2732,6 +2732,26 @@ describe("schema", () => {
         expect(system["gameSystems"]).toEqual(["dh2"]);
     });
 
+    it("sets a printed price as the target line's own acquisition currency", () => {
+        const priced = (line: Line): unknown =>
+            (
+                buildItem({
+                    type: "gear",
+                    name: "Lamp",
+                    line,
+                    book: "b",
+                    page: "3",
+                    description: "",
+                    system: { cost: 20 },
+                })["system"] as Record<string, unknown>
+            )["cost"];
+        expect((priced("dh1") as Record<string, Record<string, unknown>>)["dh1"]?.["throneGelt"]).toBe(20);
+        expect((priced("dw") as Record<string, Record<string, unknown>>)["dw"]?.["requisition"]).toBe(20);
+        // Every other line keeps its fields empty.
+        expect((priced("dw") as Record<string, Record<string, unknown>>)["dh1"]?.["throneGelt"]).toBeNull();
+        expect(headerRole("Req")).toBe("cost");
+    });
+
     it("gives XP-cost and affliction items no acquisition cost", () => {
         const doc = buildItem({
             type: "talent",

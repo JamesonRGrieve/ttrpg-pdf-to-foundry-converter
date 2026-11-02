@@ -61,7 +61,8 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     // By its stem, so a misread letter later in the word ("Availabiity") still names it.
     [/^(avl|avail[a-z]*)$/u, "availability"],
     [/^renown$/u, "renown"],
-    [/^(cost|price)$/u, "cost"],
+    // The price a line prints (its cost, or the requisition it is drawn with).
+    [/^(cost|price|req|requisition)$/u, "cost"],
     [/^(ap|armou?r points?)$/u, "armourPoints"],
     // A two-line header may reach us as its second line alone ("Covered").
     [/^(locations?( ?covered)?|covered|coverage)$/u, "locations"],

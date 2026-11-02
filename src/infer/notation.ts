@@ -178,6 +178,16 @@ export function parseWeight(raw: string): number | null {
     return m === null ? null : Number(m[1]);
 }
 
+/**
+ * A printed price: a whole figure, thousands perhaps separated by commas, a
+ * currency word or mark after it ("1,500", "20 Thrones", "15*"); null for
+ * anything else (a range of prices, "Varies").
+ */
+export function parseCost(raw: string): number | null {
+    const m = /^(\d{1,3}(?:,\d{3})+|\d+)(?:\s*\p{L}*\.?)?\s*[*†‡]*$/u.exec(clean(raw));
+    return m === null ? null : Number((m[1] ?? "").replace(/,/gu, ""));
+}
+
 export function parseInteger(raw: string): number | null {
     const text = clean(raw);
     if (isEmptyCell(text)) {

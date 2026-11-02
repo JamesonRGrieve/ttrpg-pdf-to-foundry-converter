@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     captionWeaponClass,
     isEmptyCell,
+    parseCost,
     parseArmourPoints,
     parseArmourType,
     parseAvailability,
@@ -179,6 +180,16 @@ describe("parseReload", () => {
         expect(parseReload("—")).toBe("-");
         expect(parseReload("Sometimes")).toBeNull();
         expect(parseReload("Rld 5 Full")).toBe("5-full");
+    });
+});
+
+describe("parseCost", () => {
+    it("reads a whole printed price, commas and a currency word or mark after it allowed", () => {
+        expect(parseCost("1,500")).toBe(1500);
+        expect(parseCost("20 Thrones")).toBe(20);
+        expect(parseCost("15*")).toBe(15);
+        expect(parseCost("Varies")).toBeNull();
+        expect(parseCost("10-20")).toBeNull();
     });
 });
 

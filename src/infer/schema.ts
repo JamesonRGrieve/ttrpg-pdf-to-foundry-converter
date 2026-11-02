@@ -363,8 +363,8 @@ const PHYSICAL: ReadonlySet<ItemType> = new Set([
  * The standard cost shape: a native acquisition field per line plus the
  * line-asymmetric `homebrew` block. Unauthored values are `null`.
  */
-export function costShape(): JsonObject {
-    return {
+export function costShape(line?: Line, printed?: number): JsonObject {
+    const shape: JsonObject = {
         dh1: { throneGelt: null },
         dh2: { influence: null, homebrew: { requisition: null, throneGelt: null } },
         rt: { profitFactor: null, homebrew: { throneGelt: null } },
@@ -372,6 +372,15 @@ export function costShape(): JsonObject {
         bc: { infamy: null, homebrew: { throneGelt: null } },
         ow: { logistics: null, homebrew: { throneGelt: null } },
     };
+    // A printed price is the line's own acquisition currency (its first field).
+    const own = line === undefined ? undefined : shape[line];
+    if (printed !== undefined && typeof own === "object" && own !== null && !Array.isArray(own)) {
+        const [field] = Object.keys(own);
+        if (field !== undefined) {
+            own[field] = printed;
+        }
+    }
+    return shape;
 }
 
 /** Wrap a line-dependent value in its per-line variant container. */
@@ -445,7 +454,8 @@ export function buildItem(input: ItemInput): JsonObject {
     // Talent/trait/power cost is XP and afflictions have none: only physical
     // items carry the acquisition-currency shape and owned-item state.
     if (PHYSICAL.has(input.type)) {
-        system["cost"] = costShape();
+        const printed = input.system["cost"];
+        system["cost"] = typeof printed === "number" ? costShape(input.line, printed) : costShape();
         system["state"] = stateBlock();
     }
     return { name: input.name, type: input.type, system, effects: [], flags: {} };

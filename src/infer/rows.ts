@@ -7,6 +7,7 @@ import {
     parseArmourPoints,
     parseAvailability,
     parseAvailabilityByPlace,
+    parseCost,
     parseCoverage,
     parseDamage,
     parseHullTypes,
@@ -87,6 +88,11 @@ function commonPhysical(out: RowMapping, cells: RowCells): void {
     const renown = read(out, cells, "renown", parseRenown);
     if (renown !== null) {
         out.system["renown"] = renown;
+    }
+    // The printed price, a bare figure: `buildItem` sets it as the target line's cost.
+    const cost = read(out, cells, "cost", parseCost);
+    if (cost !== null) {
+        out.system["cost"] = cost;
     }
     out.system["craftsmanship"] = "common";
     out.system["quantity"] = 1;
