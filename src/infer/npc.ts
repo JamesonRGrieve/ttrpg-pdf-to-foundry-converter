@@ -2,9 +2,9 @@
 import type { JsonObject } from "../types/entity.ts";
 import { splitTier } from "./names.ts";
 import { splitTopLevel } from "./origin-paths.ts";
-import type { DetectedNumericGrid } from "./types.ts";
 import { panelWeapons } from "./panel-weapons.ts";
 import { mapRow } from "./rows.ts";
+import type { DetectedNumericGrid } from "./types.ts";
 import { isVehicleLabel } from "./vehicle.ts";
 
 /**
