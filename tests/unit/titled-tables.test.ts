@@ -360,6 +360,40 @@ describe("titled tables", () => {
         ]);
     });
 
+    it("leaves the running text set beside a table to its left out of the table", () => {
+        const ir = irOf([
+            run("Table 2-4: Lamp Wards", 240, 712, bold),
+            run("Sustained:", 60, 710, bold),
+            run("Yes", 180, 710),
+            run("Name", 240, 698, bold),
+            run("Glow", 320, 698, bold),
+            run("Hush", 380, 698, bold),
+            run("Glass Ward", 240, 684),
+            run("12", 320, 684),
+            run("No", 380, 684),
+            run("wICK ward", 60, 680, bold),
+            run("Brass Ward", 240, 670),
+            run("15", 320, 670),
+            run("Yes", 380, 670),
+            run("Threshold:", 60, 666, bold),
+            run("17", 180, 666),
+            run("Tin Ward", 240, 656),
+            run("9", 320, 656),
+            run("No", 380, 656),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.rows.map((r) => r.cells.map((c) => c.text))).toEqual([
+            ["Glass Ward", "12", "No"],
+            ["Brass Ward", "15", "Yes"],
+            ["Tin Ward", "9", "No"],
+        ]);
+        // The text beside it is no table run: it stays the entry's.
+        const texts = new Set(table?.runs.map((r) => r.text));
+        for (const beside of ["Sustained:", "wICK ward", "Threshold:", "17"]) {
+            expect(texts.has(beside)).toBe(false);
+        }
+    });
+
     it("prefixes a label's first words printed on a line of their own above the header", () => {
         const ir = irOf([
             run("Table 1-8: Lamp Fittings", 60, 712, bold),

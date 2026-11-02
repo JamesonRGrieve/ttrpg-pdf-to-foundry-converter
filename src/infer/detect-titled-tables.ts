@@ -1076,6 +1076,29 @@ function headerColumns(header: RawRow, band: readonly IRTextRun[]): Set<number> 
     return new Set([...columns, ...body]);
 }
 
+/**
+ * A table set between columns of running text (an inset with prose to its
+ * left) holds nothing that starts left of both its caption and its header and
+ * ends before its first column starts: those runs are the text beside it. A
+ * key centred under the first label reaches under it; a cell left of a centred
+ * label starts where the caption does. Every line keeps only the table's own
+ * runs; a body line left with none is dropped.
+ */
+function besideText(
+    rows: readonly RawRow[],
+    headerIdx: number,
+    header: RawRow,
+    caption: IRTextRun,
+): RawRow[] {
+    const labels = header.runs.filter((r) => r.text.trim().length > 0);
+    const start = Math.min(...labels.map((r) => r.x)) - COLUMN_EDGE_TOLERANCE;
+    const left = Math.min(start, caption.x - COLUMN_EDGE_TOLERANCE);
+    const beside = (r: IRTextRun): boolean => r.x < left && r.x + r.width <= start;
+    const own = (row: RawRow): RawRow => ({ ...row, runs: row.runs.filter((r) => !beside(r)) });
+    // Lines down to the header keep their places (the header is found by index).
+    return rows.map(own).filter((row, i) => i <= headerIdx || row.runs.some((r) => r.text.trim().length > 0));
+}
+
 function inColumns(columns: ReadonlySet<number>): (r: IRTextRun) => boolean {
     return (r) => columns.has(r.column);
 }
@@ -1085,17 +1108,18 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
     if (tableRuns.length < 10) {
         return null;
     }
-    const lines = groupIntoRows(tableRuns);
-    if (lines.length < 2) {
+    const rows = groupIntoRows(tableRuns);
+    if (rows.length < 2) {
         return null;
     }
     // The header is the first bold row that names at least two columns (a
     // stacked header may put a single label on a line of its own above it).
-    const header = stackedHeader(lines);
+    const header = stackedHeader(rows);
     if (header === null) {
         return null;
     }
     const { index: headerIdx } = header;
+    const lines = besideText(rows, headerIdx, header.row, title.run);
     const edges = cellEdges(lines.slice(headerIdx + 1));
     const headerRow = { ...header.row, runs: splitHeaderRuns(header.row.runs, edges) };
     const colBoundaries = inferColumnBoundaries(headerRow, edges);
