@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import {
+    asLoaded,
     citesBook,
     type Doc,
     editDistance,
@@ -192,6 +193,40 @@ describe("scoreBook", () => {
             "dh2",
         );
         expect(p.types["weapon"]?.fields["type"]).toEqual({ checks: 1, score: 1 });
+    });
+
+    it("compares a legacy NPC movement and armour line as the system loads them", () => {
+        expect(asLoaded("npc", { move: "3/6/9/18", armourPoints: "H2 B4" })).toEqual({
+            movement: { half: 3, full: 6, charge: 9, run: 18 },
+            movementManual: true,
+            armour: {
+                mode: "locations",
+                total: 4,
+                authored: true,
+                locations: { head: 2, body: 4, leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 },
+            },
+        });
+        const p = scoreBook(
+            [{ name: "Lamp Thief", type: "dh2-npc", system: { move: "3/6/9/18" } }],
+            [
+                {
+                    name: "Lamp Thief",
+                    type: "dh2-npc",
+                    system: { movement: { half: 3, full: 6, charge: 9, run: 18 }, movementManual: true },
+                },
+            ],
+            "dh2",
+        );
+        expect(p.types["npc"]?.docScore).toBe(1);
+    });
+
+    it("leaves out legacy keys the schema drops", () => {
+        const p = scoreBook(
+            [{ name: "Glow", type: "psychicPower", system: { focusTime: "Half Action" } }],
+            [{ name: "Glow", type: "psychicPower", system: {} }],
+            "dh2",
+        );
+        expect(p.types["psychicPower"]?.fields["focusTime"]).toBeUndefined();
     });
 
     it("measures edit distance with an early stop", () => {

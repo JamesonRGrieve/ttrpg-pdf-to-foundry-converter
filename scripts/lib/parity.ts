@@ -104,6 +104,78 @@ export const EXCLUDED: readonly RegExp[] = [
 ];
 
 /**
+ * Legacy keys the system's schema no longer has and drops on load, with no
+ * migration (`<type key>:<leaf path>`): a document holding them carries them nowhere.
+ */
+export const NOT_IN_SCHEMA: ReadonlySet<string> = new Set([
+    "psychicPower:action",
+    "psychicPower:focusTime",
+    "psychicPower:opposed",
+    "psychicPower:threshold",
+]);
+
+/** Armour-point tokens of a legacy stat-block line → the schema's hit locations. */
+const AP_TOKENS: Readonly<Record<string, string>> = {
+    h: "head",
+    b: "body",
+    al: "leftArm",
+    ar: "rightArm",
+    ll: "leftLeg",
+    lr: "rightLeg",
+};
+
+/**
+ * A document's `system` as the system loads it: the legacy NPC `move` and
+ * `armourPoints` strings become the structured `movement` and `armour` the
+ * system's own migrations make of them (npc-import-migration `migrateMove`,
+ * `migrateArmourPoints`). Other legacy shapes are left as they are.
+ */
+export function asLoaded(type: string, system: Json | undefined): Json | undefined {
+    if (type !== "npc" || !isObject(system)) {
+        return system;
+    }
+    const out: { [k: string]: Json } = { ...system };
+    const move = out["move"];
+    if (typeof move === "string" && move.trim() !== "") {
+        delete out["move"];
+        const parts = move.split("/").map((p) => Number.parseInt(p.trim(), 10));
+        if (parts.length >= 4 && parts.every((n) => !Number.isNaN(n))) {
+            out["movement"] = {
+                half: parts[0] ?? 0,
+                full: parts[1] ?? 0,
+                charge: parts[2] ?? 0,
+                run: parts[3] ?? 0,
+            };
+            out["movementManual"] = true;
+        }
+    }
+    const ap = out["armourPoints"];
+    if (typeof ap === "string" && ap.trim() !== "") {
+        delete out["armourPoints"];
+        const locations: { [k: string]: Json } = {
+            head: 0,
+            body: 0,
+            leftArm: 0,
+            rightArm: 0,
+            leftLeg: 0,
+            rightLeg: 0,
+        };
+        let found = false;
+        for (const m of ap.matchAll(/\b(AR|AL|LR|LL|H|B)\s*(\d+)/giu)) {
+            const location = AP_TOKENS[(m[1] ?? "").toLowerCase()];
+            if (location !== undefined) {
+                locations[location] = Number(m[2]);
+                found = true;
+            }
+        }
+        out["armour"] = found
+            ? { mode: "locations", total: locations["body"] ?? 0, authored: true, locations }
+            : { authored: true };
+    }
+    return out;
+}
+
+/**
  * Non-empty initial values the system's schema gives a leaf an output document
  * leaves out (`<type key>:<path>`): on import the leaf holds this value.
  */
@@ -113,9 +185,17 @@ export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
     "gear:category": "general",
     "talent:rank": 1,
     "talent:isPassive": true,
+    "psychicPower:activation.type": "action",
+    "psychicPower:activation.cost": 1,
+    "psychicPower:target.type": "self",
+    "psychicPower:discipline": "telepathy",
+    "psychicPower:prCost": 1,
 };
 
-/** The mechanically significant leaves per type key; every other compared leaf still counts in the full score. */
+/**
+ * The mechanically significant leaves per type key (a path names its leaf or
+ * every leaf beneath it); every other compared leaf still counts in the full score.
+ */
 export const MECHANICS: Readonly<Record<string, readonly string[]>> = {
     weapon: [
         "class",
@@ -150,7 +230,7 @@ export const MECHANICS: Readonly<Record<string, readonly string[]>> = {
         "range",
         "sustained",
         "subtype",
-        "action",
+        "activation.type",
         "discipline",
         "prerequisites.text",
     ],
@@ -168,7 +248,8 @@ export const MECHANICS: Readonly<Record<string, readonly string[]>> = {
         "wounds.max",
         "threatLevel",
         "tier",
-        "armourPoints",
+        "armour.locations",
+        "movement",
         "size",
         "items.weapon",
         "items.trait",
@@ -588,8 +669,13 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
         }
         r.matched += 1;
         r.tiers[match.tier] = (r.tiers[match.tier] ?? 0) + 1;
-        const wantLeaves = leaves(want["system"], line);
-        const gotLeaves = leaves(got["system"], line);
+        const wantLeaves = leaves(asLoaded(type, want["system"]), line);
+        const gotLeaves = leaves(asLoaded(type, got["system"]), line);
+        for (const path of [...wantLeaves.keys()]) {
+            if (NOT_IN_SCHEMA.has(`${type}:${path}`)) {
+                wantLeaves.delete(path);
+            }
+        }
         const scores = new Map<string, number>();
         // A name matched only by spelling distance is a misread name: it costs one leaf.
         scores.set("name", match.tier === "fuzzy" ? 0 : 1);
@@ -636,7 +722,11 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
         }
         const all = [...scores.values()];
         const docScore = all.length === 0 ? 1 : all.reduce((a, b) => a + b, 0) / all.length;
-        const mech = (MECHANICS[type] ?? []).filter((p) => scores.has(p));
+        // A listed path names its leaf, or every leaf beneath it.
+        const listed = MECHANICS[type] ?? [];
+        const mech = [...scores.keys()].filter((leaf) =>
+            listed.some((p) => leaf === p || leaf.startsWith(`${p}.`)),
+        );
         const mechScore =
             mech.length === 0 ? docScore : mech.reduce((a, p) => a + (scores.get(p) ?? 0), 0) / mech.length;
         r.docScore += docScore;
