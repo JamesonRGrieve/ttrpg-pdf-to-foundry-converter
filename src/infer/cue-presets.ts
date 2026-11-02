@@ -27,6 +27,9 @@ const PRESET_BY_TYPE: Readonly<Record<string, string>> = {
     force: "warp",
 };
 
+/** The weapon schema's initial `type`. */
+const INITIAL_WEAPON_TYPE = "primitive";
+
 /** The cue preset a weapon of `type` and `cls` takes; null where its type does not settle one. */
 export function cuePresetFor(type: string, cls: string | undefined): string | null {
     if (type === "primitive") {
@@ -40,7 +43,7 @@ const isObject = (v: unknown): v is JsonObject => typeof v === "object" && v !==
 /** Give every weapon (a pack's own, or one embedded in an actor) the preset its type settles, unless it has one. */
 export function applyCuePresets(entities: readonly Entity[]): void {
     const apply = (type: unknown, system: unknown): void => {
-        if (type !== "weapon" || !isObject(system) || typeof system["type"] !== "string") {
+        if (type !== "weapon" || !isObject(system)) {
             return;
         }
         const cue = isObject(system["cue"]) ? system["cue"] : {};
@@ -48,7 +51,11 @@ export function applyCuePresets(entities: readonly Entity[]): void {
             return;
         }
         const cls = typeof system["class"] === "string" ? system["class"] : undefined;
-        const preset = cuePresetFor(system["type"], cls);
+        // A weapon no reading typed is of the schema's initial type.
+        const preset = cuePresetFor(
+            typeof system["type"] === "string" ? system["type"] : INITIAL_WEAPON_TYPE,
+            cls,
+        );
         if (preset !== null) {
             system["cue"] = { ...cue, preset };
         }

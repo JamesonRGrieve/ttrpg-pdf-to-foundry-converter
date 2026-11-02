@@ -56,4 +56,12 @@ describe("cue presets", () => {
             },
         ]);
     });
+
+    it("reads a weapon no reading typed as of the schema's initial type", () => {
+        const sling = entity({ type: "weapon", name: "Wick Sling", system: { class: "basic" } });
+        const club = entity({ type: "weapon", name: "Wick Club", system: { class: "melee" } });
+        applyCuePresets([sling, club]);
+        expect(sling.fields["system"]).toEqual({ class: "basic", cue: { preset: "solid" } });
+        expect(club.fields["system"]).toEqual({ class: "melee" });
+    });
 });
