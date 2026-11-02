@@ -190,6 +190,9 @@ export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
     "psychicPower:target.type": "self",
     "psychicPower:discipline": "telepathy",
     "psychicPower:prCost": 1,
+    "npc:size": 4,
+    "npc:weapons.mode": "simple",
+    "npc:armour.mode": "simple",
 };
 
 /**
