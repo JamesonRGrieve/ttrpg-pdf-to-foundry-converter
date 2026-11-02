@@ -381,6 +381,9 @@ const LIST_ITEM_TYPE = { talents: "talent", traits: "trait", weapons: "weapon", 
 /** A parenthetical closing a listed name: a talent's specialisation, a weapon's profile. */
 const CLOSING_PARENTHETICAL = /^(?<base>[^(]+?)\s*\((?<inner>.*)\)\s*$/su;
 
+/** A trait's rating in its closing parenthetical: "(2)", "(+3)". */
+const TRAIT_RATING = /^\+?\s*(?<n>\d{1,3})$/u;
+
 /** A list entry recording that the statblock has none of the kind. */
 const NO_ENTRY = /^\s*(?:none|n\/a|[-–—]+)\s*$/iu;
 
@@ -403,8 +406,14 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
                 // The name ends where its profile opens, however the line runs on.
                 return { name: /^[^(:]+/u.exec(entry)?.[0].trim() ?? entry, type };
             }
-            return type === "talent" && inner.length > 0
-                ? { name: entry, type, specialization: inner }
-                : { name: entry, type };
+            // A talent's specialisation and a trait's rating are the schema's
+            // own fields of the item, no part of its name.
+            if (type === "talent" && inner.length > 0) {
+                return { name: listedBase(entry), type, specialization: inner };
+            }
+            const rating = type === "trait" ? TRAIT_RATING.exec(inner)?.groups?.["n"] : undefined;
+            return rating === undefined
+                ? { name: entry, type }
+                : { name: listedBase(entry), type, system: { level: Number(rating) } };
         });
 }

@@ -670,7 +670,7 @@ describe("npc statblocks", () => {
     it("lists a statblock's talents, traits, weapons and gear as bare items", () => {
         expect(listedItems("Keen Eye, Hatred (Moths, Gnats), None.", "talent")).toEqual([
             { name: "Keen Eye", type: "talent" },
-            { name: "Hatred (Moths, Gnats)", type: "talent", specialization: "Moths, Gnats" },
+            { name: "Hatred", type: "talent", specialization: "Moths, Gnats" },
         ]);
         expect(
             listedItems("Wick Lance (1d10+2 R; Pen 2), Lamp Staff: (1d5 I). Trailing prose.", "weapon"),
@@ -678,9 +678,11 @@ describe("npc statblocks", () => {
             { name: "Wick Lance", type: "weapon" },
             { name: "Lamp Staff", type: "weapon" },
         ]);
-        expect(listedItems("Dim Sight (+2); lantern", "trait")).toEqual([
-            { name: "Dim Sight (+2)", type: "trait" },
+        // A trait's rating is its level; any other parenthetical stays in its name.
+        expect(listedItems("Dim Sight (+2); lantern; Glow (Bright)", "trait")).toEqual([
+            { name: "Dim Sight", type: "trait", system: { level: 2 } },
             { name: "lantern", type: "trait" },
+            { name: "Glow (Bright)", type: "trait" },
         ]);
     });
 
