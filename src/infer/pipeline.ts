@@ -97,6 +97,7 @@ import {
     type Line,
 } from "./schema.ts";
 import type { TargetSchema } from "./targets.ts";
+import { applyTwoHandedClasses, twoHandedClasses } from "./two-handed.ts";
 import type { ContentType, DetectedNumericGrid, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
 import {
@@ -2336,6 +2337,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
     applyCuePresets(entities);
+    applyTwoHandedClasses(entities, twoHandedClasses(ir.runs.map((r) => r.text).join(" ")));
     applyAmmunitionWeaponTypes(entities, out.usedWith);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
