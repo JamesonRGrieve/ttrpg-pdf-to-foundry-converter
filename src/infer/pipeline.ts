@@ -16,6 +16,7 @@ import {
     type Role,
     shipTableRoles,
 } from "./columns.ts";
+import { applyCuePresets } from "./cue-presets.ts";
 import { detectEntries, type Entry, runningHeads } from "./detect-entries.ts";
 import { detectNumericGrids } from "./detect-grids.ts";
 import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
@@ -23,7 +24,6 @@ import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import { entryItem, entryType, joinSkillCharacteristics, typeNamedBy } from "./entry-types.ts";
 import { applyDefaultIcons } from "./icons.ts";
-import { applyCuePresets } from "./cue-presets.ts";
 import { applyIdentifiers } from "./identifiers.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
 import {
