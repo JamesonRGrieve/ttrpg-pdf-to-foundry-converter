@@ -691,10 +691,17 @@ export function runningHeads(ir: IR): Map<number, string[]> {
 export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
     const body = bodyStyle(ir);
     const marginal = marginalIn(ir);
-    const inTable = (l: TextLine): boolean => visibleRuns(l).every((r) => tableRuns.has(r));
-    const lines = withoutFigures(withoutRunningFurniture(buildLines(ir), marginal)).filter(
-        (l) => !inTable(l),
-    );
+    // A table's runs are no text: a line sharing a baseline with a table's
+    // (a heading beside a header's second line, a field beside a caption) is
+    // read without them, its other runs grouped by baseline again (a table's
+    // run may have bridged two baselines into one line).
+    const lines = withoutFigures(withoutRunningFurniture(buildLines(ir), marginal)).flatMap((l) => {
+        const runs = l.runs.filter((r) => !tableRuns.has(r));
+        if (runs.length === l.runs.length) {
+            return [l];
+        }
+        return buildLines({ ...ir, runs }).filter((own) => own.runs.some((r) => r.text.trim().length > 0));
+    });
     const headingFaces = new Set<string>();
     for (const line of lines) {
         const first = visibleRuns(line)[0];

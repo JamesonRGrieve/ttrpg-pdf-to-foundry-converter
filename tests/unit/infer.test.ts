@@ -2512,6 +2512,33 @@ describe("entry detection", () => {
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
     });
 
+    it("reads a line sharing a baseline with a table's runs without them", () => {
+        // A table header's second line ("Time") on the heading's baseline, and a
+        // table cell on a field's.
+        const time = { ...run("Time", 621, "t", 10), x: 400, weight: "bold" as const };
+        const cell = { ...run("Half Action", 589, "t", 10), x: 400 };
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                ...Array.from({ length: 6 }, (_, i) => run(body, 680 - 10 * i, "b", 10)),
+                run("WICK WARD", 620, "h", 12),
+                time,
+                { ...run("Threshold:", 600, "b", 10), weight: "bold" },
+                { ...run("12", 600, "b", 10), x: 140 },
+                { ...run("Focus Time:", 588, "b", 10), weight: "bold" },
+                { ...run("Free Action", 588, "b", 10), x: 140 },
+                cell,
+                run(body, 570, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set([time, cell])).find((e) => e.heading.text === "WICK WARD");
+        expect(entry?.fields).toEqual([
+            ["Threshold", "12"],
+            ["Focus Time", "Free Action"],
+        ]);
+    });
+
     it("ends a block of values set apart in their own column at the line back at the margin", () => {
         const bodyRight = 60 + body.length * 5;
         const field = (label: string, value: string, y: number): IRTextRun[] => [
