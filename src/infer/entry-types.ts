@@ -642,6 +642,30 @@ const splitList = (s: string): string[] =>
         .map((x) => x.trim())
         .filter((x) => x.length > 0);
 
+/** A skill's own field labels (the schema's): never one of its specialisations. */
+const SKILL_FIELD_LABELS =
+    /^(?:aptitudes?|skill use|use time|characteristic|special(?:isations?|izations?)|uses?|special uses?)$/iu;
+/** Fewest named fields after a skill's own that make it a specialist skill listing its specialisations. */
+const MIN_SPECIALISATIONS = 3;
+
+/**
+ * A specialist skill prints each of its specialisations as a labelled field
+ * of its own ("Name: what it covers"); its labels, in book order, when it
+ * prints at least a few (a stray label — a sidebar's numeral — is none).
+ */
+export function skillSpecialisations(fields: readonly (readonly [string, string])[]): string[] {
+    const named = fields
+        .map(([label]) => label.trim())
+        .filter(
+            (label) =>
+                !SKILL_FIELD_LABELS.test(label) && /^\p{L}[\p{L}\s'’-]*$/u.test(label) && !ROMAN.test(label),
+        );
+    return named.length >= MIN_SPECIALISATIONS ? named : [];
+}
+
+/** A Roman numeral (a sidebar's or chapter's number), not a name. */
+const ROMAN = /^[IVXLC]+$/u;
+
 /** Build the item body for a typed entry. */
 export function entryItem(entry: Entry, type: ItemType): EntryItem {
     const fields = fieldMap(entry);
@@ -723,6 +747,16 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 system["isBasic"] = skillType === "basic";
             }
             system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? "");
+            // The time a use of the skill takes: "Skill Use: Full Action."
+            const useTime = text("skill use") ?? text("use time");
+            if (useTime !== undefined) {
+                system["useTime"] = useTime.replace(/\.\s*$/u, "").trim();
+            }
+            const specialisations = skillSpecialisations(entry.fields);
+            if (specialisations.length > 0) {
+                system["specialist"] = true;
+                system["specializations"] = specialisations;
+            }
             variantized["uses"] = entry.body;
             break;
         }

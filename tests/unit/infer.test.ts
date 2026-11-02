@@ -38,6 +38,7 @@ import {
     mutationCategory,
     powerXpCost,
     printedDiscipline,
+    skillSpecialisations,
     structuredPrerequisites,
     typeNamedBy,
 } from "../../src/infer/entry-types.ts";
@@ -1100,6 +1101,35 @@ describe("entry typing", () => {
         expect(
             mapRow("psychicPower", { name: "Spark", focusPower: "Willpower" }).system["focusPower"],
         ).toEqual(base);
+    });
+
+    it("reads a skill's use time and, where it lists them as fields, its specialisations", () => {
+        const lore = entryItem(
+            entry(
+                "LAMP LORE (INTELLIGENCE)",
+                [
+                    ["Aptitudes", "Intelligence, General"],
+                    ["Skill Use", "Free Action."],
+                    ["Reeds", "Knowledge of reeds."],
+                    ["Tides", "Knowledge of tides."],
+                    ["Wicks", "Knowledge of wicks."],
+                ],
+                ["Skills"],
+            ),
+            "skill",
+        );
+        expect(lore.system["useTime"]).toBe("Free Action");
+        expect(lore.system["specialist"]).toBe(true);
+        expect(lore.system["specializations"]).toEqual(["Reeds", "Tides", "Wicks"]);
+        // A stray label (a sidebar's numeral) or two makes no specialist skill.
+        expect(
+            skillSpecialisations([
+                ["Aptitudes", "Fellowship"],
+                ["Skill Use", "Full Action."],
+                ["VIII", "x"],
+                ["Glow", "y"],
+            ]),
+        ).toEqual([]);
     });
 
     it("types vehicle traits apart from traits, and nothing under an umbrella naming a fielded kind", () => {
