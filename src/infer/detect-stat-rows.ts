@@ -158,6 +158,41 @@ export function withMissingLabel(labels: readonly Placed[]): Placed[] {
     return [...heads.slice(0, at), missing, ...heads.slice(at)];
 }
 
+/** How far past the last label, in the row's usual spacing, a value may sit to stand under a label set after it. */
+const TRAILING_REACH: readonly [number, number] = [0.6, 1.4];
+
+/**
+ * A row of labels whose last label the text layer dropped past its end (the
+ * values run one column further: "… WP Fel" over ten values): when the row
+ * reads in the schema's order and a value sits about one usual spacing past
+ * the last label, the label next in the order is placed there. Otherwise the
+ * row unchanged.
+ */
+export function withTrailingLabel(labels: readonly Placed[], values: readonly Placed[]): Placed[] {
+    const heads = labels.filter((r) => r.text.trim().length > 0);
+    const order = heads.map((r) => LABEL_ORDER.indexOf(r.text.trim().toLowerCase()));
+    const last = heads.at(-1);
+    const next = LABEL_ORDER[(order.at(-1) ?? LABEL_ORDER.length) + 1];
+    if (
+        last === undefined ||
+        next === undefined ||
+        order.some((o, i) => o < 0 || (i > 0 && o <= (order[i - 1] ?? 0)))
+    ) {
+        return [...labels];
+    }
+    const centre = (r: Placed): number => r.x + r.width / 2;
+    const steps = heads.slice(1).map((h, i) => centre(h) - centre(heads[i] ?? h));
+    const usual = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)] ?? 0;
+    const [near, far] = TRAILING_REACH;
+    const past = values.some((v) => {
+        const beyond = centre(v) - centre(last);
+        return v.text.trim().length > 0 && beyond >= near * usual && beyond <= far * usual;
+    });
+    return usual > 0 && past
+        ? [...heads, { x: centre(last) + usual - last.width / 2, width: last.width, text: next }]
+        : [...labels];
+}
+
 /** A trailing bracketed note on a caption ("(Elite)"), perhaps set against the word before it. */
 const TRAILING_NOTE = /\s*(\([^()]*\))\s*$/u;
 
@@ -275,7 +310,7 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
         const oneRunEach =
             line.runs.filter((r) => r.text.trim().length > 0).length === tokensOf(line.text).length;
         // A label the text layer dropped is put back where the row leaves room for it.
-        const labels = oneRunEach ? withMissingLabel(line.runs) : null;
+        const labels = oneRunEach ? withTrailingLabel(withMissingLabel(line.runs), below.runs) : null;
         const row =
             labels === null
                 ? tokensOf(line.text)

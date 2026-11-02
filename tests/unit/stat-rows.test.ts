@@ -8,6 +8,7 @@ import {
     rowValues,
     textBlockRuns,
     withMissingLabel,
+    withTrailingLabel,
 } from "../../src/infer/detect-stat-rows.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
@@ -151,6 +152,23 @@ describe("statblock rows", () => {
         expect(withMissingLabel(two)).toEqual(two);
         const tight = [...row, at("Inf", 276)];
         expect(withMissingLabel(tight)).toEqual(tight);
+    });
+
+    it("puts back a last label a text layer dropped past the row's end, under a value set there", () => {
+        const at = (text: string, x: number) => ({ x, width: 10, text });
+        const row = LABELS.split(" ").map((t, i) => at(t, 100 + 22 * i));
+        const values = (count: number) => Array.from({ length: count }, (_, i) => at("3", 100 + 22 * i));
+        // Ten values under nine labels: the tenth stands where the schema's next label goes.
+        const restored = withTrailingLabel(row, values(10));
+        expect(restored.map((l) => l.text).at(-1)).toBe("inf");
+        expect(restored.at(-1)?.x).toBe(100 + 22 * 9);
+        expect(cellValues(restored, values(10))).toEqual(Array.from({ length: 10 }, () => 3));
+        // As many values as labels, or a stray run far past the row: the row as it is.
+        expect(withTrailingLabel(row, values(9))).toEqual(row);
+        expect(withTrailingLabel(row, [...values(9), at("7", 100 + 22 * 12)])).toEqual(row);
+        // A row already ending on the schema's last label has none after it.
+        const ten = [...row, at("Inf", 100 + 22 * 9)];
+        expect(withTrailingLabel(ten, values(11))).toEqual(ten);
     });
 
     it("keeps a row's last column set past the side margin's edge, not a tab set apart there", () => {
