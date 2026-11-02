@@ -136,6 +136,19 @@ describe("weapon-table load rows", () => {
         expect(mapped.variantized).toEqual({ effect: "Adds Flame." });
         expect(mapped.system).toMatchObject({ availability: "rare" });
     });
+
+    it("reads an armour modification's weight as what it adds to the armour", () => {
+        const mapped = mapRow("armourModification", {
+            name: "Glow Chains",
+            weight: "+4 kg",
+            availability: "Rare",
+        });
+        expect(mapped.system).toMatchObject({ modifiers: { weight: 4 }, availability: "rare" });
+        expect(mapped.system).not.toHaveProperty("weight");
+        const light = mapRow("armourModification", { name: "Lamp Seal", weight: "—" });
+        expect(light.system).not.toHaveProperty("weight");
+        expect(light.system).not.toHaveProperty("modifiers");
+    });
 });
 
 describe("ship weapon rows", () => {

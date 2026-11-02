@@ -426,8 +426,23 @@ const PHYSICAL_EFFECT: ReadonlySet<ItemType> = new Set([
     "armourModification",
 ]);
 
+/**
+ * An armour modification's printed weight is what it adds to the armour it is
+ * fitted to: the schema's `modifiers.weight`, not a weight of its own.
+ */
+function armourModification(cells: RowCells): RowMapping {
+    const out = effectItem(cells, "effect", true);
+    const { weight, ...system } = out.system;
+    if (typeof weight !== "number") {
+        return out;
+    }
+    return { ...out, system: weight === 0 ? system : { ...system, modifiers: { weight } } };
+}
+
 export function mapRow(type: ItemType, cells: RowCells): RowMapping {
     switch (type) {
+        case "armourModification":
+            return armourModification(cells);
         case "weapon":
             return weapon(cells);
         case "armour":
@@ -447,7 +462,6 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "gear":
         case "cybernetic":
         case "weaponModification":
-        case "armourModification":
         case "criticalInjury":
         case "condition":
         case "mutation":
