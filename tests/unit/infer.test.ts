@@ -64,6 +64,7 @@ import {
     parseNpc,
     reinforcementTerms,
     rejoinSmallCaps,
+    sizeOf,
     specialAbilities,
     splitFields,
 } from "../../src/infer/npc.ts";
@@ -751,6 +752,15 @@ describe("npc statblocks", () => {
         ]);
         expect(items.every((i) => typeof i["_id"] === "string" && String(i["_id"]).length === 16)).toBe(true);
         expect(Object(actor.fields["system"])["weapons"]).toEqual({ mode: "embedded", simple: [] });
+    });
+
+    it("reads the creature's size from its listed Size trait", () => {
+        expect(sizeOf(listedItems("Dim Sight, Size (Hulking), Glow", "trait"))).toBe(5);
+        expect(sizeOf(listedItems("Size (Puny)", "trait"))).toBe(2);
+        expect(sizeOf(listedItems("Size (7)", "trait"))).toBe(7);
+        expect(sizeOf(listedItems("Size (Vast)", "trait"))).toBeNull();
+        expect(sizeOf(listedItems("Dim Sight", "trait"))).toBeNull();
+        expect(sizeOf(listedItems("Size (Hulking)", "talent"))).toBeNull();
     });
 
     it("reads a reinforcement's call terms from its introduction", () => {

@@ -6,6 +6,7 @@ import { splitTier } from "./names.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import { panelWeapons } from "./panel-weapons.ts";
 import { mapRow } from "./rows.ts";
+import { SIZES } from "./schema.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 import { isVehicleLabel } from "./vehicle.ts";
 
@@ -341,6 +342,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     const listed = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
         listedItems(fields[key] ?? "", LIST_ITEM_TYPE[key]),
     );
+    const size = sizeOf(listed);
+    if (size !== null) {
+        system["size"] = size;
+    }
     // Weapons boxed in the panel with their own profile, unless a weapons list names them.
     const named = new Set(listed.filter((i) => i.type === "weapon").map((i) => itemKey(i.name)));
     const boxed = panelWeapons(grid.associatedText.map(rejoinSmallCaps))
@@ -358,6 +363,23 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
 }
 
 const itemKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/**
+ * The creature's size category from its listed `Size` trait: the category it
+ * names ("Size (Hulking)", by the system's size labels) or its number
+ * ("Size (5)"). Null when it lists none or names none.
+ */
+export function sizeOf(items: readonly NpcItem[]): number | null {
+    const trait = items.find((i) => i.type === "trait" && /^\s*size\s*$/iu.test(i.name));
+    if (trait === undefined) {
+        return null;
+    }
+    const level = trait.system?.["level"];
+    if (typeof level === "number" && Number.isInteger(level) && Object.values(SIZES).includes(level)) {
+        return level;
+    }
+    return SIZES[(trait.specialization ?? "").trim().toLowerCase()] ?? null;
+}
 
 /** The statblock fields the panel prints as blocks under their own label. */
 export function blockFields(blocks: DetectedNumericGrid["blocks"]): Partial<Record<StatField, string>> {

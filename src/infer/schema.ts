@@ -116,6 +116,23 @@ export const ARMOUR_TYPES = [
     "force-field",
 ] as const;
 
+/**
+ * The system's creature size categories, by the label it shows for each
+ * (`CONFIG.WH40K.sizes`): the NPC `size` value is the category's number.
+ */
+export const SIZES: Readonly<Record<string, number>> = {
+    miniscule: 1,
+    puny: 2,
+    scrawny: 3,
+    average: 4,
+    hulking: 5,
+    enormous: 6,
+    massive: 7,
+    immense: 8,
+    monumental: 9,
+    titanic: 10,
+};
+
 /** The system's weapon technology types (the weapon `type` choices). */
 export const WEAPON_TYPES = [
     "primitive",
