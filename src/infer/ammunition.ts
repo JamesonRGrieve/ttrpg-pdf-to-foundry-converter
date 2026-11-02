@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Entity, JsonObject } from "../types/entity.ts";
-import { parseQualities, parseWeaponType } from "./notation.ts";
+import { parseArmourType, parseQualities, parseWeaponType } from "./notation.ts";
 
 /**
  * `system.weaponTypes`: the kinds of weapon an ammunition loads, read from
@@ -25,6 +25,20 @@ export function usedWithPieces(text: string): string[] {
         .split(/,|\s+(?:and|or)\s+/iu)
         .map((p) => p.replace(LEAD_WORDS, "").trim())
         .filter((p) => p.length > 0);
+}
+
+/**
+ * The armour types a modification's `Used With` line names ("Carapace and
+ * power armour", "Flak, Mesh, Carapace, and Power armour"), as the schema's
+ * armour type choices; "Any armour" is the schema's `any`. Empty when a piece
+ * names no type.
+ */
+export function usedWithArmourTypes(text: string): string[] {
+    if (/^\s*(?:any|all)\b/iu.test(text)) {
+        return ["any"];
+    }
+    const types = usedWithPieces(text).map((piece) => parseArmourType(piece));
+    return types.length > 0 && types.every((t) => t !== null) ? [...new Set(types)] : [];
 }
 
 /** The singular forms a plural piece may name a weapon by ("revolvers" → "revolver"). */

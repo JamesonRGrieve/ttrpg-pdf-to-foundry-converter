@@ -5,7 +5,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
-import { applyAmmunitionEffects, applyAmmunitionWeaponTypes } from "./ammunition.ts";
+import { applyAmmunitionEffects, applyAmmunitionWeaponTypes, usedWithArmourTypes } from "./ammunition.ts";
 import { inferBookSlug, inferBookTitle } from "./book.ts";
 import { classifyTable } from "./classify.ts";
 import {
@@ -1368,6 +1368,11 @@ function extractEntries(
         const usedWith = entry.fields.find(([label]) => /^used with$/iu.test(label.trim()))?.[1];
         if (type === "ammunition" && usedWith !== undefined) {
             out.usedWith.set(nameKey(item.name), usedWith);
+        }
+        // An armour modification's `Used With` names the armour types it fits.
+        const fits = usedWith === undefined ? [] : usedWithArmourTypes(usedWith);
+        if (type === "armourModification" && fits.length > 0 && item.system["restrictions"] === undefined) {
+            item.system["restrictions"] = { armourTypes: fits };
         }
         out.add(
             "Item",

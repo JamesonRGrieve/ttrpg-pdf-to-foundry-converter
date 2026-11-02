@@ -4,6 +4,7 @@ import {
     ammunitionEffect,
     applyAmmunitionEffects,
     applyAmmunitionWeaponTypes,
+    usedWithArmourTypes,
     usedWithPieces,
     usedWithTypes,
 } from "../../src/infer/ammunition.ts";
@@ -111,5 +112,23 @@ describe("ammunition effects", () => {
             modifiers: { damage: 2 },
         });
         expect(kept.fields["system"]).toMatchObject({ addedQualities: ["flicker"] });
+    });
+});
+
+describe("armour a modification is used with", () => {
+    it("names the schema's armour types a Used With line lists", () => {
+        expect(usedWithArmourTypes("Carapace and power armour.")).toEqual(["carapace", "power"]);
+        expect(usedWithArmourTypes("Flak, Mesh, Carapace, and Power armour")).toEqual([
+            "flak",
+            "mesh",
+            "carapace",
+            "power",
+        ]);
+        expect(usedWithArmourTypes("Any armour.")).toEqual(["any"]);
+    });
+
+    it("names none when a piece names no armour type", () => {
+        expect(usedWithArmourTypes("Carapace armour and lamp hoods")).toEqual([]);
+        expect(usedWithArmourTypes("Glow cloaks")).toEqual([]);
     });
 });
