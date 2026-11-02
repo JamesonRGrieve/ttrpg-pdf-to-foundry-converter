@@ -80,6 +80,7 @@ import {
     preferTableBenefit,
     modalHeadingSizes,
     nameKey,
+    qualifiedBySection,
     siblingKinds,
     singularKey,
     type TableRecord,
@@ -89,7 +90,7 @@ import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
 import { mapRow, type RowCells } from "../../src/infer/rows.ts";
 import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
 import { TARGETS } from "../../src/infer/targets.ts";
-import type { DetectedTable } from "../../src/infer/types.ts";
+import type { DetectedTable, TableRow } from "../../src/infer/types.ts";
 import { createLogger } from "../../src/logger.ts";
 import type { Entity, JsonObject, JsonValue } from "../../src/types/entity.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
@@ -2434,5 +2435,58 @@ describe("schema", () => {
     it("names packs line-book-category and escapes HTML paragraphs", () => {
         expect(packName("dh2", "field-manual", "items-weapons")).toBe("dh2-field-manual-items-weapons");
         expect(toHtml("a < b\n\nc & d")).toBe("<p>a &lt; b</p><p>c &amp; d</p>");
+    });
+});
+
+describe("section-qualified table names", () => {
+    const row = (cells: string[]): TableRow => ({
+        cells: cells.map((text, colIndex) => ({ text, colIndex, isHeader: false })),
+        isHeaderRow: false,
+        isSectionHeader: false,
+        sectionName: null,
+    });
+    const section = (name: string): TableRow => ({
+        cells: [],
+        isHeaderRow: false,
+        isSectionHeader: true,
+        sectionName: name,
+    });
+    const table = (rows: TableRow[]): DetectedTable => ({
+        pageIndex: 0,
+        headers: ["Type", "Cost"],
+        rows,
+        tableTitle: "Lamp Services",
+    });
+
+    it("names a grade repeated under each section by its section", () => {
+        const low = row(["Low Grade (Tallow, Rush)", "5"]);
+        const high = row(["High Grade", "50"]);
+        const lowOil = row(["Low Grade", "2"]);
+        const names = qualifiedBySection(
+            table([section("Candles"), low, high, section("Oil"), lowOil, row(["High Grade", "20"])]),
+            0,
+        );
+        expect([names.get(low), names.get(high), names.get(lowOil)]).toEqual([
+            "Candles: Low Grade",
+            "Candles: High Grade",
+            "Oil: Low Grade",
+        ]);
+    });
+
+    it("leaves a catalogue that repeats a name or two", () => {
+        const names = qualifiedBySection(
+            table([
+                section("Wicks"),
+                row(["Glow Wick", "5"]),
+                row(["Long Wick", "6"]),
+                row(["Twin Wick", "7"]),
+                section("Lamps"),
+                row(["Glow Wick", "5"]),
+                row(["Hood Lamp", "9"]),
+                row(["Brass Lamp", "9"]),
+            ]),
+            0,
+        );
+        expect(names.size).toBe(0);
     });
 });

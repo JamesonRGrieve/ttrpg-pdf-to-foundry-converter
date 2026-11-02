@@ -470,6 +470,7 @@ function extractTables(
             continue;
         }
         const nameCol = nameColumn(table, roles);
+        const sectionQualified = qualifiedBySection(table, nameCol);
         if (keyedByBands(table, nameCol)) {
             unclassified += 1;
             continue;
@@ -503,7 +504,7 @@ function extractTables(
             // class in the name cell ("Bonesword Melee").
             const hasClassColumn = roles.some((r) => r?.includes("class") === true);
             const classInName = type === "weapon" && !hasClassColumn ? splitTrailingClass(cleaned) : null;
-            const name = classInName?.name ?? cleaned;
+            const name = sectionQualified.get(row) ?? classInName?.name ?? cleaned;
             // A name starts like a name (capital or digit, perhaps after an
             // opening quote) and reads like one; a lowercase start or a sentence
             // is prose that strayed into the column.
@@ -1540,6 +1541,41 @@ export function fitModifications(entities: readonly Entity[], line: Line, book: 
             e.pack = packName(line, book, itemSegment(type));
         }
     }
+}
+
+/** Share of a table's rows whose name recurs under another section for its rows to be grades of each. */
+const REPEATED_SHARE = 0.5;
+/** A closing parenthetical of examples ("Low Grade (Grox Pen, Bilge Berth)"). */
+const EXAMPLES = /\s*\([^()]*\)\s*$/u;
+
+/**
+ * A table whose rows repeat one name under different section rows ("Low
+ * Grade" under "Accommodation" and again under "Provisions") names each row
+ * by its section: "Accommodation: Low Grade" (closing examples dropped).
+ * Returns the qualified name of each such row.
+ */
+export function qualifiedBySection(table: DetectedTable, nameCol: number): Map<TableRow, string> {
+    const placed: { row: TableRow; section: string; base: string }[] = [];
+    let section: string | null = null;
+    for (const row of table.rows) {
+        if (row.isSectionHeader) {
+            section = row.sectionName;
+            continue;
+        }
+        const raw = row.cells.find((c) => c.colIndex === nameCol)?.text ?? "";
+        const base = cleanName(raw).replace(EXAMPLES, "");
+        if (!row.isHeaderRow && section !== null && base.length > 0) {
+            placed.push({ row, section, base });
+        }
+    }
+    const sectionsOf = new Map<string, Set<string>>();
+    for (const { section: s, base } of placed) {
+        sectionsOf.set(base.toLowerCase(), (sectionsOf.get(base.toLowerCase()) ?? new Set()).add(s));
+    }
+    // Grades repeated down a table, not a name or two a catalogue happens to repeat.
+    const repeats = placed.filter(({ base }) => (sectionsOf.get(base.toLowerCase())?.size ?? 0) > 1);
+    const graded = placed.length > 0 && repeats.length >= REPEATED_SHARE * placed.length;
+    return new Map(graded ? placed.map(({ row, section: s, base }) => [row, `${s}: ${base}`]) : []);
 }
 
 /**
