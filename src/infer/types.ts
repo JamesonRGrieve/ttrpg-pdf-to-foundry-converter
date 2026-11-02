@@ -46,6 +46,8 @@ export interface DetectedNumericGrid {
     blocks: { label: string | null; text: string; pageIndex: number }[];
     /** The figures at each hit location of a diagram printed beside the grid. */
     armourDiagram?: ArmourDiagram;
+    /** The runs the statblock's panel and diagram are set in: no running prose. */
+    panelRuns?: IRTextRun[];
 }
 
 /** Content kinds a table can be classified as (the Foundry system's type vocabulary). */

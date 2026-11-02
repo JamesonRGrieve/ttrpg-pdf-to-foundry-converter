@@ -73,7 +73,7 @@ import {
     type Line,
 } from "./schema.ts";
 import type { TargetSchema } from "./targets.ts";
-import type { ContentType, DetectedTable, TableRow } from "./types.ts";
+import type { ContentType, DetectedNumericGrid, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
 import {
     hasShipHeader,
@@ -1332,11 +1332,15 @@ function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
     return wordsOf(near.map((e) => `${e.heading.text} ${e.body}`).join(" "));
 }
 
-function extractActors(ir: IR, entries: readonly Entry[], out: EntityCollector): number {
+function extractActors(
+    ir: IR,
+    numeric: readonly DetectedNumericGrid[],
+    entries: readonly Entry[],
+    out: EntityCollector,
+): number {
     // Statblocks print their characteristics as a grid or as a row. A label
     // nearly every grid's banner carries ("… Profile") is no part of a name;
     // row captions already drop theirs.
-    const numeric = detectNumericGrids(ir);
     const grids = [...numeric, ...detectStatRows(ir)];
     const npcs = grids.map(parseNpc);
     const bannerNames = captionNames(
@@ -1674,9 +1678,11 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     const out = new EntityCollector(target, book, numbering, sourceBookLabel(line, inferBookTitle(ir)));
     const descriptions = new Map<string, string>();
     const { tables, unclassified, tableRuns } = extractTables(ir, out, log);
-    const detected = detectEntries(ir, tableRuns);
+    // A statblock's panel is no running prose: its lines join no entry.
+    const numeric = detectNumericGrids(ir);
+    const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
     const entries = extractEntries(joinSkillCharacteristics(detected), out, descriptions);
-    const grids = extractActors(ir, detected, out);
+    const grids = extractActors(ir, numeric, detected, out);
     extractOriginPaths(detected, runningHeads(ir), out);
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);

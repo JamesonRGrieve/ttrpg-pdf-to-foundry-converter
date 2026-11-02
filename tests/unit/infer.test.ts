@@ -935,12 +935,17 @@ describe("npc statblocks", () => {
                 ...label("Ember Rule:", "Glows.", 1, 60, 700, 0),
             ],
         );
-        const blocks = detectNumericGrids(ir)[0]?.blocks ?? [];
+        const [found] = detectNumericGrids(ir);
+        const blocks = found?.blocks ?? [];
         expect(blocks.map((b) => [b.label, b.pageIndex])).toEqual([
             ["Skills", 0],
             ["Talents", 0],
             ["Ember Rule", 1],
         ]);
+        // The panel's own box is no running prose; text carried elsewhere may share its column with prose.
+        const panel = new Set(found?.panelRuns?.map((r) => r.text));
+        expect(panel.has("and more awareness")).toBe(true);
+        expect(panel.has("and a keener eye")).toBe(false);
     });
 
     it("gives a label whose column was mistaken to the statblock it sits under", () => {

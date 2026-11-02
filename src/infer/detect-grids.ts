@@ -829,6 +829,19 @@ const DIAGRAM_BELOW = 40;
 const DIAGRAM_WIDTH = 150;
 
 /**
+ * A panel's runs set inside the statblock's own box (on its page, between the
+ * banner's and the grid's edges); text carried into another column or page
+ * may share it with other prose.
+ */
+function boxedRuns(lines: readonly BaselineLine[], grid: CharGrid, banner: Banner): IRTextRun[] {
+    const left = Math.min(banner.x0, grid.x0) - PANEL_SLACK;
+    const right = Math.max(banner.x1, grid.x1) + PANEL_SLACK;
+    return lines
+        .flatMap((l) => l.runs)
+        .filter((r) => r.pageIndex === grid.pageIndex && r.x >= left && r.x <= right);
+}
+
+/**
  * The runs beside a statblock's grid, between its banner and the grid's
  * foot: where a hit-location diagram is set.
  */
@@ -896,10 +909,12 @@ export function detectNumericGrids(ir: IR): DetectedNumericGrid[] {
             const labels = readLabelsForGrid(ir, grid);
             const values = grid.cells.map((c) => c.value);
             const lines = panelLines(ir, grid, banner, floor, nextRegion, bands);
-            const diagram = armourDiagram(diagramRuns(ir, grid, banner));
+            const beside = diagramRuns(ir, grid, banner);
+            const diagram = armourDiagram(beside);
 
             results.push({
                 ...(diagram === null ? {} : { armourDiagram: diagram }),
+                panelRuns: [...boxedRuns(lines, grid, banner), ...(diagram === null ? [] : beside)],
                 pageIndex: p,
                 name: banner.name,
                 caption: null,
