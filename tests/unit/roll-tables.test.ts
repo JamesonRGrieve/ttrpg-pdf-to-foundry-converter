@@ -37,6 +37,31 @@ describe("roll tables", () => {
         ]);
     });
 
+    it("joins a range broken at its dash, ends before a note, and rolls past 100 on d100", () => {
+        const roll = rollResults([
+            ["01-09", "Flicker."],
+            ["10-", "The lamp gutters and"],
+            ["13", "goes out."],
+            ["14-120", "Darkness."],
+            ["A lantern", "may be relit."],
+        ]);
+        expect(roll?.die).toBe(100);
+        expect(roll?.results).toEqual([
+            { range: [1, 9], text: "Flicker." },
+            { range: [10, 13], text: "The lamp gutters and goes out." },
+            { range: [14, 120], text: "Darkness." },
+        ]);
+        // A line without a die result between results is no note: no table.
+        expect(
+            rollResults([
+                ["1", "First."],
+                ["2", "Second."],
+                ["Aside", "Prose."],
+                ["3", "Third."],
+            ]),
+        ).toBeNull();
+    });
+
     it("rejects tables that are not rolls", () => {
         expect(rollResults([["Lamp", "A light."]])).toBeNull();
         expect(rollResults([["2-5", "Starts late."]])).toBeNull();

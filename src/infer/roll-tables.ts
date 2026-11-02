@@ -54,11 +54,12 @@ export interface RollResult {
  * die's top face. Returns the die too.
  */
 export function rollResults(
-    rows: readonly (readonly string[])[],
+    printedRows: readonly (readonly string[])[],
 ): { die: number; results: RollResult[] } | null {
-    if (rows.length === 0 || rows.some((r) => r.length !== ROLL_TABLE_COLUMNS)) {
+    if (printedRows.length === 0 || printedRows.some((r) => r.length !== ROLL_TABLE_COLUMNS)) {
         return null;
     }
+    const rows = withoutTrailingNotes(joinBrokenRanges(printedRows));
     const rolls = rows.map(([roll = ""]) => parseRollRange(roll));
     let reach = 0;
     for (const roll of rolls) {
@@ -68,7 +69,8 @@ export function rollResults(
         reach = roll.hi;
     }
     const printed = rolls.filter((r): r is PrintedRoll => r !== null);
-    const die = dieFor(reach);
+    // Results printed past a percentile die's top face are reached with modifiers to a d100 roll.
+    const die = reach > PERCENTILE_ZERO ? PERCENTILE_ZERO : dieFor(reach);
     if (die === null || printed[0]?.lo !== 1 || printed.some((r, i) => r.open && i !== printed.length - 1)) {
         return null;
     }
@@ -81,6 +83,44 @@ export function rollResults(
         results.push({ range: [roll.lo, roll.open ? die : roll.hi], text: outcome.trim() });
     }
     return { die, results };
+}
+
+/** A die result broken at its dash ("10–" over "13"): its first part. */
+const OPEN_DASH = /^\s*\d{1,3}\s*[-–—]\s*$/u;
+/** The second part of a broken die result: a bare figure. */
+const BARE_FIGURE = /^\s*\d{1,3}\s*$/u;
+
+/**
+ * A die range a layout broke at its dash ("10–" on one line, "13" under it)
+ * is one result: its two halves join, as do the outcome lines beside them.
+ */
+export function joinBrokenRanges(rows: readonly (readonly string[])[]): string[][] {
+    const out: string[][] = [];
+    for (const [roll = "", outcome = ""] of rows) {
+        const last = out.at(-1);
+        if (last !== undefined && OPEN_DASH.test(last[0] ?? "") && BARE_FIGURE.test(roll)) {
+            last[0] = `${(last[0] ?? "").trim()}${roll.trim()}`;
+            last[1] = `${last[1] ?? ""} ${outcome}`.trim();
+            continue;
+        }
+        out.push([roll, outcome]);
+    }
+    return out;
+}
+
+/** Fewest results a roll table holds before lines without a die result end it. */
+const MIN_RESULTS_BEFORE_NOTES = 2;
+
+/**
+ * Lines a layout read on after a table's last result (a note set under it)
+ * carry no die result, and no later line does: the table ends before them.
+ */
+export function withoutTrailingNotes(rows: readonly string[][]): string[][] {
+    const end = rows.findIndex(([roll = ""]) => parseRollRange(roll) === null);
+    return end >= MIN_RESULTS_BEFORE_NOTES &&
+        rows.slice(end).every(([roll = ""]) => parseRollRange(roll) === null)
+        ? rows.slice(0, end)
+        : [...rows];
 }
 
 export interface RollTableInput {
