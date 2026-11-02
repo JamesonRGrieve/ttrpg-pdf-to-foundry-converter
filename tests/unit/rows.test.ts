@@ -34,6 +34,20 @@ describe("weapon-table load rows", () => {
         expect(rowType("gear", shell)).toBe("gear");
     });
 
+    it("reads a weapon-table row of dashes with its weight and availability as gear", () => {
+        const engine = {
+            name: "Wick Engine",
+            class: "-",
+            damage: "-",
+            penetration: "-",
+            weight: "4kg",
+            availability: "Rare",
+        };
+        expect(rowType("weapon", engine)).toBe("gear");
+        // A repeated header row is no item.
+        expect(rowType("weapon", { ...engine, weight: "Wt.", availability: "Availability" })).toBeNull();
+    });
+
     it("drops weapon-table rows that print no weapon profile", () => {
         expect(rowType("weapon", { name: "Kettle whistle", availability: "—" })).toBeNull();
         expect(rowType("weapon", { name: "Sling", damage: "—", class: "—" })).toBeNull();

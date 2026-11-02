@@ -380,7 +380,15 @@ export function rowType(type: ItemType, cells: RowCells): ItemType | null {
         return filled(cell) && parse(cell) !== null;
     });
     if (!readable) {
-        return null;
+        // A weapon table may list an item that is no weapon — every weapon
+        // column a dash — with its weight and availability: a piece of gear.
+        return type === "weapon" &&
+            filled(cells.weight) &&
+            parseWeight(cells.weight) !== null &&
+            filled(cells.availability) &&
+            parseAvailability(cells.availability) !== null
+            ? "gear"
+            : null;
     }
     if (type !== "weapon") {
         return type;
