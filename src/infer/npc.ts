@@ -336,7 +336,7 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
         system["armour"] = authoredArmour(diagramArmour(grid.armourDiagram, bonus));
     }
     if (fields.skills !== undefined) {
-        system["skills"] = fields.skills;
+        system["skills"] = tidyList(fields.skills);
     }
 
     const listed = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
@@ -363,6 +363,22 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
 }
 
 const itemKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/**
+ * A statblock list as the book sets it, the spacing a text layer garbled
+ * around brackets restored: none inside them ("(S )" → "(S)"), one before an
+ * opening bracket after a word ("Acrobatics(Ag)") and before a bonus closing
+ * on one ("(Per)+10" → "(Per) +10").
+ */
+export function tidyList(text: string): string {
+    return text
+        .replace(/\(\s+/gu, "(")
+        .replace(/\s+\)/gu, ")")
+        .replace(/(\p{L})\(/gu, "$1 (")
+        .replace(/\)\s*([+-]\s*\d)/gu, ") $1")
+        .replace(/\s+/gu, " ")
+        .trim();
+}
 
 /**
  * The creature's size category from its listed `Size` trait: the category it

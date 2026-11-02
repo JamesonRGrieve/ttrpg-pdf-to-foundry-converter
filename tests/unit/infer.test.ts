@@ -65,6 +65,7 @@ import {
     reinforcementTerms,
     rejoinSmallCaps,
     sizeOf,
+    tidyList,
     specialAbilities,
     splitFields,
 } from "../../src/infer/npc.ts";
@@ -752,6 +753,12 @@ describe("npc statblocks", () => {
         ]);
         expect(items.every((i) => typeof i["_id"] === "string" && String(i["_id"]).length === 16)).toBe(true);
         expect(Object(actor.fields["system"])["weapons"]).toEqual({ mode: "embedded", simple: [] });
+    });
+
+    it("restores a statblock list's spacing around brackets", () => {
+        expect(tidyList("Glow Lore(Int)+10, Dodge (Ag ) +20,  Wick ( Lamps) (Int) -10")).toBe(
+            "Glow Lore (Int) +10, Dodge (Ag) +20, Wick (Lamps) (Int) -10",
+        );
     });
 
     it("reads the creature's size from its listed Size trait", () => {
