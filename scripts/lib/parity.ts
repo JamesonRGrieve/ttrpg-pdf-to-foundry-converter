@@ -103,6 +103,14 @@ export const EXCLUDED: readonly RegExp[] = [
     /^source\.(book|errata)$/u,
 ];
 
+/**
+ * Non-empty initial values the system's schema gives a leaf an output document
+ * leaves out (`<type key>:<path>`): on import the leaf holds this value.
+ */
+export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
+    "weapon:type": "primitive",
+};
+
 /** The mechanically significant leaves per type key; every other compared leaf still counts in the full score. */
 export const MECHANICS: Readonly<Record<string, readonly string[]>> = {
     weapon: [
@@ -559,14 +567,15 @@ export function scoreBook(reference: readonly Doc[], output: readonly Doc[], lin
             });
         }
         for (const [path, value] of wantLeaves) {
-            const s = leafScore(value, gotLeaves.get(path));
+            const gotValue = gotLeaves.get(path) ?? SCHEMA_INITIAL[`${type}:${path}`];
+            const s = leafScore(value, gotValue);
             scores.set(path, s);
             if (s < 1) {
                 r.mismatches.push({
                     name: String(want["name"]),
                     field: path,
                     want: show(value),
-                    got: show(gotLeaves.get(path)),
+                    got: show(gotValue),
                 });
             }
         }

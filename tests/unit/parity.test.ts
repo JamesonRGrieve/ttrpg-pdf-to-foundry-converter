@@ -167,6 +167,15 @@ describe("scoreBook", () => {
         expect(p.types["npc"]?.fields["name"]).toEqual({ checks: 2, score: 1 });
     });
 
+    it("compares a leaf the output leaves out at the schema's initial value", () => {
+        const p = scoreBook(
+            [{ name: "Club", type: "weapon", system: { type: "primitive" } }],
+            [{ name: "Club", type: "weapon", system: {} }],
+            "dh2",
+        );
+        expect(p.types["weapon"]?.fields["type"]).toEqual({ checks: 1, score: 1 });
+    });
+
     it("measures edit distance with an early stop", () => {
         expect(editDistance("kitten", "sitting", 5)).toBe(3);
         expect(editDistance("abc", "abcdefgh", 2)).toBe(3);
