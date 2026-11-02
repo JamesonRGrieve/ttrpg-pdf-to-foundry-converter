@@ -55,7 +55,7 @@ const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
     [/\b(?:instant changes|unlocked advances)\b/iu, "changes"],
     [/\bspecial abilit(?:y|ies)\b/iu, "specialAbilities"],
     [/\bcharacteristic modifiers?\b/iu, "modifiers"],
-    [/\bfate threshold\b/iu, "fate"],
+    [/\bfate\b/iu, "fate"],
     [/\bwounds?\b/iu, "wounds"],
     [/\baptitudes?\b/iu, "aptitudes"],
     [/\bbonus\b/iu, "bonus"],
@@ -101,6 +101,8 @@ export interface OriginPathReading {
     description: string;
     grants: JsonObject;
     modifiers: Record<string, number>;
+    /** Signed changes to the character's resources (`wounds`, `fate`), when printed. */
+    resources?: Record<string, number>;
     /** Rules text of a single-effect origin (a table row's effect), plain text. */
     effect?: string;
     /** Experience cost of taking the step, when it has one. */
@@ -386,9 +388,14 @@ function specialAbility(text: string): JsonObject | null {
 }
 
 /** Whether a reading grants anything: a modifier, a wound or fate value, or a listed grant. */
-function grantsAnything(read: { grants: JsonObject; modifiers: Record<string, number> }): boolean {
+function grantsAnything(read: {
+    grants: JsonObject;
+    modifiers: Record<string, number>;
+    resources?: Record<string, number>;
+}): boolean {
     return (
         Object.keys(read.modifiers).length > 0 ||
+        Object.keys(read.resources ?? {}).length > 0 ||
         read.grants["woundsFormula"] !== "" ||
         read.grants["fateThreshold"] !== 0 ||
         Object.values(read.grants).some((v) => Array.isArray(v) && v.length > 0)
@@ -402,6 +409,7 @@ function grantsOf(
 ): {
     grants: JsonObject;
     modifiers: Record<string, number>;
+    resources?: Record<string, number>;
     xpCost?: number;
     requirements?: string;
 } {
@@ -417,6 +425,7 @@ function grantsOf(
     let modifiers: Record<string, number> = {};
     let woundsFormula = "";
     let fateThreshold = 0;
+    const resources: Record<string, number> = {};
     for (const entry of labels) {
         const label = capitalizeWords(entry.heading.text.toLowerCase());
         // A grant's value is the label's first paragraph; later ones are narrative.
@@ -437,13 +446,29 @@ function grantsOf(
             case "modifiers":
                 modifiers = characteristicModifiers(value);
                 break;
-            case "fate":
-                fateThreshold = Number(/\d+/u.exec(value)?.[0] ?? "0");
+            case "fate": {
+                // A signed value ("+1") changes the character's Fate; a bare one is the threshold.
+                const bonus = signedBonus(value);
+                if (bonus === null) {
+                    fateThreshold = Number(/\d+/u.exec(value)?.[0] ?? "0");
+                } else {
+                    resources["fate"] = bonus;
+                }
                 break;
-            case "wounds":
-                woundsFormula =
-                    /\d+\s*\+\s*\d*d\d+|\d*d\d+\s*\+\s*\d+|\d+/iu.exec(value)?.[0].replace(/\s+/gu, "") ?? "";
+            }
+            case "wounds": {
+                // A signed value ("+2", "−1") is a bonus to the total, which the system
+                // reads only from modifiers.resources.wounds; anything else is the
+                // starting-wounds formula.
+                const bonus = signedBonus(value);
+                if (bonus === null) {
+                    woundsFormula =
+                        /\d+\s*\+\s*\d*d\d+|\d*d\d+\s*\+\s*\d+|\d+/iu.exec(value)?.[0].replace(/\s+/gu, "") ?? "";
+                } else {
+                    resources["wounds"] = bonus;
+                }
                 break;
+            }
             case "aptitudes": {
                 const r = listGrants(
                     value,
@@ -558,7 +583,18 @@ function grantsOf(
             choices,
         },
         modifiers,
+        ...(Object.keys(resources).length === 0 ? {} : { resources }),
     };
+}
+
+/** A value printed as a signed change ("+2", "−1", "-3"): its number, or null when unsigned. */
+function signedBonus(value: string): number | null {
+    const m = /^\s*([+−–-])\s*(\d+)\b(?!\s*\+\s*\d*d\d)/iu.exec(value);
+    if (m === null) {
+        return null;
+    }
+    const magnitude = Number(m[2]);
+    return m[1] === "+" ? magnitude : -magnitude;
 }
 
 /**

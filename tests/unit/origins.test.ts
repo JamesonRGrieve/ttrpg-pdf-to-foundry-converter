@@ -14,6 +14,7 @@ import {
     signedCharacteristicChanges,
     splitTopLevel,
 } from "../../src/infer/origin-paths.ts";
+import { buildOriginPath } from "../../src/infer/schema.ts";
 import { DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
 
 const STEPS = DEFAULT_TARGET.originSteps;
@@ -433,6 +434,50 @@ describe("origins granted by inline fields", () => {
             { name: "Lantern", quantity: 1 },
             { name: "Wick Shears", quantity: 1 },
         ]);
+    });
+
+    it("keeps a signed wound or Fate change out of the formula, as a resource modifier", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 4: SELECT A PRIDE", "display", ["Lamps"], [], "Pick one."),
+                at("Ember Heart", "display", ["Lamps"], [], "The flame never dies."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Ember Heart"],
+                    [
+                        ["Characteristic Bonus", "Gain +5 Toughness."],
+                        ["Starting Talents", "Steady Hand"],
+                        ["Wounds", "+2"],
+                        ["Fate", "−1"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins.map((o) => [o.name, o.step.key, o.resources])).toEqual([
+            ["Ember Heart", "pride", { wounds: 2, fate: -1 }],
+        ]);
+        expect(origins[0]?.grants["woundsFormula"]).toBe("");
+        expect(origins[0]?.grants["fateThreshold"]).toBe(0);
+        const body = buildOriginPath({
+            name: "Ember Heart",
+            step: { key: "pride", index: 3 },
+            line: "bc",
+            book: "lamps",
+            page: "1",
+            description: "",
+            grants: origins[0]?.grants ?? {},
+            characteristics: origins[0]?.modifiers ?? {},
+            ...(origins[0]?.resources === undefined ? {} : { resources: origins[0].resources }),
+        });
+        const system = body["system"] as { modifiers: unknown; grants: Record<string, unknown> };
+        expect(system.modifiers).toEqual({
+            characteristics: { toughness: 5 },
+            resources: { wounds: 2, fate: -1 },
+        });
+        // The system declares no grants.wounds (#688): the bonus has one home.
+        expect(system.grants).not.toHaveProperty("wounds");
     });
 
     it("reads nothing from a single grant, a priced block, or a section naming no step", () => {

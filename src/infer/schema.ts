@@ -119,6 +119,12 @@ export interface OriginPathInput {
     grants: JsonObject;
     /** Characteristic key → points. */
     characteristics: Record<string, number>;
+    /**
+     * Resource key (`wounds`, `fate`) → signed change. The system reads an
+     * origin's wound and Fate bonuses only here (`modifiers.resources`), never
+     * from its grants.
+     */
+    resources?: Record<string, number>;
     /** Rules text of an origin that is a single effect (a divination), as HTML. */
     effectText?: string;
     /** Experience cost of taking the step. */
@@ -140,7 +146,12 @@ export function buildOriginPath(input: OriginPathInput): JsonObject {
             gameSystem: input.line,
             gameSystems: [input.line],
             grants: input.grants,
-            modifiers: { characteristics: input.characteristics },
+            modifiers: {
+                characteristics: input.characteristics,
+                ...(input.resources === undefined || Object.keys(input.resources).length === 0
+                    ? {}
+                    : { resources: input.resources }),
+            },
             effectText: input.effectText ?? "",
             description: descriptionContainer(input.line, input.description),
             source: sourceRecord(input.line, input.book, input.page),
