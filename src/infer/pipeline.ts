@@ -1503,6 +1503,24 @@ export function citeFirstPage(head: Entity, readings: readonly Entity[], line: L
 }
 
 /**
+ * A summary table's Benefit column states what a talent or trait does in
+ * one line; the entry's prose is its description. When both are printed, the
+ * table's line is the `benefit`, however much longer the prose is.
+ */
+export function preferTableBenefit(head: Entity, readings: readonly Entity[]): void {
+    const benefitOf = (e: Entity): JsonValue | undefined => {
+        const system = e.fields["system"];
+        return isJsonObject(system) ? system["benefit"] : undefined;
+    };
+    const row = readings.find((e) => e.blockId.startsWith(TABLE_READING) && !isBlank(benefitOf(e)));
+    const system = head.fields["system"];
+    const benefit = row === undefined ? undefined : benefitOf(row);
+    if (benefit !== undefined && isJsonObject(system)) {
+        system["benefit"] = benefit;
+    }
+}
+
+/**
  * One document per (pack, name). A book often prints an entity twice — its
  * stat line in a table, its rules prose in an entry block — so same-named
  * readings are merged field-wise, the richest reading taking precedence.
@@ -1531,6 +1549,7 @@ function consolidate(
         for (const e of rest) {
             mergeInto(head.fields, e.fields);
         }
+        preferTableBenefit(head, group);
         // A statblock is cited by its own entry; a same-named one elsewhere
         // (an illustration) does not move it.
         if (head.documentType === "Item") {

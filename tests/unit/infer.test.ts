@@ -73,6 +73,7 @@ import {
     isBlank,
     kindEntry,
     mergeInto,
+    preferTableBenefit,
     modalHeadingSizes,
     nameKey,
     siblingKinds,
@@ -1454,6 +1455,32 @@ describe("unmarked section rows", () => {
         expect(isUnmarkedSectionRow(row("Glow Pistol", "Pistol", "30m"), 8)).toBe(false);
         expect(isUnmarkedSectionRow(row("Glow Pistol", "30m"), 8)).toBe(false);
         expect(isUnmarkedSectionRow(row("Lamp Weapons"), 3)).toBe(false);
+    });
+});
+
+describe("table benefits", () => {
+    const reading = (blockId: string, benefit: string): Entity => ({
+        blockId,
+        documentType: "Item",
+        group: "g",
+        pack: "p",
+        ordinal: 0,
+        fields: { name: "Lamp Sense", type: "talent", system: { benefit } },
+        images: {},
+        provenance: { pageIndex: 0, y: 0 },
+    });
+
+    it("keeps a summary table's one-line benefit over the entry's longer prose", () => {
+        const entry = reading("entry:talent", "<p>A long account of how the lamp sense works in play.</p>");
+        const row = reading("table:talent", "<p>Sense lamps.</p>");
+        preferTableBenefit(entry, [entry, row]);
+        expect(entry.fields["system"]).toEqual({ benefit: "<p>Sense lamps.</p>" });
+    });
+
+    it("keeps the entry's benefit when no table prints one", () => {
+        const entry = reading("entry:talent", "<p>Prose.</p>");
+        preferTableBenefit(entry, [entry, reading("table:talent", "")]);
+        expect(entry.fields["system"]).toEqual({ benefit: "<p>Prose.</p>" });
     });
 });
 

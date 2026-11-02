@@ -23,7 +23,7 @@ import {
     parseWeight,
     BODY_LOCATIONS,
 } from "./notation.ts";
-import type { ItemType } from "./schema.ts";
+import { type ItemType, toHtml } from "./schema.ts";
 
 /**
  * One table row, keyed by field role, → the type-specific `system` fields and
@@ -277,8 +277,9 @@ function talent(cells: RowCells): RowMapping {
     out.system["prerequisites"] = structuredPrerequisites(
         prereq === undefined || isEmptyCell(prereq) ? "" : prereq,
     ).prerequisites;
-    if (cells.benefit !== undefined) {
-        out.system["benefit"] = cells.benefit.trim();
+    // `benefit` is an HTML field, as the entry reading writes it.
+    if (cells.benefit !== undefined && !isEmptyCell(cells.benefit)) {
+        out.system["benefit"] = toHtml(cells.benefit);
     }
     return out;
 }
@@ -315,8 +316,8 @@ function psychicPower(cells: RowCells): RowMapping {
 
 function trait(cells: RowCells): RowMapping {
     const out = mapping();
-    if (cells.benefit !== undefined) {
-        out.system["benefit"] = cells.benefit.trim();
+    if (cells.benefit !== undefined && !isEmptyCell(cells.benefit)) {
+        out.system["benefit"] = toHtml(cells.benefit);
     }
     return out;
 }

@@ -58,6 +58,16 @@ describe("weapon-table load rows", () => {
         expect(talent.system["prerequisites"]).toMatchObject({ characteristics: { perception: 30 } });
     });
 
+    it("writes a talent or trait row's benefit as the HTML field it is, and a dash as none", () => {
+        expect(mapRow("talent", { name: "Wick Sense", benefit: "Sense wicks." }).system["benefit"]).toBe(
+            "<p>Sense wicks.</p>",
+        );
+        expect(mapRow("trait", { name: "Glow", benefit: "Glows & hums." }).system["benefit"]).toBe(
+            "<p>Glows &amp; hums.</p>",
+        );
+        expect(mapRow("trait", { name: "Glow", benefit: "—" }).system["benefit"]).toBeUndefined();
+    });
+
     it("reads dashed armour points as no protection anywhere", () => {
         const mapped = mapRow("armour", { name: "Ward Plate", armourPoints: "—", protection: "40" });
         expect(mapped.variantized["armourPoints"]).toEqual({
