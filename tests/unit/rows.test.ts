@@ -42,6 +42,22 @@ describe("weapon-table load rows", () => {
         expect(rowType("gear", { name: "Padded Coat" })).toBe("gear");
     });
 
+    it("maps a power table row's prerequisites, Psy Rating and Sustained to the schema's shapes", () => {
+        const mapped = mapRow("psychicPower", {
+            name: "Spark",
+            prerequisites: "Psy Rating 2, Corruption 10+",
+            sustained: "No",
+        });
+        expect(mapped.system["prerequisites"]).toMatchObject({
+            text: "Psy Rating 2, Corruption 10+",
+            thresholds: { corruption: 10 },
+        });
+        expect(mapped.system["prCost"]).toBe(2);
+        expect(mapped.system["sustained"]).toBe(false);
+        const talent = mapRow("talent", { name: "Wick Sense", prerequisites: "Perception 30" });
+        expect(talent.system["prerequisites"]).toMatchObject({ characteristics: { perception: 30 } });
+    });
+
     it("reads dashed armour points as no protection anywhere", () => {
         const mapped = mapRow("armour", { name: "Ward Plate", armourPoints: "—", protection: "40" });
         expect(mapped.variantized["armourPoints"]).toEqual({

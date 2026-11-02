@@ -307,6 +307,86 @@ function modificationFor(fields: ReadonlyMap<string, string>): ItemType | null {
     return /\b(?:weapons?|ammunition|ammo)\b/iu.test(usedWith) ? "weaponModification" : null;
 }
 
+/** Characteristic names a prerequisite may print, longest first (single letters are too ambiguous in prose). */
+const PREREQUISITE_CHARACTERISTICS = Object.keys(CHARACTERISTICS)
+    .filter((name) => name.length > 1)
+    .sort((a, b) => b.length - a.length);
+
+/** The actor stats a prerequisite may set a minimum on (the schema's threshold keys). */
+const PREREQUISITE_THRESHOLDS = ["corruption", "infamy", "insanity", "rank"] as const;
+
+/** The Chaos alignments a prerequisite may require (the schema's alignment choices). */
+const PREREQUISITE_ALIGNMENTS = ["khorne", "nurgle", "slaanesh", "tzeentch"] as const;
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/**
+ * A printed Prerequisite line as the schema's structured prerequisites
+ * (`{text, characteristics, skills, talents, talentsAny, alignment,
+ * thresholds}`), plus the Psy Rating it names. Only gates the schema keys by
+ * its own vocabulary are read — characteristic minimums ("Willpower 40",
+ * "WP 50+"), stat thresholds ("Corruption 30+", "5+ Insanity points",
+ * "Rank 3") and a Chaos alignment ("Aligned Nurgle"). Skills and talents are
+ * names from the book, so they stay in `text` for the reader.
+ */
+export function structuredPrerequisites(printed: string): { prerequisites: JsonObject; psyRating: number | null } {
+    const text = printed.replace(/\.\s*$/u, "").trim();
+    const shown = /^(?:none|[-–—])?$/iu.test(text) ? "" : text;
+    // Each gate is one listed part; a part offering an alternative ("… or 20+
+    // Insanity") is a condition the shape cannot hold, so it stays text.
+    const parts = shown
+        .split(/[,;\n]|\band\b/iu)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0 && !/\bor\b/iu.test(p));
+    const characteristics: JsonObject = {};
+    const thresholds: JsonObject = {};
+    let alignment = "";
+    let psyRating: number | null = null;
+    for (const part of parts) {
+        for (const name of PREREQUISITE_CHARACTERISTICS) {
+            const m = new RegExp(`^${escapeRe(name)}\\s*(?:of\\s*)?(\\d{2,3})\\s*\\+?$`, "iu").exec(part);
+            const key = CHARACTERISTICS[name];
+            if (m !== null && key !== undefined && characteristics[key] === undefined) {
+                characteristics[key] = Number(m[1]);
+            }
+        }
+        for (const stat of PREREQUISITE_THRESHOLDS) {
+            // "Corruption 30+", "10 Corruption points", "5+ Insanity points", "Rank 3".
+            const m =
+                new RegExp(`^${stat}(?:\\s+points?)?\\s*(?:of\\s*)?(\\d+)\\s*\\+?$`, "iu").exec(part) ??
+                new RegExp(`^(\\d+)\\s*\\+?\\s*${stat}(?:\\s+points?)?$`, "iu").exec(part);
+            if (m !== null && thresholds[stat] === undefined) {
+                thresholds[stat] = Number(m[1]);
+            }
+        }
+        const aligned = new RegExp(
+            `^aligned\\s+(?:to\\s+|with\\s+)?(${PREREQUISITE_ALIGNMENTS.join("|")})$`,
+            "iu",
+        ).exec(part);
+        if (aligned?.[1] !== undefined) {
+            alignment = aligned[1].toLowerCase();
+        } else if (/^unaligned$/iu.test(part)) {
+            alignment = "unaligned";
+        }
+        const psy = /^psy(?:chic)?\s+rating\s*(?:of\s*)?(\d+)\s*\+?$/iu.exec(part)?.[1];
+        if (psy !== undefined) {
+            psyRating = Number(psy);
+        }
+    }
+    return {
+        prerequisites: {
+            text: shown,
+            characteristics,
+            skills: [],
+            talents: [],
+            talentsAny: [],
+            alignment,
+            thresholds,
+        },
+        psyRating,
+    };
+}
+
 /**
  * Whether a printed Sustained value says the power can be sustained (the
  * schema's `sustained` is a boolean): "No" or a dash says it cannot; "Yes" or
@@ -375,16 +455,22 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             // keeps it where aptitudes go.
             system["aptitudes"] = splitList(text("aptitudes") ?? text("aptitude") ?? text("alignment") ?? "");
             // A closing full stop ends the printed sentence; it is not part of the value.
-            system["prerequisites"] = {
-                text: (text("prerequisites") ?? text("prerequisite") ?? "").replace(/\.\s*$/u, ""),
-            };
+            system["prerequisites"] = structuredPrerequisites(
+                text("prerequisites") ?? text("prerequisite") ?? "",
+            ).prerequisites;
             system["benefit"] = html;
             break;
         }
         case "psychicPower": {
+            const printedPrerequisites = text("prerequisites") ?? text("prerequisite");
+            if (printedPrerequisites !== undefined) {
+                const { prerequisites, psyRating } = structuredPrerequisites(printedPrerequisites);
+                system["prerequisites"] = prerequisites;
+                if (psyRating !== null) {
+                    system["prCost"] = psyRating;
+                }
+            }
             for (const [label, field] of [
-                ["prerequisites", "prerequisites"],
-                ["prerequisite", "prerequisites"],
                 ["action", "action"],
                 ["focus power", "focusPower"],
                 ["range", "range"],

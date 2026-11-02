@@ -32,6 +32,7 @@ import {
     isSustained,
     joinSkillCharacteristics,
     powerXpCost,
+    structuredPrerequisites,
     typeNamedBy,
 } from "../../src/infer/entry-types.ts";
 import {
@@ -1159,7 +1160,73 @@ describe("entry typing", () => {
             entry("LAMP SENSE", [["Prerequisites", "Perception 30."]], ["Talents"]),
             "talent",
         );
-        expect(item.system["prerequisites"]).toEqual({ text: "Perception 30" });
+        expect(item.system["prerequisites"]).toEqual({
+            text: "Perception 30",
+            characteristics: { perception: 30 },
+            skills: [],
+            talents: [],
+            talentsAny: [],
+            alignment: "",
+            thresholds: {},
+        });
+    });
+
+    it("structures a prerequisite line's gates in the schema's own keys (#673, #675)", () => {
+        const read = (s: string): ReturnType<typeof structuredPrerequisites> => structuredPrerequisites(s);
+        expect(read("Willpower 40").prerequisites["characteristics"]).toEqual({ willpower: 40 });
+        expect(read("WP 50+, Psy Rating 4")).toEqual({
+            prerequisites: {
+                text: "WP 50+, Psy Rating 4",
+                characteristics: { willpower: 50 },
+                skills: [],
+                talents: [],
+                talentsAny: [],
+                alignment: "",
+                thresholds: {},
+            },
+            psyRating: 4,
+        });
+        expect(read("Corruption 30+, Psy Rating 4").prerequisites["thresholds"]).toEqual({ corruption: 30 });
+        expect(read("5+ Insanity points").prerequisites["thresholds"]).toEqual({ insanity: 5 });
+        expect(read("10 Corruption points").prerequisites["thresholds"]).toEqual({ corruption: 10 });
+        expect(read("Rank 3").prerequisites["thresholds"]).toEqual({ rank: 3 });
+        expect(read("Aligned Nurgle, Willpower 45").prerequisites).toMatchObject({
+            alignment: "nurgle",
+            characteristics: { willpower: 45 },
+        });
+        // A skill's rank is a skill gate, not the actor's rank; skills and talents stay text.
+        expect(read("Lamp Lore rank 2").prerequisites["thresholds"]).toEqual({});
+        // A part offering an alternative cannot be held by the shape: text only.
+        expect(read("Fellowship 30 or 20+ Insanity").prerequisites).toMatchObject({
+            characteristics: {},
+            thresholds: {},
+        });
+        expect(read("None.").prerequisites["text"]).toBe("");
+        expect(read("—").prerequisites["text"]).toBe("");
+    });
+
+    it("gates a talent on its threshold only, never granting the stat (#691)", () => {
+        const item = entryItem(
+            entry("ASH SOUL", [["Prerequisites", "10 Corruption points"]], ["Talents"]),
+            "talent",
+        );
+        expect(item.system["prerequisites"]).toMatchObject({ thresholds: { corruption: 10 } });
+        expect(item.system).not.toHaveProperty("modifiers");
+    });
+
+    it("structures a power's prerequisites and reads the Psy Rating it needs as prCost", () => {
+        const item = entryItem(
+            entry("SPARK", [
+                ["Prerequisites", "Willpower 40, Psy Rating 3"],
+                ["Focus Power", "Willpower"],
+            ]),
+            "psychicPower",
+        );
+        expect(item.system["prerequisites"]).toMatchObject({
+            text: "Willpower 40, Psy Rating 3",
+            characteristics: { willpower: 40 },
+        });
+        expect(item.system["prCost"]).toBe(3);
     });
 
     it("falls back to the enclosing section's schema type word", () => {

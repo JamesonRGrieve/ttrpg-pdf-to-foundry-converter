@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Role } from "./columns.ts";
+import { isSustained, structuredPrerequisites } from "./entry-types.ts";
 import {
     isEmptyCell,
     parseArmourPoints,
@@ -273,7 +274,9 @@ function talent(cells: RowCells): RowMapping {
     }
     out.system["aptitudes"] = cells.aptitudes === undefined ? [] : parseAptitudes(cells.aptitudes);
     const prereq = cells.prerequisites;
-    out.system["prerequisites"] = { text: prereq === undefined || isEmptyCell(prereq) ? "" : prereq.trim() };
+    out.system["prerequisites"] = structuredPrerequisites(
+        prereq === undefined || isEmptyCell(prereq) ? "" : prereq,
+    ).prerequisites;
     if (cells.benefit !== undefined) {
         out.system["benefit"] = cells.benefit.trim();
     }
@@ -291,9 +294,17 @@ function psychicPower(cells: RowCells): RowMapping {
     text("focusPower", "focusPower");
     text("action", "action");
     text("range", "range");
-    text("sustained", "sustained");
     text("subtype", "subtype");
-    text("prerequisites", "prerequisites");
+    if (cells.sustained !== undefined && !isEmptyCell(cells.sustained)) {
+        out.system["sustained"] = isSustained(cells.sustained);
+    }
+    if (cells.prerequisites !== undefined && !isEmptyCell(cells.prerequisites)) {
+        const { prerequisites, psyRating } = structuredPrerequisites(cells.prerequisites);
+        out.system["prerequisites"] = prerequisites;
+        if (psyRating !== null) {
+            out.system["prCost"] = psyRating;
+        }
+    }
     if (cells.effect !== undefined) {
         out.variantized["effect"] = cells.effect.trim();
     }
