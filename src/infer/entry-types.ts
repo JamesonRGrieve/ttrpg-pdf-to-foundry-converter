@@ -51,6 +51,8 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bammunition\b|\bammo\b/iu, "ammunition"],
     [/\bweapons? (?:modifications?|upgrades?|customi[sz]ations?)\b/iu, "weaponModification"],
     [/\barmou?rs? (?:modifications?|upgrades?)\b/iu, "armourModification"],
+    // "Weapon Qualities", "Weapon Special Qualities" (a text layer may drop the space).
+    [/\bweapons?\s*(?:special\s*)?qualit(?:y|ies)\b/iu, "weaponQuality"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -187,7 +189,6 @@ function splitCharacteristic(heading: string): { name: string; characteristic: s
 export function typeNamedBy(text: string): ItemType | null {
     return SECTION_TYPES.find(([re]) => re.test(text))?.[1] ?? null;
 }
-
 /** The kinds that identify themselves by field blocks (see SECTION_TYPES), by the word a section names them with. */
 const FIELDED_KINDS: readonly [RegExp, ItemType][] = [
     [/\btalents?\b/iu, "talent"],
@@ -230,6 +231,12 @@ const SELF_REFERENCES: readonly [RegExp, ItemType][] = [
     [/\bthis (?:psychic )?power\b/iu, "psychicPower"],
     [/\bthis order\b/iu, "order"],
 ];
+
+/** Most words a name whose small capitals lost their case is read as a heading with. */
+const MAX_CASE_LOST_WORDS = 3;
+
+/** A heading that is only one of the schema's kind words. */
+const KIND_WORD = /^(?:talents?|traits?|skills?|psychic powers?|weapons?|armou?rs?|gear)$/iu;
 
 /** The fielded kind the nearest enclosing section naming any catalogue kind names, if fielded. */
 function fieldedSectionKind(sections: readonly string[]): ItemType | null {
@@ -300,9 +307,20 @@ export function entryType(entry: Entry): ItemType | null {
     // and a heading that names the very kind it sits under ("Traits",
     // "Acquiring Traits") heads part of that section rather than being one of
     // its entries.
+    // A short name with no capitals at all, or with a capital inside a word
+    // after lower case ("blAst", "PoweR"), is small capitals whose case was
+    // lost too (a fragment of prose runs longer, or carries punctuation).
     const heading = entry.heading.text.trim();
-    const smallCapsLost = fields.size > 0 && /\p{Lu}/u.test(heading) && caseLost(heading);
+    const shortName =
+        /^[\p{L}\s()'’-]+$/u.test(heading) && heading.split(/\s+/u).length <= MAX_CASE_LOST_WORDS;
+    const smallCapsLost =
+        (fields.size > 0 && /\p{Lu}/u.test(heading) && caseLost(heading)) ||
+        (shortName && (!/\p{Lu}/u.test(heading) || /\p{Ll}\p{Lu}/u.test(heading)));
     if (!/^[\p{Lu}\p{N}]/u.test(heading) && !smallCapsLost) {
+        return null;
+    }
+    // A heading that is only a kind's name ("TALENT", "Skills") is furniture.
+    if (KIND_WORD.test(heading)) {
         return null;
     }
     const type = sectionType(entry.sections);
@@ -669,6 +687,11 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         }
         case "trait":
             system["benefit"] = html;
+            break;
+        case "weaponQuality":
+            // A quality printed with a rating placeholder ("Blast (X)") takes a level.
+            system["hasLevel"] = /\(\s*x\s*\)/iu.test(name);
+            variantized["effect"] = toHtml(text("effect") ?? entry.body);
             break;
         case "mutation": {
             const category = mutationCategory(entry.sections);

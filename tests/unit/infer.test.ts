@@ -1095,6 +1095,21 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types entries under a weapon qualities section, case-lost headings included", () => {
+        const sections = ["Armoury", "WEAPONSPECIAL QUALITIES"];
+        expect(entryType(entry("GLARING", [], sections))).toBe("weaponQuality");
+        expect(entryType(entry("dazzle (x)", [], sections))).toBe("weaponQuality");
+        expect(entryType(entry("glArE", [], sections))).toBe("weaponQuality");
+        // A heading that is only a kind word is the section's furniture.
+        expect(entryType(entry("TALENT", [], sections))).toBeNull();
+        // Mixed case breaking off like prose stays prose.
+        expect(entryType(entry("and Glare", [], sections))).toBeNull();
+        const rated = entryItem(entry("DAZZLE (X)", [], sections, "Blinds the target."), "weaponQuality");
+        expect(rated.system["hasLevel"]).toBe(true);
+        expect(rated.variantized["effect"]).toBe("<p>Blinds the target.</p>");
+        expect(entryItem(entry("GLARING", [], sections), "weaponQuality").system["hasLevel"]).toBe(false);
+    });
+
     it("types a section headed by the gift category's label as mutations, with their riders", () => {
         const gift = entry(
             "GLOWING VEINS",
