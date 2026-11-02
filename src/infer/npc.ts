@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject } from "../types/entity.ts";
+import { diagramArmour, HIT_LOCATIONS, type HitLocation, type LocationArmour } from "./armour-diagram.ts";
 import { splitTier } from "./names.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import { panelWeapons } from "./panel-weapons.ts";
@@ -156,10 +157,6 @@ export function rejoinSmallCaps(text: string): string {
     return text.replace(/\b(\p{Lu}) (?=\p{Lu}{2,}\b)/gu, "$1");
 }
 
-type HitLocation = "head" | "body" | "leftArm" | "rightArm" | "leftLeg" | "rightLeg";
-
-const HIT_LOCATIONS: readonly HitLocation[] = ["head", "body", "leftArm", "rightArm", "leftLeg", "rightLeg"];
-
 /** A printed location word → the hit locations it covers ("Arms" both, "Chest" the body). */
 const LOCATION_WORDS: readonly [RegExp, readonly HitLocation[]][] = [
     [/^all(?:\s+locations)?$/iu, HIT_LOCATIONS],
@@ -206,8 +203,10 @@ export function armourOf(text: string): JsonObject | null {
     const lone = /^\d+\W*$/u.exec(line);
     if (lone !== null || (firstWhere < 0 && /^none\b/iu.test(line))) {
         const value = lone === null ? 0 : Number.parseInt(line, 10);
-        const all = Object.fromEntries(HIT_LOCATIONS.map((loc) => [loc, value]));
-        return { mode: "locations", total: value, authored: true, locations: all };
+        for (const loc of HIT_LOCATIONS) {
+            points[loc] = value;
+        }
+        return authoredArmour(points);
     }
     if (firstPoints < 0 || firstWhere < 0) {
         return null;
@@ -241,7 +240,12 @@ export function armourOf(text: string): JsonObject | null {
     for (const loc of bare) {
         points[loc] = 0;
     }
-    return { mode: "locations", total: points.body, authored: true, locations: points };
+    return authoredArmour(points);
+}
+
+/** Printed per-location armour in the schema's shape: authored, its total the body's. */
+function authoredArmour(points: LocationArmour): JsonObject {
+    return { mode: "locations", total: points.body, authored: true, locations: { ...points } };
 }
 
 export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
@@ -324,6 +328,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
         } else {
             system["armour"] = armour;
         }
+    } else if (grid.armourDiagram !== undefined) {
+        const toughness = characteristics["t"];
+        const bonus = typeof toughness === "number" ? Math.floor(toughness / 10) : 0;
+        system["armour"] = authoredArmour(diagramArmour(grid.armourDiagram, bonus));
     }
     if (fields.skills !== undefined) {
         system["skills"] = fields.skills;

@@ -4,6 +4,7 @@ import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
 import { bestLattice, LATTICE_SIDE } from "../util/lattice.ts";
 import { inMarginBand, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { wordBreakBetween, wordSpace } from "../util/text.ts";
+import { armourDiagram } from "./armour-diagram.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 
 /**
@@ -818,6 +819,31 @@ export function panelBlocks(lines: readonly BaselineLine[]): DetectedNumericGrid
     return blocks;
 }
 
+/**
+ * How far below the grid's lowest values a diagram beside it may reach, in
+ * points: a row's pitch further, for a tenth characteristic set in a row of
+ * its own under the three.
+ */
+const DIAGRAM_BELOW = 40;
+/** How far left of the grid a diagram beside it may start, in points. */
+const DIAGRAM_WIDTH = 150;
+
+/**
+ * The runs beside a statblock's grid, between its banner and the grid's
+ * foot: where a hit-location diagram is set.
+ */
+function diagramRuns(ir: IR, grid: CharGrid, banner: Banner): IRTextRun[] {
+    const left = grid.x0 - DIAGRAM_WIDTH;
+    return ir.runs.filter(
+        (r) =>
+            r.pageIndex === grid.pageIndex &&
+            r.x >= left &&
+            r.x < grid.x0 - PANEL_WORD_GAP &&
+            r.y >= grid.y0 - DIAGRAM_BELOW &&
+            r.y < banner.y - PANEL_WORD_GAP,
+    );
+}
+
 export function detectNumericGrids(ir: IR): DetectedNumericGrid[] {
     const { gridFont, gridSize } = discoverFontRoles(ir);
     const results: DetectedNumericGrid[] = [];
@@ -870,8 +896,10 @@ export function detectNumericGrids(ir: IR): DetectedNumericGrid[] {
             const labels = readLabelsForGrid(ir, grid);
             const values = grid.cells.map((c) => c.value);
             const lines = panelLines(ir, grid, banner, floor, nextRegion, bands);
+            const diagram = armourDiagram(diagramRuns(ir, grid, banner));
 
             results.push({
+                ...(diagram === null ? {} : { armourDiagram: diagram }),
                 pageIndex: p,
                 name: banner.name,
                 caption: null,

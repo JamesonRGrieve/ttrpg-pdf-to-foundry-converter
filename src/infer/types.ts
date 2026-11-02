@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { IRTextRun } from "../types/ir.ts";
+import type { ArmourDiagram } from "./armour-diagram.ts";
 
 export interface TableCell {
     text: string;
@@ -43,6 +44,8 @@ export interface DetectedNumericGrid {
      * unlabelled lines), with the page the block opens on.
      */
     blocks: { label: string | null; text: string; pageIndex: number }[];
+    /** The figures at each hit location of a diagram printed beside the grid. */
+    armourDiagram?: ArmourDiagram;
 }
 
 /** Content kinds a table can be classified as (the Foundry system's type vocabulary). */
