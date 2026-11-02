@@ -197,6 +197,15 @@ export const SCHEMA_INITIAL: Readonly<Record<string, Json>> = {
     "npc:size": 4,
     "npc:weapons.mode": "simple",
     "npc:armour.mode": "simple",
+    "skill:skillType": "basic",
+    "mutation:category": "minor",
+    "mutation:visible": true,
+    "order:category": "combat",
+    "navigatorPower:mastery": "novice",
+    "shipComponent:componentType": "essential",
+    "shipComponent:availability": "common",
+    "shipComponent:condition": "functional",
+    "shipComponent:hullType": ["all"],
 };
 
 /**
