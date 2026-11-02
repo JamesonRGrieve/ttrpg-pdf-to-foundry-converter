@@ -134,10 +134,16 @@ export function asLoaded(type: string, system: Json | undefined): Json | undefin
     if (type !== "npc" || !isObject(system)) {
         return system;
     }
-    const out: { [k: string]: Json } = { ...system };
-    const move = out["move"];
+    const { move, armourPoints: ap, ...rest } = system;
+    const out: { [k: string]: Json } = rest;
+    // A legacy string the migrations read is consumed; any other value stays.
+    if (move !== undefined && !(typeof move === "string" && move.trim() !== "")) {
+        out["move"] = move;
+    }
+    if (ap !== undefined && !(typeof ap === "string" && ap.trim() !== "")) {
+        out["armourPoints"] = ap;
+    }
     if (typeof move === "string" && move.trim() !== "") {
-        delete out["move"];
         const parts = move.split("/").map((p) => Number.parseInt(p.trim(), 10));
         if (parts.length >= 4 && parts.every((n) => !Number.isNaN(n))) {
             out["movement"] = {
@@ -149,9 +155,7 @@ export function asLoaded(type: string, system: Json | undefined): Json | undefin
             out["movementManual"] = true;
         }
     }
-    const ap = out["armourPoints"];
     if (typeof ap === "string" && ap.trim() !== "") {
-        delete out["armourPoints"];
         const locations: { [k: string]: Json } = {
             head: 0,
             body: 0,
