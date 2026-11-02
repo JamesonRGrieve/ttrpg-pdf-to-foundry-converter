@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { inferDnd5e } from "./infer/dnd5e/index.ts";
 import { infer } from "./infer/pipeline.ts";
-import type { Line } from "./infer/schema.ts";
+import { type Line, LINES, packFlags, packSegment } from "./infer/schema.ts";
 import { type SystemId, type Target, TARGET_IDS, targetId } from "./infer/targets.ts";
 import type { Logger } from "./logger.ts";
 import { arbitrate } from "./ocr/arbitrate.ts";
@@ -15,6 +15,7 @@ import { homologate } from "./stages/homologate.ts";
 import { recoverImages } from "./stages/images.ts";
 import { type BuiltModule, buildModule, MODULE_ASSET_PLACEHOLDER } from "./stages/module.ts";
 import { normalize } from "./stages/normalize.ts";
+import type { JsonObject } from "./types/entity.ts";
 import type { IR, ImageAssets } from "./types/ir.ts";
 import { sha256Hex } from "./util/hash.ts";
 import { byteCompare } from "./util/ordered.ts";
@@ -244,16 +245,28 @@ export async function runModule(
     const ids = new Set(results.map((r) => targetId(r.target)));
     // The run's targets in the system's order: they name the module and read in its flags.
     const targets = TARGET_IDS.filter((id) => ids.has(id));
+    // The wh40k-rpg system finds a line's packs by the flags they declare.
+    const booksOf = (line: Line): string[] =>
+        results.flatMap((r) => (r.target.system === "wh40k-rpg" && r.target.line === line ? [r.book] : []));
+    const flagsOf = (group: string, pack: string): JsonObject | undefined => {
+        const line = LINES.find((l) => l === group);
+        const segment = line === undefined ? null : packSegment(pack, line, booksOf(line));
+        return line === undefined || segment === null ? undefined : packFlags(line, segment);
+    };
     const module = buildModule({
         system,
         targets,
         packs: grouped.flatMap(({ group, packs }) =>
-            packs.map((p) => ({
-                name: p.pack,
-                label: packLabel(p.pack, group),
-                documentType: p.documentType,
-                documents: p.documents,
-            })),
+            packs.map((p) => {
+                const systemFlags = system === "wh40k-rpg" ? flagsOf(group, p.pack) : undefined;
+                return {
+                    name: p.pack,
+                    label: packLabel(p.pack, group),
+                    documentType: p.documentType,
+                    documents: p.documents,
+                    ...(systemFlags === undefined ? {} : { systemFlags }),
+                };
+            }),
         ),
         assets: results.flatMap((r) => r.assets),
         sources: results.map((r) => r.book),

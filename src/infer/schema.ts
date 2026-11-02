@@ -157,6 +157,34 @@ export function packName(line: Line, book: string, segment: string): string {
     return `${line}-${book}-${segment}`;
 }
 
+/**
+ * The segment of a pack named `packName(line, book, segment)` for one of
+ * `books`, or null when none of them names it. The longest matching book wins,
+ * so a book whose slug extends another's is not cut short.
+ */
+export function packSegment(pack: string, line: Line, books: readonly string[]): string | null {
+    const prefix = books
+        .map((book) => `${line}-${book}-`)
+        .filter((p) => pack.startsWith(p) && pack.length > p.length)
+        .sort((a, b) => b.length - a.length)[0];
+    return prefix === undefined ? null : pack.slice(prefix.length);
+}
+
+/** A pack's category as the system reads it: its segment, any `items-` prefix dropped. */
+export function packCategory(segment: string): string {
+    return segment.replace(/^items-/u, "");
+}
+
+/**
+ * The flags a pack declares for the system (`flags["wh40k-rpg"]`). The system
+ * finds a line's packs only by these — never by a pack's name — so a pack
+ * without them is invisible to every lookup. Engine output is the book's
+ * printed rules, never homebrew.
+ */
+export function packFlags(line: Line, segment: string): JsonObject {
+    return { line, category: packCategory(segment), homebrew: false };
+}
+
 /** Item types carrying a physical acquisition cost (the standard cost shape). */
 const PHYSICAL: ReadonlySet<ItemType> = new Set([
     "weapon",

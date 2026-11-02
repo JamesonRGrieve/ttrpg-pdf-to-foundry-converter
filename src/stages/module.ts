@@ -54,6 +54,8 @@ export interface PackInput {
     documentType: FoundryDocumentType;
     /** The pack's documents, each with its `_id`. */
     documents: readonly JsonObject[];
+    /** Flags the pack declares for its game system (under the system's id), if the system reads any. */
+    systemFlags?: JsonObject;
 }
 
 export interface ModuleInput {
@@ -167,7 +169,10 @@ export function buildModule(input: ModuleInput): BuiltModule {
             type: p.documentType,
             system: input.system,
             ownership: { PLAYER: "OBSERVER", ASSISTANT: "OWNER" },
-            flags: { [FLAG_SCOPE]: { release: input.provenance.release } },
+            flags: {
+                [FLAG_SCOPE]: { release: input.provenance.release },
+                ...(p.systemFlags === undefined ? {} : { [input.system]: p.systemFlags }),
+            },
         })),
         packFolders: [
             { name: `PDF Compendium ${id.slice(-MODULE_ID_HASH_LENGTH)}`, packs: packs.map((p) => p.name) },

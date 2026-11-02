@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
+import { packCategory, packFlags, packSegment } from "../../src/infer/schema.ts";
 import {
     buildModule,
     MODULE_ASSET_PLACEHOLDER,
@@ -124,6 +125,44 @@ describe("module packaging", () => {
     it("gives distinct content distinct module ids, so modules install side by side", () => {
         const other = input({ assets: [{ relPath: "x2.png", bytes: new Uint8Array([9]) }] });
         expect(buildModule(other).id).not.toBe(buildModule(input()).id);
+    });
+
+    it("declares each pack's system flags under the system's id, beside the release", () => {
+        const base = input();
+        const [gear, bestiary] = base.packs;
+        if (gear === undefined || bestiary === undefined) {
+            throw new Error("two packs expected");
+        }
+        const module = buildModule({
+            ...base,
+            packs: [{ ...gear, systemFlags: packFlags("dh2", "items-gear") }, bestiary],
+        });
+        const manifest = JSON.parse(text(module.files[1]?.contents ?? "")) as {
+            packs: { name: string; flags: Record<string, unknown> }[];
+        };
+        const flags = Object.fromEntries(manifest.packs.map((p) => [p.name, p.flags]));
+        expect(flags["dh2-lamps-items-gear"]).toEqual({
+            "foundry-pdf-parser": { release: "2000-01-02-03-04" },
+            "wh40k-rpg": { line: "dh2", category: "gear", homebrew: false },
+        });
+        // A pack with no system flags declares only its release.
+        expect(flags["dh2-lamps-actors-bestiary"]).toEqual({
+            "foundry-pdf-parser": { release: "2000-01-02-03-04" },
+        });
+    });
+
+    it("reads a pack's line flags the way the system does: segment, items- prefix dropped", () => {
+        expect(packSegment("dh2-lamps-items-gear", "dh2", ["lamps"])).toBe("items-gear");
+        expect(packSegment("dh2-lamps-origins-homeworlds", "dh2", ["lamps"])).toBe("origins-homeworlds");
+        // The longest book wins where one book's slug extends another's.
+        expect(packSegment("dh2-lamps-oil-actors-bestiary", "dh2", ["lamps", "lamps-oil"])).toBe(
+            "actors-bestiary",
+        );
+        expect(packSegment("rt-lamps-items-gear", "dh2", ["lamps"])).toBeNull();
+        expect(packCategory("items-weapon-mods")).toBe("weapon-mods");
+        expect(packCategory("origins-elite-advances")).toBe("origins-elite-advances");
+        expect(packCategory("vehicles-terracraft")).toBe("vehicles-terracraft");
+        expect(packFlags("rt", "rolltables")).toEqual({ line: "rt", category: "rolltables", homebrew: false });
     });
 
     it("names the module by its targets, several joined in order", () => {

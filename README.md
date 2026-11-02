@@ -99,7 +99,9 @@ Several modules install side by side: the module id is a hash of the module's
 own contents, pack names are namespaced by the module, image paths point into
 the module, and nothing touches the system or other packages. Packs are named
 `<target>-<book>-<category>`; the book segment comes from the PDF's own metadata
-title.
+title. The wh40k-rpg system finds packs by what they declare, not by their
+names, so each wh40k-rpg pack carries `flags["wh40k-rpg"]`: its line, its
+category (the segment without an `items-` prefix) and `homebrew: false`.
 
 Each module is versioned by the converter release that built it, a
 `YYYY-MM-DD-HH-MM` stamp (UTC) also recorded on every pack. Its one script,
