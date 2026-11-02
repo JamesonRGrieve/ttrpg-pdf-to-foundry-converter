@@ -674,6 +674,11 @@ function extractTables(
                 out.warnings.push(`p${out.page(table.pageIndex)} ${name}: unparsed ${u}`);
             }
             records.push({ name: fullName, itemType, cells, mapped });
+            // An ammunition's Used With cell is read as its printed `Used With` line.
+            const usedWith = cells.usedWith?.trim();
+            if (itemType === "ammunition" && usedWith !== undefined && /\p{L}/u.test(usedWith)) {
+                out.usedWith.set(nameKey(fullName), usedWith);
+            }
         }
         // A row keyed by a roll is a result the table points to, not where the item is catalogued.
         const rolled = roles.some((r) => r?.includes("roll") === true);

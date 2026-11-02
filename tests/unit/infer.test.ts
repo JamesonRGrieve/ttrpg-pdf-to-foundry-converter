@@ -2843,6 +2843,51 @@ describe("entry detection", () => {
         expect(origins(table(["Divination", "Effect", "Page"], (y) => [cell("44", 460, y)]))).toEqual([]);
     });
 
+    it("reads an ammunition table's Used With column as the weapons it loads", () => {
+        const cell = (
+            text: string,
+            x: number,
+            y: number,
+            weight: "bold" | "normal" = "normal",
+        ): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: text.length * 5,
+            font: weight === "bold" ? "h" : "b",
+            weight,
+            size: 10,
+        });
+        const ir = irOf(
+            [0],
+            [
+                run(body, 760, "b", 10),
+                cell("Table 5-9: Special Ammunition", 60, 720, "bold"),
+                ...["Name", "Can Upgrade", "Availability"].map((h, i) =>
+                    cell(h, [60, 200, 400][i] ?? 0, 700, "bold"),
+                ),
+                ...[
+                    ["Glow Rounds", "Any Las weapon"],
+                    ["Wick Shells", "Any Bolt weapon"],
+                    ["Hush Darts", "Any Flame weapon"],
+                    ["Dim Pellets", "Any Las or Bolt weapon"],
+                ].flatMap(([name, fits], i) => [
+                    cell(name ?? "", 60, 680 - 20 * i),
+                    cell(fits ?? "", 200, 680 - 20 * i),
+                    cell("Scarce", 400, 680 - 20 * i),
+                ]),
+            ],
+        );
+        const loads = infer(ir, createLogger("error"), TARGETS.dh2)
+            .graph.entities.filter((e) => e.fields["type"] === "ammunition")
+            .map((e) => [e.fields["name"], Object(e.fields["system"])["weaponTypes"]]);
+        expect(loads).toEqual([
+            ["Glow Rounds", ["las"]],
+            ["Wick Shells", ["bolt"]],
+            ["Hush Darts", ["flame"]],
+            ["Dim Pellets", ["las", "bolt"]],
+        ]);
+    });
+
     it("flags the components a caption names essential", () => {
         const cell = (
             text: string,
