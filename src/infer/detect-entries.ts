@@ -674,8 +674,33 @@ export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[
             justified.add(l);
         }
     });
+    // Text set to a narrower measure than its column (an inset block of
+    // fields): a line is full when it ends near where the widest of its
+    // neighbours starting at its own left edge ends.
+    const insetFull = new Set<TextLine>();
+    lines.forEach((l, i) => {
+        const left = visibleRuns(l)[0]?.x;
+        if (left === undefined) {
+            return;
+        }
+        const aligned = lines
+            .slice(Math.max(0, i - WRAP_WINDOW), i + WRAP_WINDOW + 1)
+            .filter(
+                (n) =>
+                    n !== l &&
+                    n.pageIndex === l.pageIndex &&
+                    n.column === l.column &&
+                    Math.abs((visibleRuns(n)[0]?.x ?? Number.NaN) - left) <= JUSTIFIED_TOLERANCE,
+            );
+        const widest = Math.max(...aligned.map((n) => n.right));
+        if (aligned.length >= MIN_JUSTIFIED_NEIGHBOURS && l.right >= widest - WRAP_SLACK) {
+            insetFull.add(l);
+        }
+    });
     const wrapped = (l: TextLine): boolean =>
-        justified.has(l) || l.right >= (columnRight.get(`${l.pageIndex}:${l.column}`) ?? 0) - WRAP_SLACK;
+        justified.has(l) ||
+        insetFull.has(l) ||
+        l.right >= (columnRight.get(`${l.pageIndex}:${l.column}`) ?? 0) - WRAP_SLACK;
     /** A field value runs on when its line wraps before the value ends a sentence, or it ends mid-list. */
     const continues = (l: TextLine, value: string): boolean =>
         (wrapped(l) && !endsSentence(value)) || valueUnfinished(value);

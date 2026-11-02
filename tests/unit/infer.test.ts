@@ -2272,6 +2272,31 @@ describe("entry detection", () => {
         expect(entry?.body).toContain("You dim every lamp in sight.");
     });
 
+    it("continues a field set to a measure narrower than its column", () => {
+        // Inset lines all 39 characters (195 points) wide, the column's own measure far wider:
+        // the field's line is as full as its neighbours.
+        const inset = (text: string, y: number): IRTextRun => run(text.padEnd(39, " "), y, "b", 10);
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                inset("A medal for those who keep the lamps", 450),
+                inset("burning when all the others have gone", 438),
+                inset("out across the whole of the marshland", 426),
+                { ...run("Awarded for:", 414, "b", 10), weight: "bold" },
+                { ...run("Keeping a lamp lit through", 414, "b", 10), x: 125 },
+                inset("the longest night of the whole winter", 402),
+                run("in the reeds.", 390, "b", 10),
+                run("Then the next paragraph starts.", 378, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields[0]?.[1]).toBe(
+            "Keeping a lamp lit through the longest night of the whole winter in the reeds.",
+        );
+    });
+
     it("continues a field that reaches the text measure despite a stray run past it", () => {
         const label = "Requires:";
         const value = "Glow Lore (Lamps) +10 or Dim";
