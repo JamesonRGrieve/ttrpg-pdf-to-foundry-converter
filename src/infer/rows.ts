@@ -445,6 +445,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "vehicleTrait":
         case "medal":
         case "darkPact":
+        case "ritual":
             return effectItem(cells, "effect", PHYSICAL_EFFECT.has(type));
         case "shipComponent":
             return shipComponent(cells);

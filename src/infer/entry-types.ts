@@ -301,6 +301,14 @@ export function entryType(entry: Entry): ItemType | null {
     if (/\bpact\b/iu.test(entry.heading.text) && entry.sections.some((s) => DARK_PACTS.test(s))) {
         return "darkPact";
     }
+    // A ritual prints its requirements and effects under a section of rituals.
+    if (
+        has(fields, "requirements") &&
+        has(fields, "effects", "effect") &&
+        entry.sections.some((s) => /\brituals?\b/iu.test(s))
+    ) {
+        return "ritual";
+    }
     const tagged = headingKindTag(entry.heading.text);
     if (tagged !== null) {
         return tagged;
@@ -808,6 +816,20 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "ritual": {
+            for (const [labels, key] of [
+                [["requirements"], "requirements"],
+                [["effects", "effect"], "effect"],
+                [["cost", "costs"], "costs"],
+                [["the price of failure", "failure"], "failure"],
+            ] as const) {
+                const value = labels.map((l) => text(l)).find((v) => v !== undefined);
+                if (value !== undefined) {
+                    system[key] = toHtml(value);
+                }
+            }
+            break;
+        }
         case "darkPact": {
             // Its boons and banes, each a named entry of the schema's lists.
             for (const list of ["boons", "banes"] as const) {

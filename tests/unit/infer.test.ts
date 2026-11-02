@@ -1104,6 +1104,27 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types a ritual by its requirement and effect fields under a section of rituals", () => {
+        const ritual = entry(
+            "SUMMON THE LAMPLIGHTER",
+            [
+                ["Requirements", "A circle of candles."],
+                ["Effects", "A lamplighter appears."],
+                ["Cost", "One candle."],
+                ["The Price of Failure", "The candles go out."],
+            ],
+            ["Rites and Rituals", "Example Rituals"],
+        );
+        expect(entryType(ritual)).toBe("ritual");
+        expect(entryItem(ritual, "ritual").system).toEqual({
+            requirements: "<p>A circle of candles.</p>",
+            effect: "<p>A lamplighter appears.</p>",
+            costs: "<p>One candle.</p>",
+            failure: "<p>The candles go out.</p>",
+        });
+        expect(entryType({ ...ritual, sections: ["Gear"] })).toBeNull();
+    });
+
     it("types pacts under a dark pacts section, their boons folded in from the sub-heading", () => {
         const sections = ["Lore", "dark pacts", "pacts and their effects"];
         const joined = joinPactGroups([

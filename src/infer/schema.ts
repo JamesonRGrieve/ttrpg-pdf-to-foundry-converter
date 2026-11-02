@@ -53,7 +53,8 @@ export type ItemType =
     | "navigatorPower"
     | "vehicleTrait"
     | "medal"
-    | "darkPact";
+    | "darkPact"
+    | "ritual";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -82,6 +83,7 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     vehicleTrait: "items-vehicle-traits",
     medal: "items-medals",
     darkPact: "items-dark-pacts",
+    ritual: "items-rituals",
 };
 
 /** The system's ship weapon types (the ship weapon `weaponType` choices). */
