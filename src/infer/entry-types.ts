@@ -301,6 +301,14 @@ export function entryType(entry: Entry): ItemType | null {
     if (/\bpact\b/iu.test(entry.heading.text) && entry.sections.some((s) => DARK_PACTS.test(s))) {
         return "darkPact";
     }
+    // An oath, by its name, prints its effect under a section about oaths.
+    if (
+        /\boath\b/iu.test(entry.heading.text) &&
+        has(fields, "effect") &&
+        entry.sections.some((s) => /\boath/iu.test(s))
+    ) {
+        return "oath";
+    }
     // A ritual prints its requirements and effects under a section of rituals.
     if (
         has(fields, "requirements") &&
@@ -816,6 +824,14 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "oath": {
+            const requirement = text("prerequisite") ?? text("prerequisites") ?? text("requirement");
+            if (requirement !== undefined) {
+                system["requirement"] = toHtml(requirement);
+            }
+            variantized["effect"] = toHtml(text("effect") ?? "");
+            break;
+        }
         case "ritual": {
             for (const [labels, key] of [
                 [["requirements"], "requirements"],

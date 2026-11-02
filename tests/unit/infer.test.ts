@@ -1104,6 +1104,22 @@ describe("entry typing", () => {
         ).toEqual(base);
     });
 
+    it("types an oath by its name and effect under a section about oaths", () => {
+        const oath = entry(
+            "OATH OF THE LAMP",
+            [
+                ["Prerequisite", "Lamplighter"],
+                ["Effect", "The lamp never goes out."],
+            ],
+            ["Preparation", "OATH-TAKING"],
+        );
+        expect(entryType(oath)).toBe("oath");
+        const item = entryItem(oath, "oath");
+        expect(item.system["requirement"]).toBe("<p>Lamplighter</p>");
+        expect(item.variantized["effect"]).toBe("<p>The lamp never goes out.</p>");
+        expect(entryType(entry("OATH PREREQUISITE", [], ["OATH-TAKING"]))).toBeNull();
+    });
+
     it("types a ritual by its requirement and effect fields under a section of rituals", () => {
         const ritual = entry(
             "SUMMON THE LAMPLIGHTER",
