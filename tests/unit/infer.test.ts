@@ -78,6 +78,7 @@ import {
     namingEntry,
     isBlank,
     criticalEffects,
+    honourGroupsOf,
     kindEntry,
     kindNamed,
     mergeInto,
@@ -2658,6 +2659,31 @@ describe("section-qualified table names", () => {
         headers: ["Type", "Cost"],
         rows,
         tableTitle: "Lamp Services",
+    });
+
+    it("groups medals under the nearest honour-type heading beside them", () => {
+        const at = (text: string, sections: string[], fields: [string, string][] = []): Entry => ({
+            heading: { text, size: 11, style: "h", pageIndex: 0 },
+            sections,
+            fields,
+            body: "",
+        });
+        const awards = ["Rewards", "Medals"];
+        const first = at("Lamp Star", awards, [["Awarded for", "Bravery."]]);
+        const second = at("Wick Cross", awards, [["Awarded for", "Wit."]]);
+        const elsewhere = at("Oil Rules", ["Rules"]);
+        const groups = honourGroupsOf([
+            at("IMPERIAL HONOURS", awards),
+            first,
+            at("CAMPAIGN HONOURS", [...awards, "Lamp Star"]),
+            second,
+            elsewhere,
+        ]);
+        expect([groups.get(first), groups.get(second), groups.get(elsewhere)]).toEqual([
+            "imperial",
+            "campaign",
+            undefined,
+        ]);
     });
 
     it("reads a severity table into a critical injury's graded effects", () => {
