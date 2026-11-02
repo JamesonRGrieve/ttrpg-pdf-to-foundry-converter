@@ -193,6 +193,13 @@ describe("scoreBook", () => {
             "dh2",
         );
         expect(p.types["weapon"]?.fields["type"]).toEqual({ checks: 1, score: 1 });
+        // The damage template's type and other required choices load at their initial values too.
+        const q = scoreBook(
+            [{ name: "Wick Round", type: "ammunition", system: { damage: { type: "impact" } } }],
+            [{ name: "Wick Round", type: "ammunition", system: {} }],
+            "dh2",
+        );
+        expect(q.types["ammunition"]?.fields["damage.type"]).toEqual({ checks: 1, score: 1 });
     });
 
     it("compares a legacy NPC movement and armour line as the system loads them", () => {
