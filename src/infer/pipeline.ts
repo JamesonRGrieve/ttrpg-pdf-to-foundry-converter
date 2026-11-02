@@ -350,6 +350,7 @@ function extractTableItem(table: DetectedTable, type: ItemType, out: EntityColle
         return;
     }
     const effect = tableHtml(table);
+    const graded = type === "criticalInjury" ? criticalEffects(table) : null;
     out.add(
         "Item",
         itemSegment(type),
@@ -359,13 +360,54 @@ function extractTableItem(table: DetectedTable, type: ItemType, out: EntityColle
             line: out.line,
             book: out.sourceBook,
             page: out.page(table.pageIndex),
-            description: "",
-            system: {},
-            variantized: { effect },
+            // A critical injury keeps its graded effects in the schema's own
+            // fields; the printed table is its description.
+            description: graded === null ? "" : effect,
+            system: graded ?? {},
+            variantized: graded === null ? { effect } : {},
         }),
         table.pageIndex,
         `table-item:${type}`,
     );
+}
+
+/** The system's critical injury damage types and body parts (its `damageType` / `bodyPart` choices). */
+const CRITICAL_DAMAGE_TYPES = ["impact", "rending", "explosive", "energy"] as const;
+const CRITICAL_BODY_PARTS = ["head", "arm", "body", "leg"] as const;
+/** Fewest graded rows a severity table keeps for its effects to be read. */
+const MIN_GRADES = 3;
+
+/**
+ * A severity table read into the schema's critical injury: the damage type
+ * and body part its caption names, and each row's effect under its damage
+ * figure (`effects.<n>.text`), permanent where the effect says so. Null when
+ * its rows are not keyed by single damage figures.
+ */
+export function criticalEffects(table: DetectedTable): JsonObject | null {
+    const words = (table.tableTitle ?? "").toLowerCase().split(/[^a-z]+/u);
+    const pick = <T extends string>(choices: readonly T[]): T | undefined =>
+        choices.find((c) => words.includes(c) || words.includes(`${c}s`));
+    const effects: JsonObject = {};
+    for (const row of table.rows.filter((r) => !r.isHeaderRow && !r.isSectionHeader)) {
+        const cells = [...row.cells].sort((a, b) => a.colIndex - b.colIndex).map((c) => c.text.trim());
+        const grade = /^(\d{1,2})\+?$/u.exec(cells[0] ?? "")?.[1];
+        const text = cells.slice(1).join(" ").trim();
+        if (grade === undefined || text.length === 0) {
+            continue;
+        }
+        effects[String(Number(grade))] = { text: toHtml(text), permanent: /\bpermanent/iu.test(text) };
+    }
+    if (Object.keys(effects).length < MIN_GRADES) {
+        return null;
+    }
+    const damageType = pick(CRITICAL_DAMAGE_TYPES);
+    const bodyPart = pick(CRITICAL_BODY_PARTS);
+    return {
+        ...(damageType === undefined ? {} : { damageType }),
+        ...(bodyPart === undefined ? {} : { bodyPart }),
+        severity: 1,
+        effects,
+    };
 }
 
 /** A result cell that names an outcome and states its effect: `Name: effect`. */

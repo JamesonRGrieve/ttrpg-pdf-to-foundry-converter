@@ -77,6 +77,7 @@ import {
     keyedByBands,
     namingEntry,
     isBlank,
+    criticalEffects,
     kindEntry,
     kindNamed,
     mergeInto,
@@ -2644,6 +2645,31 @@ describe("section-qualified table names", () => {
         headers: ["Type", "Cost"],
         rows,
         tableTitle: "Lamp Services",
+    });
+
+    it("reads a severity table into a critical injury's graded effects", () => {
+        const severity = {
+            ...table([
+                row(["1", "The wick sputters."]),
+                row(["2", "The wick smokes."]),
+                row(["3", "Permanently lose a finger."]),
+            ]),
+            tableTitle: "Energy Critical Effects - Arm",
+        };
+        expect(criticalEffects(severity)).toEqual({
+            damageType: "energy",
+            bodyPart: "arm",
+            severity: 1,
+            effects: {
+                "1": { text: "<p>The wick sputters.</p>", permanent: false },
+                "2": { text: "<p>The wick smokes.</p>", permanent: false },
+                "3": { text: "<p>Permanently lose a finger.</p>", permanent: true },
+            },
+        });
+        // Rows not keyed by single damage figures are no graded effects.
+        expect(criticalEffects(table([row(["01-30", "A"]), row(["31-60", "B"]), row(["61-00", "C"])]))).toBe(
+            null,
+        );
     });
 
     it("names a grade repeated under each section by its section", () => {
