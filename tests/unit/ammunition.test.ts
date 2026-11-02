@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { applyAmmunitionWeaponTypes, usedWithPieces, usedWithTypes } from "../../src/infer/ammunition.ts";
+import {
+    ammunitionEffect,
+    applyAmmunitionEffects,
+    applyAmmunitionWeaponTypes,
+    usedWithPieces,
+    usedWithTypes,
+} from "../../src/infer/ammunition.ts";
 import type { Entity } from "../../src/types/entity.ts";
 
 const entity = (type: string, name: string, system: Record<string, unknown> = {}): Entity =>
@@ -48,5 +54,62 @@ describe("ammunition weapon types", () => {
             ["solid-projectile"],
             ["las"],
         ]);
+    });
+});
+
+describe("ammunition effects", () => {
+    it("reads the qualities an effect adds and removes", () => {
+        expect(
+            ammunitionEffect("<p>A weapon using wick rounds gains the Glowing (2) quality.</p>").added,
+        ).toEqual(["glowing-2"]);
+        expect(
+            ammunitionEffect("Lamp shells add the Dazzle (2) and Flicker qualities to the weapon.").added,
+        ).toEqual(["dazzle-2", "flicker"]);
+        const swap = ammunitionEffect(
+            "These rounds remove the Crude quality, and grant the weapon the Burst (1) quality. It also loses its Steady quality.",
+        );
+        expect(swap.added).toEqual(["burst-1"]);
+        expect(swap.removed).toEqual(["crude", "steady"]);
+    });
+
+    it("reads flat damage and penetration amounts, not ones against some targets", () => {
+        expect(ammunitionEffect("These rounds add 1 to a weapon’s damage and penetration.")).toMatchObject({
+            damage: 1,
+            penetration: 1,
+        });
+        expect(
+            ammunitionEffect(
+                "Glim slugs add 2 to the weapon’s damage, but armour counts double against them.",
+            ),
+        ).toMatchObject({ damage: 2 });
+        expect(ammunitionEffect("Wick bolts reduce its damage by 2.")).toMatchObject({ damage: -2 });
+        expect(
+            ammunitionEffect("Lamp bolts add 3 to the weapon’s damage against targets with the Glass trait."),
+        ).toMatchObject({ damage: 0 });
+        expect(ammunitionEffect("Ember shot adds 3 to the weapon’s penetration.")).toMatchObject({
+            penetration: 3,
+        });
+    });
+
+    it("ignores a list that names no qualities", () => {
+        expect(ammunitionEffect("The round gains the bright and steady quality of a lamp.").added).toEqual(
+            [],
+        );
+    });
+
+    it("writes what the effect does where no reading set it", () => {
+        const read = entity("ammunition", "Wick Rounds", {
+            effect: { dh2: "<p>Adds 2 to the weapon’s damage and gains the Glowing quality.</p>" },
+        });
+        const kept = entity("ammunition", "Lamp Cells", {
+            effect: { dh2: "<p>Gains the Glowing quality.</p>" },
+            addedQualities: ["flicker"],
+        });
+        applyAmmunitionEffects([read, kept]);
+        expect(read.fields["system"]).toMatchObject({
+            addedQualities: ["glowing"],
+            modifiers: { damage: 2 },
+        });
+        expect(kept.fields["system"]).toMatchObject({ addedQualities: ["flicker"] });
     });
 });

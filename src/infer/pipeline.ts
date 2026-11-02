@@ -5,7 +5,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { id16 } from "../util/hash.ts";
 import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
-import { applyAmmunitionWeaponTypes } from "./ammunition.ts";
+import { applyAmmunitionEffects, applyAmmunitionWeaponTypes } from "./ammunition.ts";
 import { inferBookSlug, inferBookTitle } from "./book.ts";
 import { classifyTable } from "./classify.ts";
 import {
@@ -2385,6 +2385,7 @@ export function infer(ir: IR, log: Logger, target: TargetSchema): InferResult {
     applyCyberneticTypes(entities);
     applyTwoHandedClasses(entities, twoHandedClasses(ir.runs.map((r) => r.text).join(" ")));
     applyAmmunitionWeaponTypes(entities, out.usedWith);
+    applyAmmunitionEffects(entities);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
