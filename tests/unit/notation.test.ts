@@ -19,8 +19,24 @@ import {
     parseShipPower,
     parseShipWeaponType,
     parseWeaponClass,
+    parseWeaponType,
     parseWeight,
 } from "../../src/infer/notation.ts";
+
+describe("parseWeaponType", () => {
+    it("reads the one schema weapon type a section row or caption names", () => {
+        expect(parseWeaponType("Las Weapons")).toBe("las");
+        expect(parseWeaponType("Solid Projectile Weapons")).toBe("solid-projectile");
+        expect(parseWeaponType("Grenades/Missiles")).toBe("grenade");
+        expect(parseWeaponType("Chain Weapons")).toBe("chain");
+    });
+
+    it("names no type for a caption naming none, or two", () => {
+        expect(parseWeaponType("Ranged Weapons")).toBeNull();
+        expect(parseWeaponType("Las and Plasma Weapons")).toBeNull();
+        expect(parseWeaponType("Flamers")).toBeNull();
+    });
+});
 
 describe("captionWeaponClass", () => {
     it("reads the one weapon class a caption names", () => {

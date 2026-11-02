@@ -67,6 +67,7 @@ import {
     infer,
     splitNumberFromText,
     introducingEntry,
+    isUnmarkedSectionRow,
     keyedByBands,
     namingEntry,
     isBlank,
@@ -1433,6 +1434,26 @@ describe("result tables", () => {
     it("reads a table keyed by test modifiers as results, not items", () => {
         expect(keyedByBands(tableOf(["Dim +20", "Murky –10", "Pitch Black -30"]), 0)).toBe(true);
         expect(keyedByBands(tableOf(["Lamp-30", "Glow Lamp", "Hush Lamp"]), 0)).toBe(false);
+    });
+});
+
+describe("unmarked section rows", () => {
+    const row = (...texts: string[]): DetectedTable["rows"][number] => ({
+        cells: texts.map((text, colIndex) => ({ colIndex, text, isHeader: false })),
+        isHeaderRow: false,
+        isSectionHeader: false,
+        sectionName: null,
+    });
+
+    it("reads a words-only row filling one or two cells of a wide table as a section row", () => {
+        expect(isUnmarkedSectionRow(row("Lamp Weapons"), 8)).toBe(true);
+        expect(isUnmarkedSectionRow(row("Glow Projectile", "Weapons", "", ""), 8)).toBe(true);
+    });
+
+    it("keeps records, figures and narrow tables as they are", () => {
+        expect(isUnmarkedSectionRow(row("Glow Pistol", "Pistol", "30m"), 8)).toBe(false);
+        expect(isUnmarkedSectionRow(row("Glow Pistol", "30m"), 8)).toBe(false);
+        expect(isUnmarkedSectionRow(row("Lamp Weapons"), 3)).toBe(false);
     });
 });
 

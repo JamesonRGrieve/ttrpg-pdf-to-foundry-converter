@@ -85,6 +85,26 @@ export const SHIP_WEAPON_TYPES = [
     "attack-craft",
 ] as const;
 
+/** The system's weapon technology types (the weapon `type` choices). */
+export const WEAPON_TYPES = [
+    "primitive",
+    "las",
+    "solid-projectile",
+    "bolt",
+    "melta",
+    "plasma",
+    "flame",
+    "launcher",
+    "explosive",
+    "grenade",
+    "power",
+    "chain",
+    "shock",
+    "force",
+    "exotic",
+    "xenos",
+] as const;
+
 export const ACTOR_SEGMENT = "actors-bestiary";
 
 /** The system's ship hull types (the ship component `hullType` choices). */

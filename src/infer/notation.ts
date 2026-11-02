@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
-import { ALL_HULLS, HULL_TYPES, SHIP_WEAPON_TYPES } from "./schema.ts";
+import { ALL_HULLS, HULL_TYPES, SHIP_WEAPON_TYPES, WEAPON_TYPES } from "./schema.ts";
 
 /**
  * Parsers for the generic d100 stat notation printed in stat tables — dice
@@ -231,6 +231,26 @@ export function parseShipWeaponType(raw: string): string | null {
         }
     }
     return null;
+}
+
+/**
+ * The weapon type a table's section row or caption names ("Las Weapons",
+ * "Solid Projectile Weapons", "Grenades and Missiles") → the schema's weapon
+ * type, its words singular; null when it names none, or more than one.
+ */
+export function parseWeaponType(raw: string): string | null {
+    const words = clean(raw)
+        .toLowerCase()
+        .split(/[^a-z]+/u)
+        .filter((w) => w.length > 0);
+    // A printed word names a type word as it is or with a plural ending.
+    const names = (word: string, part: string): boolean =>
+        word === part || word === `${part}s` || word === `${part}es`;
+    const found = WEAPON_TYPES.filter((t) => {
+        const parts = t.split("-");
+        return words.some((_, i) => parts.every((p, j) => names(words[i + j] ?? "", p)));
+    });
+    return found.length === 1 ? (found[0] ?? null) : null;
 }
 
 /** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */

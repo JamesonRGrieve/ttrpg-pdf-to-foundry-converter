@@ -36,7 +36,7 @@ import {
     stripHeadingLabel,
     wordsOf,
 } from "./names.ts";
-import { captionWeaponClass } from "./notation.ts";
+import { captionWeaponClass, parseWeaponType } from "./notation.ts";
 import { listedBase, parseNpc } from "./npc.ts";
 import {
     type OriginPathReading,
@@ -472,6 +472,13 @@ function extractTables(
             if (row.isHeaderRow) {
                 continue;
             }
+            if (type === "weapon" && isUnmarkedSectionRow(row, table.headers.length)) {
+                section = row.cells
+                    .map((c) => c.text.trim())
+                    .filter((t) => t !== "")
+                    .join(" ");
+                continue;
+            }
             const rawName = row.cells.find((c) => c.colIndex === nameCol)?.text ?? "";
             const name = cleanName(rawName);
             // A name starts like a name (capital or digit, perhaps after an
@@ -501,6 +508,16 @@ function extractTables(
                 cells.type = section;
             }
             const mapped = mapRow(itemType, cells);
+            // A weapon's technology type is named by the section row it sits
+            // under ("Las Weapons"), else by the table's caption.
+            if (itemType === "weapon" && mapped.system["type"] === undefined) {
+                const weaponType =
+                    (section === null ? null : parseWeaponType(section)) ??
+                    parseWeaponType(table.tableTitle ?? "");
+                if (weaponType !== null) {
+                    mapped.system["type"] = weaponType;
+                }
+            }
             for (const u of mapped.unparsed) {
                 out.warnings.push(`p${out.page(table.pageIndex)} ${name}: unparsed ${u}`);
             }
@@ -1128,6 +1145,26 @@ const MODIFIER_CLOSE = /\s[+\-–−]\d+$/u;
  * test modifier keys them by difficulty; its rows are outcomes, not catalogue
  * items.
  */
+/** Most filled cells a section row the detector did not mark may spread over. */
+const SECTION_ROW_MAX_CELLS = 2;
+/** Fewest columns a table must have for a row filling so few to be a section row, not a record. */
+const SECTION_ROW_MIN_COLUMNS = 4;
+
+/**
+ * A row of a many-column table that fills one or two cells with words and no
+ * figures is a section row ("Las Weapons", or "Solid Projectile | Weapons"
+ * when its words straddle a column), not a record.
+ */
+export function isUnmarkedSectionRow(row: TableRow, columns: number): boolean {
+    const filled = row.cells.map((c) => c.text.trim()).filter((t) => t !== "");
+    return (
+        columns >= SECTION_ROW_MIN_COLUMNS &&
+        filled.length > 0 &&
+        filled.length <= SECTION_ROW_MAX_CELLS &&
+        filled.every((t) => /^[\p{L}][\p{L}\s/&,'’-]*$/u.test(t))
+    );
+}
+
 export function keyedByBands(table: DetectedTable, nameCol: number): boolean {
     const names = table.rows
         .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
