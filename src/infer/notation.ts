@@ -51,7 +51,7 @@ export function isEmptyCell(raw: string): boolean {
 }
 
 /** Damage-type letter → the system's `damageTypes` key. */
-const DAMAGE_TYPES: Readonly<Record<string, string>> = {
+export const DAMAGE_TYPES: Readonly<Record<string, string>> = {
     e: "energy",
     x: "explosive",
     i: "impact",

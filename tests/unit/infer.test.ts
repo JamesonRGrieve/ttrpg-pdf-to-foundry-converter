@@ -33,6 +33,7 @@ import {
     entryType,
     focusPowerTest,
     powerActivation,
+    powerAttackProfile,
     targetType,
     headingKindTag,
     isSustained,
@@ -1521,6 +1522,35 @@ describe("entry typing", () => {
             "psychicPower",
         );
         expect(spark.system["discipline"]).toBe("Lampcraft");
+    });
+
+    it("reads a power's printed attack profile as its damage", () => {
+        expect(powerAttackProfile("WICK LASH PSYCHIC BOLT RNG 5M X PR DMG 1D10+5+3XPR (E) PEN 2XPR")).toEqual(
+            {
+                formula: "1d10+3xPR",
+                type: "energy",
+                bonus: 5,
+                penetration: 0,
+            },
+        );
+        expect(powerAttackProfile("Rng 20m x Pr Dmg Pr (i) Pen 2")).toEqual({
+            formula: "PR",
+            type: "impact",
+            bonus: 0,
+            penetration: 2,
+        });
+        expect(powerAttackProfile("The lamp deals 1d10 Energy damage.")).toBeNull();
+        const glare = entryItem(
+            entry(
+                "GLARE",
+                [["Focus Power", "Willpower"]],
+                ["Psychic Powers", "Lampcraft"],
+                "Light. RNG 10M DMG 2D10 (E) PEN 0",
+            ),
+            "psychicPower",
+        );
+        expect(glare.system["damage"]).toEqual({ formula: "2d10", type: "energy", bonus: 0, penetration: 0 });
+        expect(glare.system["isAttack"]).toBe(true);
     });
 
     it("gives powers the discipline an earlier heading under the catalogue names as such", () => {

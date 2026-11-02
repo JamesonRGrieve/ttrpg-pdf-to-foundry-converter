@@ -3,7 +3,7 @@ import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Entry } from "./detect-entries.ts";
 import { identifierFromName } from "./identifiers.ts";
 import { caseLost, cleanName } from "./names.ts";
-import { parseAvailability, parseAvailabilityByPlace, parseWeight } from "./notation.ts";
+import { DAMAGE_TYPES, parseAvailability, parseAvailabilityByPlace, parseWeight } from "./notation.ts";
 import { toHtml, type ItemType } from "./schema.ts";
 
 /**
@@ -581,6 +581,42 @@ export function withDisciplines(entries: readonly Entry[]): Entry[] {
     });
 }
 
+/**
+ * A power's printed attack profile, the weapon-style line a book sets in a
+ * box with the power ("RNG 20M X PR  DMG 1D10+2+2XPR (E)  PEN 0"), as the
+ * schema's damage: the dice and psy-rating terms are the formula
+ * ("1d10+2xPR"), whole-number terms the bonus, the bracketed letter the
+ * damage type, a whole-number penetration the penetration. Null when no
+ * such line is printed.
+ */
+export function powerAttackProfile(text: string): JsonObject | null {
+    const m = /\bDMG\s+(?<dmg>[\d+\s\p{L}]+?)\s*\(\s*(?<type>[EIRX])\s*\)\s*PEN\s+(?<pen>\S+)/iu.exec(text);
+    const dmg = m?.groups?.["dmg"];
+    const type = DAMAGE_TYPES[(m?.groups?.["type"] ?? "").toLowerCase()];
+    if (dmg === undefined || type === undefined) {
+        return null;
+    }
+    let bonus = 0;
+    const terms: string[] = [];
+    for (const raw of dmg.replace(/\s+/gu, "").split("+")) {
+        if (/^\d+$/u.test(raw)) {
+            bonus += Number(raw);
+        } else if (raw.length > 0) {
+            // Dice in lower case ("1d10"), a multiple's x in lower case, the rating's letters as printed in capitals.
+            terms.push(
+                raw
+                    .replace(/^(\d*)d(\d+)$/iu, "$1d$2")
+                    .replace(/^(\d+)x(\p{L}+)$/iu, (_s, n: string, r: string) => `${n}x${r.toUpperCase()}`),
+            );
+        }
+    }
+    const formula = terms
+        .map((t) => (/^\d*d\d+$/iu.test(t) ? t.toLowerCase() : /^\p{L}+$/u.test(t) ? t.toUpperCase() : t))
+        .join("+");
+    const pen = m?.groups?.["pen"] ?? "";
+    return { formula, type, bonus, penetration: /^\d+$/u.test(pen) ? Number(pen) : 0 };
+}
+
 /** A characteristic key from a printed name or abbreviation, or null. */
 function characteristicKey(name: string): string | null {
     return CHARACTERISTICS[name.toLowerCase().replace(/\s+/gu, " ").trim()] ?? null;
@@ -919,6 +955,12 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             const cost = powerXpCost(fields);
             if (cost !== null) {
                 system["cost"] = cost;
+            }
+            // A power's attack profile ("RNG … DMG 1D10+2+PR (E) PEN 2") is its damage.
+            const attack = powerAttackProfile([entry.body, ...entry.fields.map(([, v]) => v)].join(" "));
+            if (attack !== null) {
+                system["damage"] = attack;
+                system["isAttack"] = true;
             }
             // A power printing no `Effect` field states its effect as its text.
             const effect = text("effect");
