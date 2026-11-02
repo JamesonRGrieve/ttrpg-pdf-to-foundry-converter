@@ -941,6 +941,45 @@ describe("npc statblocks", () => {
         ]);
     });
 
+    it("gives a label whose column was mistaken to the statblock it sits under", () => {
+        const at = (text: string, x: number, y: number, column: number, bold = false): IRTextRun => ({
+            ...irRun(text, 0, y),
+            x,
+            width: 6 * text.length,
+            size: bold ? 13 : 9,
+            weight: bold ? "bold" : "normal",
+            column,
+        });
+        const label = (text: string, value: string, x: number, y: number, column: number) => [
+            { ...at(text, x, y, column), weight: "bold" as const },
+            at(value, x + 6 * text.length + 4, y, column),
+        ];
+        const gridAt = (x0: number, column: number, values: number[]): IRTextRun[] =>
+            values.map((v, i) =>
+                at(String(v), x0 + 30 * (i % 3), 600 - 25 * Math.floor(i / 3), column, true),
+            );
+        const ir = irOf(
+            [0],
+            [
+                ...gridAt(160, 0, [31, 42, 27, 35, 30, 18, 33, 29, 12]),
+                at("LAMP", 100, 640, 0, true),
+                at("WARDEN", 140, 640, 0, true),
+                ...gridAt(420, 1, [41, 22, 37, 25, 40, 28, 23, 39, 22]),
+                at("WICK", 360, 640, 1, true),
+                at("KEEPER", 400, 640, 1, true),
+                // The second statblock's label, read into the first column, sits
+                // higher than the first statblock's own text section.
+                { ...at("Skills:", 316, 500, 0), weight: "bold" as const },
+                at("Dodge, Parry", 360, 500, 1),
+                ...label("Skills:", "Awareness", 60, 470, 0),
+            ],
+        );
+        const skills = detectNumericGrids(ir).map(
+            (g) => g.blocks.find((b) => b.label === "Skills")?.text ?? null,
+        );
+        expect(skills).toEqual(["Awareness", "Dodge, Parry"]);
+    });
+
     it("reads a grid of only two values, but not a block of one repeated value", () => {
         const bold = (text: string, x: number, y: number, size: number): IRTextRun => ({
             ...irRun(text, 0, y),

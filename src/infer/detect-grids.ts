@@ -587,6 +587,14 @@ interface PanelRegion {
     floor: number;
     box: (r: IRTextRun) => boolean;
     text: (r: IRTextRun) => boolean;
+    /**
+     * The middle of the boxed panel's width, when the region is the
+     * statblock's own. The text section's lines start at the column's left
+     * margin; a line lying wholly right of the middle, before that section
+     * begins, belongs to the next column (a run whose column was mistaken),
+     * and never opens this statblock's text section.
+     */
+    middle?: number;
 }
 
 /**
@@ -637,6 +645,15 @@ function readPanel(
         }
         const text = joinLine(line.runs);
         if (mode === "resume" && !inText && !isLabelLine(line, text)) {
+            continue;
+        }
+        const middle = region.middle;
+        if (
+            !inText &&
+            middle !== undefined &&
+            line.runs.every((r) => r.x > middle) &&
+            isLabelLine(line, text)
+        ) {
             continue;
         }
         const prev = lines.at(-1);
@@ -690,7 +707,12 @@ function panelLines(
             top: grid.y0,
             floor: Math.max(floor, grid.y0 - PANEL_MAX_DEPTH),
             box: (r) => onPage(r) && r.x >= left && r.x + r.width <= right,
-            text: (r) => onPage(r) && r.column === banner.column,
+            // The column's text, and any run set under the box whose column was
+            // mistaken (a label just left of the column's text).
+            text: (r) =>
+                onPage(r) &&
+                (r.column === banner.column || (r.x >= left - PANEL_SLACK && r.x + r.width <= right)),
+            middle: (left + right) / 2,
         },
         "panel",
     );
