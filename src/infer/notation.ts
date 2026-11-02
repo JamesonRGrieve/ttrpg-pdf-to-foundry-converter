@@ -2,6 +2,7 @@
 import { CONTROL_RANGES, NOTE_MARKERS, numberPoint } from "../util/text.ts";
 import {
     ALL_HULLS,
+    ARMOUR_TYPES,
     GEAR_CATEGORIES,
     HULL_TYPES,
     SHIP_COMPONENT_TYPES,
@@ -286,22 +287,50 @@ export function parseGearCategory(raw: string): string | null {
  * allowed, hyphens closed up). The longest such match wins; null when none.
  */
 export function parseShipComponentType(raw: string): string | null {
+    const keyWords = (key: string): string[] => key.split(/(?=[A-Z])/u).map((w) => w.toLowerCase());
+    return longestNamedChoice(
+        raw,
+        SHIP_COMPONENT_TYPES.map(([key, label]) => ({
+            key,
+            forms: [keyWords(key), label.toLowerCase().split(/\s+/u)],
+        })),
+    );
+}
+
+/**
+ * The choice among `choices` all of one of whose word forms appear in `raw`
+ * (a plural allowed, a hyphenated word read whole and in parts); the one
+ * naming the most words wins. Null when none is named.
+ */
+function longestNamedChoice(
+    raw: string,
+    choices: readonly { key: string; forms: readonly (readonly string[])[] }[],
+): string | null {
+    const lower = clean(raw).toLowerCase();
     const words = new Set(
-        clean(raw)
-            .toLowerCase()
-            .replace(/-/gu, "")
-            .split(/[^a-z]+/u)
+        [...lower.replace(/-/gu, "").split(/[^a-z]+/u), ...lower.split(/[^a-z]+/u)]
             .filter((w) => w.length > 0)
             .flatMap((w) => [w, w.replace(/s$/u, ""), w.replace(/es$/u, "")]),
     );
-    const keyWords = (key: string): string[] => key.split(/(?=[A-Z])/u).map((w) => w.toLowerCase());
     const named = (wordsOf: readonly string[]): boolean =>
         wordsOf.length > 0 && wordsOf.every((w) => words.has(w));
-    const hits = SHIP_COMPONENT_TYPES.flatMap(([key, label]) => {
-        const forms = [keyWords(key), label.toLowerCase().split(/\s+/u)].filter(named);
-        return forms.length === 0 ? [] : [{ key, length: Math.max(...forms.map((f) => f.length)) }];
+    const hits = choices.flatMap(({ key, forms }) => {
+        const found = forms.filter(named);
+        return found.length === 0 ? [] : [{ key, length: Math.max(...found.map((f) => f.length)) }];
     });
     return [...hits].sort((a, b) => b.length - a.length)[0]?.key ?? null;
+}
+
+/**
+ * A section row, caption or name naming a kind of armour ("Carapace Armour",
+ * "Storm Trooper Carapace") → the schema's armour type; the choice naming the
+ * most words wins. Null when none is named.
+ */
+export function parseArmourType(raw: string): string | null {
+    return longestNamedChoice(
+        raw,
+        ARMOUR_TYPES.map((key) => ({ key, forms: [key.split("-")] })),
+    );
 }
 
 /** One hull type as printed ("Light Cruisers", "Frigate") → the schema's choice; null when it is not one. */

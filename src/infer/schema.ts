@@ -91,6 +91,23 @@ export const SHIP_WEAPON_TYPES = [
     "attack-craft",
 ] as const;
 
+/** The system's armour types (the armour `type` choices). */
+export const ARMOUR_TYPES = [
+    "flak",
+    "mesh",
+    "carapace",
+    "power",
+    "light-power",
+    "storm-trooper",
+    "feudal-world",
+    "primitive",
+    "xenos",
+    "void",
+    "enforcer",
+    "hostile-environment",
+    "force-field",
+] as const;
+
 /** The system's weapon technology types (the weapon `type` choices). */
 export const WEAPON_TYPES = [
     "primitive",

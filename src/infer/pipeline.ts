@@ -38,6 +38,7 @@ import {
 } from "./names.ts";
 import {
     captionWeaponClass,
+    parseArmourType,
     parseGearCategory,
     parseShipComponentType,
     parseWeaponType,
@@ -543,6 +544,17 @@ function extractTables(
                     parseWeaponType(table.tableTitle ?? "");
                 if (weaponType !== null) {
                     mapped.system["type"] = weaponType;
+                }
+            }
+            // An armour's type is named by its section row ("Carapace Armour"),
+            // else the caption, else its own name ("Flak Cloak").
+            if (itemType === "armour" && mapped.system["type"] === undefined) {
+                const armourType =
+                    (section === null ? null : parseArmourType(section)) ??
+                    parseArmourType(table.tableTitle ?? "") ??
+                    parseArmourType(name);
+                if (armourType !== null) {
+                    mapped.system["type"] = armourType;
                 }
             }
             // A ship component's type is named by its section row ("Plasma

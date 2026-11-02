@@ -4,6 +4,7 @@ import {
     captionWeaponClass,
     isEmptyCell,
     parseArmourPoints,
+    parseArmourType,
     parseAvailability,
     parseAvailabilityByPlace,
     parseCoverage,
@@ -25,6 +26,21 @@ import {
     parseWeight,
     splitTrailingClass,
 } from "../../src/infer/notation.ts";
+
+describe("parseArmourType", () => {
+    it("reads the armour type a section row, caption or name names", () => {
+        expect(parseArmourType("Carapace Armour")).toBe("carapace");
+        expect(parseArmourType("Flak Cloak")).toBe("flak");
+        expect(parseArmourType("Light Power Armour")).toBe("light-power");
+        expect(parseArmourType("Storm Trooper Carapace")).toBe("storm-trooper");
+        expect(parseArmourType("Primitive Armours")).toBe("primitive");
+    });
+
+    it("names none for text naming no armour type", () => {
+        expect(parseArmourType("Other Armours")).toBeNull();
+        expect(parseArmourType("Lamp Hood")).toBeNull();
+    });
+});
 
 describe("splitTrailingClass", () => {
     it("splits a class a header-less class column left in the name cell", () => {
