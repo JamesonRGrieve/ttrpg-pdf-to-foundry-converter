@@ -340,6 +340,28 @@ describe("arbitrate", () => {
         expect(arbitrate(kept, partial).textRuns.map((r) => r.text)).toEqual(["Lantern oil burns"]);
     });
 
+    it("reads a line OCR alone can spell with the words the document's own vocabulary vouches for", () => {
+        // A caption in a display face the text layer garbles; the body below it prints the word OCR misread.
+        const body = (y: number): RawTextRun => run("the wick burns and the wick smokes", 100, 200, { y });
+        const raw = doc([run("9Lgpq0V:hAamh2Xk", 100, 120), body(600), body(588)]);
+        const ocr = [
+            {
+                pageIndex: 0,
+                words: [
+                    word("TABLE", 96, [100, 698, 130, 708]),
+                    word("5-4:", 96, [134, 698, 152, 708]),
+                    word("LAMPS", 95, [156, 698, 190, 708]),
+                    // An odd display capital reads unsure: corrected to the page's word.
+                    word("WICI", 30, [194, 698, 214, 708]),
+                    // An unsure word the document never prints stays out.
+                    word("QZX", 30, [216, 698, 222, 708]),
+                ],
+                cells: [],
+            },
+        ];
+        expect(arbitrate(raw, ocr).textRuns.map((r) => r.text)[0]).toBe("TABLE 5-4: LAMPS WICK");
+    });
+
     it("leaves pages without OCR unchanged", () => {
         const raw = doc([run("untouched", 100, 40)]);
         expect(arbitrate(raw, []).textRuns).toEqual(raw.textRuns);

@@ -4,7 +4,8 @@ import { at } from "../util/at.ts";
 import { numAsc } from "../util/ordered.ts";
 import { readReprints } from "../util/reprints.ts";
 import { CONTROL_RANGES, numberPoint, stripSubsetPrefix } from "../util/text.ts";
-import { notPlainlyUpright, OCR_FONT_NAME, scanPageRuns, scanScale } from "./scan-lines.ts";
+import { type Lexicon, buildLexicon, vouch } from "./lexicon.ts";
+import { OCR_FONT_NAME, notPlainlyUpright, scanPageRuns, scanScale } from "./scan-lines.ts";
 import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 
 /**
@@ -46,6 +47,8 @@ import type { OcrPage, OcrWord, PdfBox } from "./types.ts";
 export const REPLACE_CONFIDENCE = 60;
 /** Minimum OCR confidence to insert a word where the text layer has nothing. */
 export const INSERT_CONFIDENCE = 85;
+/** Minimum OCR confidence of a word the document's own vocabulary vouches for, on a line OCR alone can read. */
+export const VOUCHED_CONFIDENCE = 10;
 
 /** Glyph box of a run relative to its baseline, as fractions of the font size. */
 const DESCENT_FRACTION = 0.22;
@@ -612,6 +615,7 @@ function arbitratePage(
     pageIndex: number,
     copies: readonly RawTextRun[],
     misEncoded: ReadonlySet<string>,
+    lexicon: Lexicon,
 ): RawTextRun[] {
     const lines = buildLines(runs);
     const words = readingOrder(page.words);
@@ -705,6 +709,21 @@ function arbitratePage(
         );
     };
 
+    /**
+     * The OCR words of a line the text layer cannot spell, as the document's
+     * own vocabulary vouches for them (`vouch`): a word it prints, or one it
+     * corrects to such a word, stands down to `VOUCHED_CONFIDENCE` (a display
+     * face's odd capital reads unsure); any other only when confident.
+     */
+    const readAlone = (lineWords: readonly OcrWord[]): OcrWord[] =>
+        lineWords.flatMap((w) => {
+            const vouched = vouch(w.text, pageIndex, lexicon);
+            if (vouched.known && w.confidence >= VOUCHED_CONFIDENCE) {
+                return [{ ...w, text: vouched.text }];
+            }
+            return w.confidence >= REPLACE_CONFIDENCE ? [w] : [];
+        });
+
     lines.forEach((line, li) => {
         const lineWords = at(perLine, li);
         const confident = lineWords.filter((w) => w.confidence >= REPLACE_CONFIDENCE);
@@ -716,7 +735,7 @@ function arbitratePage(
             lineText.length > 0 &&
             line.runs.every((i) => misEncoded.has(stripSubsetPrefix(at(runs, i).fontName)));
         if ((lineText.length > 0 && corrupt / lineText.length >= CORRUPT_LINE_SHARE) || inMisEncoded) {
-            rewriteByRuns(line, confident);
+            rewriteByRuns(line, readAlone(lineWords));
             return;
         }
         if (overdrawn(line, runs, copies)) {
@@ -741,7 +760,7 @@ function arbitratePage(
             ocrLetters > 0 &&
             ocrLetters >= DISOWNED_OCR_SHARE * lineLetters
         ) {
-            rewriteByRuns(line, confident);
+            rewriteByRuns(line, readAlone(lineWords));
             return;
         }
         for (const group of groups) {
@@ -907,6 +926,10 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
     }
     const scale = scanScale([...scanned.values()].map((p) => p.words));
     const misEncoded = misEncodedFaces(runsByPage, ocrByPage);
+    const lexicon = buildLexicon(
+        layer,
+        (run) => !CORRUPTION.test(run.text) && !misEncoded.has(stripSubsetPrefix(run.fontName)),
+    );
     const textRuns: RawTextRun[] = [];
     for (const page of pages) {
         const runs = runsByPage.get(page.pageIndex) ?? [];
@@ -926,6 +949,7 @@ export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
                           page.pageIndex,
                           copiesByPage.get(page.pageIndex) ?? [],
                           misEncoded,
+                          lexicon,
                       )),
             );
         }
