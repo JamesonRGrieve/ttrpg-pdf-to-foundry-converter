@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
+import { headerRole } from "../../src/infer/columns.ts";
 import { isLoadRow, mapRow, rowType } from "../../src/infer/rows.ts";
 
 describe("weapon-table load rows", () => {
@@ -148,6 +149,18 @@ describe("weapon-table load rows", () => {
         const light = mapRow("armourModification", { name: "Lamp Seal", weight: "—" });
         expect(light.system).not.toHaveProperty("weight");
         expect(light.system).not.toHaveProperty("modifiers");
+    });
+
+    it("reads the armour types an armour modification's column says it fits", () => {
+        const fits = (usedWith: string): unknown =>
+            mapRow("armourModification", { name: "Glow Chains", usedWith }).system["restrictions"];
+        expect(fits("Flak, Carapace, and Power armour")).toEqual({
+            armourTypes: ["flak", "carapace", "power"],
+        });
+        expect(fits("Any")).toEqual({ armourTypes: ["any"] });
+        // A piece naming no armour type gives none at all.
+        expect(fits("Lanterns of the marsh")).toBeUndefined();
+        expect(headerRole("Can Upgrade")).toBe("usedWith");
     });
 });
 

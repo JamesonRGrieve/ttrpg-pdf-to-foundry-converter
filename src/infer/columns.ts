@@ -43,7 +43,8 @@ export type Role =
     | "hullTypes"
     | "power"
     | "strength"
-    | "crit";
+    | "crit"
+    | "usedWith";
 
 /** Normalized header text (or a word within it) → role. Order matters: first match wins. */
 const HEADER_ROLES: readonly [RegExp, Role][] = [
@@ -85,6 +86,8 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^space$/u, "space"],
     [/^(sp|ship points)$/u, "shipPoints"],
     [/^(appropriate )?hull types?$/u, "hullTypes"],
+    // What an upgrade fits: the schema's restrictions.
+    [/^(used with|can upgrade)$/u, "usedWith"],
 ];
 
 /**

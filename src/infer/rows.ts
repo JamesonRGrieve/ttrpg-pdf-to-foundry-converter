@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
+import { usedWithArmourTypes } from "./ammunition.ts";
 import type { Role } from "./columns.ts";
 import { focusPowerTest, isSustained, powerActivation, structuredPrerequisites } from "./entry-types.ts";
 import {
@@ -432,6 +433,11 @@ const PHYSICAL_EFFECT: ReadonlySet<ItemType> = new Set([
  */
 function armourModification(cells: RowCells): RowMapping {
     const out = effectItem(cells, "effect", true);
+    // A column naming what the modification fits ("Used With") gives its armour types.
+    const fits = cells.usedWith === undefined ? [] : usedWithArmourTypes(cells.usedWith);
+    if (fits.length > 0) {
+        out.system["restrictions"] = { armourTypes: fits };
+    }
     const { weight, ...system } = out.system;
     if (typeof weight !== "number") {
         return out;
