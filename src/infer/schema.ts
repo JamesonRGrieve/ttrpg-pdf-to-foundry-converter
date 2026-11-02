@@ -468,6 +468,11 @@ export function buildItem(input: ItemInput): JsonObject {
     for (const [field, value] of Object.entries(input.variantized ?? {})) {
         system[field] = variant(input.line, value);
     }
+    // The system wields every heavy weapon in two hands (`isTwoHanded`): the
+    // stored flag says so too.
+    if (input.type === "weapon" && system["class"] === "heavy" && system["twoHanded"] === undefined) {
+        system["twoHanded"] = true;
+    }
     // Talent/trait/power cost is XP and afflictions have none: only physical
     // items carry the acquisition-currency shape and owned-item state.
     if (PHYSICAL.has(input.type)) {

@@ -3052,6 +3052,25 @@ describe("schema", () => {
         expect(headerRole("Req")).toBe("cost");
     });
 
+    it("stores a heavy weapon two-handed, as the system wields it", () => {
+        const twoHanded = (system: JsonObject): unknown =>
+            (
+                buildItem({
+                    type: "weapon",
+                    name: "Lamp Cannon",
+                    line: "dh2",
+                    book: "b",
+                    page: "3",
+                    description: "",
+                    system,
+                })["system"] as Record<string, unknown>
+            )["twoHanded"];
+        expect(twoHanded({ class: "heavy" })).toBe(true);
+        expect(twoHanded({ class: "pistol" })).toBeUndefined();
+        // A printed flag stands.
+        expect(twoHanded({ class: "heavy", twoHanded: false })).toBe(false);
+    });
+
     it("gives XP-cost and affliction items no acquisition cost", () => {
         const doc = buildItem({
             type: "talent",
