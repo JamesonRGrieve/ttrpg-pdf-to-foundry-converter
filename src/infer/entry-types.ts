@@ -476,6 +476,59 @@ export function isSustained(printed: string): boolean {
     return !/^\s*(?:no|none|n\/a|[-–—])?\s*\.?\s*$/iu.test(printed);
 }
 
+/** The system's activation types (the activation template's `type` choices), longest name first. */
+const ACTIVATION_TYPES = [
+    "extended-action",
+    "half-action",
+    "full-action",
+    "free-action",
+    "reaction",
+    "passive",
+    "special",
+    "action",
+] as const;
+
+/**
+ * A power's printed action or focus time ("Half Action", "Full Action
+ * (Sustained)", "Reaction") → the schema's activation type it starts with;
+ * null when it names none ("2 Full Actions" names a count, not a type).
+ */
+export function activationType(printed: string): string | null {
+    const text = printed
+        .toLowerCase()
+        .replace(/[^a-z]+/gu, " ")
+        .trim();
+    return ACTIVATION_TYPES.find((t) => `${text} `.startsWith(`${t.replace(/-/gu, " ")} `)) ?? null;
+}
+
+/**
+ * The target a power's printed range implies: `self` for a range of "Self"
+ * (or "You"), `area` for a radius; any other printed range leaves the target
+ * to the power's text (`special`).
+ */
+export function targetType(range: string): string {
+    if (/^\s*(?:self|you)\b/iu.test(range)) {
+        return "self";
+    }
+    return /\bradius\b/iu.test(range) ? "area" : "special";
+}
+
+/**
+ * A power's `activation` and `target` from its printed action (or focus time)
+ * and range; a field neither names is left to the schema's initial value.
+ */
+export function powerActivation(action: string | undefined, range: string | undefined): JsonObject {
+    const out: JsonObject = {};
+    const type = action === undefined ? null : activationType(action);
+    if (type !== null) {
+        out["activation"] = { type };
+    }
+    if (range !== undefined && range.trim() !== "" && !/^[-–—]$/u.test(range.trim())) {
+        out["target"] = { type: targetType(range) };
+    }
+    return out;
+}
+
 /**
  * The experience a power costs as printed: a `Value` or `Cost` line naming xp
  * ("300 xp"), or a bare number under a label that names xp ("XP Cost: 400").
@@ -557,7 +610,6 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 system["focusPower"] = focusPowerTest(focus, threshold);
             }
             for (const [label, field] of [
-                ["action", "action"],
                 ["range", "range"],
                 ["subtype", "subtype"],
             ] as const) {
@@ -566,6 +618,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                     system[field] = value;
                 }
             }
+            Object.assign(system, powerActivation(text("action") ?? text("focus time"), text("range")));
             const sustained = text("sustained") ?? text("sustain");
             if (sustained !== undefined) {
                 system["sustained"] = isSustained(sustained);

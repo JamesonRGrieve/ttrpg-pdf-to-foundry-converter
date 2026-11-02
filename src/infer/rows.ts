@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import type { Role } from "./columns.ts";
-import { focusPowerTest, isSustained, structuredPrerequisites } from "./entry-types.ts";
+import { focusPowerTest, isSustained, powerActivation, structuredPrerequisites } from "./entry-types.ts";
 import {
     isEmptyCell,
     parseArmourPoints,
@@ -295,9 +295,11 @@ function psychicPower(cells: RowCells): RowMapping {
     if (cells.focusPower !== undefined && !isEmptyCell(cells.focusPower)) {
         out.system["focusPower"] = focusPowerTest(cells.focusPower, undefined);
     }
-    text("action", "action");
     text("range", "range");
     text("subtype", "subtype");
+    const filledCell = (v: string | undefined): string | undefined =>
+        v === undefined || isEmptyCell(v) ? undefined : v;
+    Object.assign(out.system, powerActivation(filledCell(cells.action), filledCell(cells.range)));
     if (cells.sustained !== undefined && !isEmptyCell(cells.sustained)) {
         out.system["sustained"] = isSustained(cells.sustained);
     }

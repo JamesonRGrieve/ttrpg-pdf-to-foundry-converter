@@ -26,9 +26,12 @@ import {
 } from "../../src/infer/detect-grids.ts";
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
 import {
+    activationType,
     entryItem,
     entryType,
     focusPowerTest,
+    powerActivation,
+    targetType,
     headingKindTag,
     isSustained,
     joinSkillCharacteristics,
@@ -1438,6 +1441,31 @@ describe("result tables", () => {
     });
 });
 
+describe("power activation", () => {
+    it("reads a printed action or focus time as the schema's activation type", () => {
+        expect(activationType("Half Action")).toBe("half-action");
+        expect(activationType("Full Action (Sustained)")).toBe("full-action");
+        expect(activationType("Reaction")).toBe("reaction");
+        expect(activationType("Free Action")).toBe("free-action");
+        expect(activationType("2 Full Actions")).toBeNull();
+    });
+
+    it("reads the target a printed range implies", () => {
+        expect(targetType("Self")).toBe("self");
+        expect(targetType("You")).toBe("self");
+        expect(targetType("5 metres x Psy Rating radius")).toBe("area");
+        expect(targetType("20 metres x psy rating")).toBe("special");
+    });
+
+    it("writes activation and target only where printed", () => {
+        expect(powerActivation("Half Action", "Self")).toEqual({
+            activation: { type: "half-action" },
+            target: { type: "self" },
+        });
+        expect(powerActivation(undefined, "—")).toEqual({});
+    });
+});
+
 describe("unmarked section rows", () => {
     const row = (...texts: string[]): DetectedTable["rows"][number] => ({
         cells: texts.map((text, colIndex) => ({ colIndex, text, isHeader: false })),
@@ -1883,6 +1911,32 @@ describe("entry detection", () => {
         const entries = detectEntries(ir, new Set());
         expect(entries.map((e) => e.heading.text)).toEqual(["GLOW SECTION", "DIM GLOW"]);
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
+    });
+
+    it("ends a block of values set apart in their own column at the line back at the margin", () => {
+        const bodyRight = 60 + body.length * 5;
+        const field = (label: string, value: string, y: number): IRTextRun[] => [
+            { ...run(label, y, "b", 10), weight: "bold" },
+            { ...run(value, y, "b", 10), x: bodyRight - value.length * 5 },
+        ];
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                ...field("Focus Time:", "Half Action", 450),
+                ...field("Sustained:", "No", 438),
+                ...field("Range:", "You", 426),
+                run("You dim every lamp in sight.", 414, "b", 10),
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields).toEqual([
+            ["Focus Time", "Half Action"],
+            ["Sustained", "No"],
+            ["Range", "You"],
+        ]);
+        expect(entry?.body).toContain("You dim every lamp in sight.");
     });
 
     it("continues a field that reaches the text measure despite a stray run past it", () => {
