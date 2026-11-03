@@ -3094,6 +3094,30 @@ describe("entry detection", () => {
         ]);
     });
 
+    it("keeps a list's run-on when the entry's text opens indented beneath it", () => {
+        const bodyRight = 60 + body.length * 5;
+        const value = "Steady Hand 40, Glow";
+        const ir = irOf(
+            [0],
+            [
+                run("DIM WARD", 720, "h", 14),
+                ...Array.from({ length: 20 }, (_, i) => run(body, 700 - 12 * i, "b", 10)),
+                { ...run("Requires:", 450, "b", 10), weight: "bold" },
+                { ...run(value, 450, "b", 10), x: bodyRight - value.length * 5 },
+                run("Lore Training in at least two kinds of lamp".padEnd(body.length), 438, "b", 10),
+                run("of the dark.", 426, "b", 10),
+                // The entry's text opens with a paragraph indent.
+                { ...run("The bearer keeps a lamp lit all night.", 414, "b", 10), x: 69 },
+            ],
+        );
+        const entry = detectEntries(ir, new Set()).find((e) => e.heading.text === "DIM WARD");
+        expect(entry?.fields).toEqual([
+            ["Requires", "Steady Hand 40, Glow Lore Training in at least two kinds of lamp of the dark."],
+        ]);
+        expect(entry?.body.endsWith("The bearer keeps a lamp lit all night.")).toBe(true);
+        expect(entry?.body).not.toContain("Lore Training");
+    });
+
     it("reads ships as voidcraft, joining a header to a profile a sidebar split off", () => {
         const field = (text: string, y: number): IRTextRun => ({
             ...run(text, y, "b-bold", 10),

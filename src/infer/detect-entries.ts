@@ -64,6 +64,8 @@ const HEADING_WRAP_FACTOR = 1.6;
 const OPEN_HEADING_WRAP_FACTOR = 2;
 /** A gap above a body line wider than this many font-sizes opens a paragraph. */
 const PARAGRAPH_GAP_FACTOR = 1.5;
+/** A paragraph's first line is indented at most this many font sizes. */
+const MAX_PARAGRAPH_INDENT = 3;
 /** Paragraph separator inside an entry body (what `toHtml` splits on). */
 export const PARAGRAPH_BREAK = "\n\n";
 
@@ -888,7 +890,8 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
      * edge, not more of the list.
      */
     let held: { field: [string, string]; before: string; lines: TextLine[] } | null = null;
-    const settle = (): void => {
+    /** `next` is the line after the run-on, when one follows in the entry. */
+    const settle = (next?: TextLine): void => {
         if (held === null) {
             return;
         }
@@ -897,6 +900,25 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         const text = ranOn.map((l) => l.text).join(" ");
         // More names closed by a full stop ("Strong Minded, Willpower 40.") stay the field's.
         if (!holdsSentence(text) || nameListValue(text.replace(/[.!?]["”’)]*\s*$/u, ""))) {
+            return;
+        }
+        // The entry's text opens with a paragraph indent where it has one: a
+        // run-on at the margin followed, at line spacing, by a line indented
+        // from it was the value's own end ("Basic" / "Weapon Training in at
+        // least two groups of weapons."), the indented line the text.
+        const [firstRan] = ranOn;
+        const lastRan = ranOn.at(-1);
+        const ranLeft = firstRan === undefined ? undefined : visibleRuns(firstRan)[0]?.x;
+        const nextLeft = next === undefined ? undefined : visibleRuns(next)[0]?.x;
+        if (
+            next !== undefined &&
+            lastRan !== undefined &&
+            ranLeft !== undefined &&
+            nextLeft !== undefined &&
+            followsInColumn(lastRan, next) &&
+            nextLeft - ranLeft > JUSTIFIED_TOLERANCE &&
+            nextLeft - ranLeft <= MAX_PARAGRAPH_INDENT * Math.max(...next.runs.map((r) => r.size))
+        ) {
             return;
         }
         field[1] = before;
@@ -1049,7 +1071,7 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             lastFieldLine = line;
             continue;
         }
-        settle();
+        settle(line);
         lastFieldWrapped = false;
         lastFieldLine = null;
         if (opensParagraph(line)) {
