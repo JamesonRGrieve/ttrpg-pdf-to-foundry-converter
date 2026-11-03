@@ -686,6 +686,40 @@ describe("origins granted by inline fields", () => {
         expect(origins[0]?.grantsPsychicPowers).toBe(true);
     });
 
+    it("reads a skill without the characteristic tag printed after it", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Flamewright"],
+                    [
+                        [
+                            "Starting Skills",
+                            "Glowcraft (Fel), Lamp Lore (Wicks) (Int), Tongue (High Wick, Low Wick) (Int)",
+                        ],
+                        ["Starting Talents", "Steady Hand"],
+                        ["Starting Gear", "Lantern"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(
+            (origins[0]?.grants["skills"] as { name: string; specialization: string }[]).map((s) => [
+                s.name,
+                s.specialization,
+            ]),
+        ).toEqual([
+            ["Glowcraft", ""],
+            ["Lamp Lore", "Wicks"],
+            ["Tongue", "High Wick"],
+            ["Tongue", "Low Wick"],
+        ]);
+    });
+
     it("grants a talent's listed specialisations and offers the alternatives among them", () => {
         const origins = readInlineOrigins(
             [

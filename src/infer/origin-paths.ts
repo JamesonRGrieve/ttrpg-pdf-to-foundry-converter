@@ -374,6 +374,7 @@ function listGrants(
     const items = splitTopLevel(text.replace(/\.\s*$/u, ""), LIST_SEPARATOR);
     for (const item of items
         .filter((i) => !readsAsProse(i) && named(i))
+        .map((i) => (type === "skill" ? withoutCharacteristicTag(i) : i))
         .flatMap((i) => mixedSpecialisations(i) ?? [i])) {
         const alternatives = splitTopLevel(item, ALTERNATIVE);
         const specialisation = specialisationChoice(item, type, label);
@@ -386,6 +387,18 @@ function listGrants(
         }
     }
     return { granted, choices };
+}
+
+/**
+ * A skill without the characteristic it tests printed after it in brackets
+ * ("Command (Fel)", "Common Lore (Imperium) (Int)"): the tag is no
+ * specialisation.
+ */
+function withoutCharacteristicTag(item: string): string {
+    const m = /^(?<rest>.*?\S)\s*\((?<tag>[^()]+)\)\s*$/u.exec(item);
+    const tag = m?.groups?.["tag"]?.trim().toLowerCase();
+    const rest = m?.groups?.["rest"];
+    return tag !== undefined && rest !== undefined && CHARACTERISTICS[tag] !== undefined ? rest : item;
 }
 
 /**
