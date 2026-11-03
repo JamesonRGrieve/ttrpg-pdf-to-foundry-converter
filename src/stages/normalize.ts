@@ -274,14 +274,15 @@ function gapPieces<T extends { y: number }>(lines: readonly T[]): T[][] {
  * at the lines that cross one of a document layout's `gutters`; a region that
  * no line crosses and whose every column is prose reads as those columns, and
  * everything else as one. Columns are numbered top region first, left to
- * right. Returns null when no region splits.
+ * right. Returns null when no region splits; otherwise the layout and how many
+ * lines it reads as columns.
  */
 function regionLayout(
     runs: readonly RawTextRun[],
     page: RawPage,
     { gutters, rights }: DocumentLayout,
     marginLeft: number,
-): ColumnLayout | null {
+): { layout: ColumnLayout; splitLines: number } | null {
     const crosses = (r: RawTextRun): boolean =>
         r.width > 0 &&
         gutters.some(
@@ -367,7 +368,8 @@ function regionLayout(
             place(r, r.y > page.height / 2 ? regions[0] : regions.at(-1));
         }
     }
-    return { columnOf, lefts };
+    const splitLines = blocks.filter((b) => b.split).reduce((n, b) => n + b.lines.length, 0);
+    return { layout: { columnOf, lefts }, splitLines };
 }
 
 function buildSortedSet(values: Iterable<number>): number[] {
@@ -413,15 +415,21 @@ export function normalize(raw: RawDoc): IR {
     for (const page of sortedPages) {
         const pageRuns = runsByPage.get(page.pageIndex) ?? [];
         const geom = geometries.get(page.pageIndex) ?? detectGeometry(pageRuns, page);
-        // The first of the document's layouts (most columns first) any region splits by.
+        // Of the document's layouts (most columns first) a region splits by,
+        // the one reading the most lines as columns: a three-column layout
+        // splitting a two-line strip must not keep the page's two-column
+        // text below it, set at another of the document's gutters, as one.
         const regional =
             geom.columnLefts.length === 1
-                ? (layouts.get(page.pageIndex % 2) ?? []).reduce<ColumnLayout | null>(
-                      (found, candidate) => found ?? regionLayout(pageRuns, page, candidate, geom.marginLeft),
-                      null,
-                  )
+                ? (layouts.get(page.pageIndex % 2) ?? []).reduce<{
+                      layout: ColumnLayout;
+                      splitLines: number;
+                  } | null>((found, candidate) => {
+                      const next = regionLayout(pageRuns, page, candidate, geom.marginLeft);
+                      return next !== null && next.splitLines > (found?.splitLines ?? 0) ? next : found;
+                  }, null)
                 : null;
-        const layout = regional ?? pageLayout(pageRuns, geom.columnLefts);
+        const layout = regional?.layout ?? pageLayout(pageRuns, geom.columnLefts);
         const columns = layout.lefts.length;
         pageColumnCounts.push(columns);
         pages.push({

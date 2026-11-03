@@ -124,6 +124,32 @@ describe("column regions", () => {
         expect(["col0 3", "col1 3", "col2 3", "spanning row 518"].map(columnOf)).toEqual([0, 1, 2, 3]);
     });
 
+    it("splits by the layout reading the most lines as columns, not the one with the most columns", () => {
+        // A two-line strip in thirds, then ten lines in two columns, then a table.
+        const strip = thirds(2, 700, 2);
+        // The right column ends where the strip's last third does.
+        const two = columns(2, 640, 10).map((r) => (r.x === RIGHT ? { ...r, width: 200 } : r));
+        const rows = [500, 488, 476].map((y) => raw(2, LEFT, y, 470, `spanning row ${y}`));
+        const ir = normalize(
+            doc(
+                [
+                    ...twoColumnPages(),
+                    ...thirds(6, 700, 20),
+                    ...thirds(8, 700, 20),
+                    ...strip,
+                    ...two,
+                    ...rows,
+                ],
+                [0, 2, 4, 6, 8],
+            ),
+        );
+        const columnOf = (text: string): number | undefined =>
+            ir.runs.find((r) => r.pageIndex === 2 && r.text === text)?.column;
+        expect(["left 3", "right 3", "spanning row 488"].map(columnOf)).toEqual([1, 2, 3]);
+        const order = ir.runs.filter((r) => r.pageIndex === 2).map((r) => r.text);
+        expect(order.indexOf("left 9")).toBeLessThan(order.indexOf("right 0"));
+    });
+
     it("splits three columns whose middle holds a picture, not text", () => {
         const rows = [530, 518, 506].map((y) => raw(2, LEFT, y, 470, `spanning row ${y}`));
         const sides = thirds(2, 700, 10).filter((r) => !r.text.startsWith("col1"));
