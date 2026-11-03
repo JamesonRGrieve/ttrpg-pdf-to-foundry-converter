@@ -2317,11 +2317,16 @@ export function citeFirstPage(head: Entity, readings: readonly Entity[], line: L
 }
 
 /**
- * A summary table's Benefit column states what a talent or trait does in
- * one line; the entry's prose is its description. When both are printed, the
- * table's line is the `benefit`, however much longer the prose is.
+ * A summary table's Benefit column states what a talent does in one line;
+ * the entry's prose is its description. When both are printed, the table's
+ * line is the `benefit`, however much longer the prose is. A trait's prose
+ * is its rule (a trait has no other rules field), so its own reading stays:
+ * the table abridges it ("Extra damage on a charge").
  */
 export function preferTableBenefit(head: Entity, readings: readonly Entity[]): void {
+    if (head.fields["type"] === "trait") {
+        return;
+    }
     const benefitOf = (e: Entity): JsonValue | undefined => {
         const system = e.fields["system"];
         return isJsonObject(system) ? system["benefit"] : undefined;

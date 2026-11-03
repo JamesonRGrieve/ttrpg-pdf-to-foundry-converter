@@ -2247,6 +2247,13 @@ describe("table benefits", () => {
         preferTableBenefit(entry, [entry, reading("table:talent", "")]);
         expect(entry.fields["system"]).toEqual({ benefit: "<p>Prose.</p>" });
     });
+
+    it("keeps a trait's own rules over the table's abridgement", () => {
+        const trait = (e: Entity): Entity => ({ ...e, fields: { ...e.fields, type: "trait" } });
+        const entry = trait(reading("entry:trait", "<p>It glows by (X) lamps.</p>"));
+        preferTableBenefit(entry, [entry, trait(reading("table:trait", "<p>Glows.</p>"))]);
+        expect(entry.fields["system"]).toEqual({ benefit: "<p>It glows by (X) lamps.</p>" });
+    });
 });
 
 describe("table continuations", () => {
