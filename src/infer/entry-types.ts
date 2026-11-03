@@ -1142,7 +1142,17 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             if (useTime !== undefined) {
                 system["useTime"] = useTime.replace(/\.\s*$/u, "").trim();
             }
-            const specialisations = skillSpecialisations(entry.fields);
+            // Described one by one as fields, or else listed in one ("Skill
+            // Groups: A, B, and C.").
+            const described = skillSpecialisations(entry.fields);
+            const specialisations =
+                described.length > 0
+                    ? described
+                    : splitList(
+                          (text("skill groups") ?? text("skill group") ?? "")
+                              .replace(/\.\s*$/u, "")
+                              .replace(/(^|,)\s*and\s+/giu, "$1"),
+                      );
             if (specialisations.length > 0) {
                 system["specialist"] = true;
                 system["specializations"] = specialisations;

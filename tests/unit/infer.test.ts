@@ -1498,6 +1498,19 @@ describe("entry typing", () => {
         expect(lore.system["useTime"]).toBe("Free Action");
         expect(lore.system["specialist"]).toBe(true);
         expect(lore.system["specializations"]).toEqual(["Reeds", "Tides", "Wicks"]);
+        // Groups listed in one field, not described one by one, are its specialisations too.
+        const listed = entryItem(
+            entry(
+                "LAMP CRAFT (AGILITY)",
+                [
+                    ["Skill Groups", "Hand Lamp, Lantern/Torch, and Beacon."],
+                    ["Skill Use", "Full Action."],
+                ],
+                ["Skills"],
+            ),
+            "skill",
+        );
+        expect(listed.system["specializations"]).toEqual(["Hand Lamp", "Lantern/Torch", "Beacon"]);
         // A stray label (a sidebar's numeral) or two makes no specialist skill.
         expect(
             skillSpecialisations([
