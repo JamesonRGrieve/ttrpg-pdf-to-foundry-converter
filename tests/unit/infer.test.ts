@@ -2434,6 +2434,17 @@ describe("headings", () => {
         expect(headingOf(subheading, body, false)).toBeNull();
     });
 
+    it("keeps a capitals heading whose case was lost breaking off on a comma, not running text", () => {
+        // Small capitals the text layer read in scrambled case, or in capitals
+        // beside lower case, wrap their bracketed tags onto the next line.
+        const scrambled = heading([["wiCK-Use (advanced,", 100, 90]]);
+        expect(headingOf(scrambled, body, false)?.text).toBe("wiCK-Use (advanced,");
+        const capitals = heading([["lantern (advanced, CRAFTING,", 100, 120]]);
+        expect(headingOf(capitals, body, false)?.text).toBe("lantern (advanced, CRAFTING,");
+        const prose = heading([["The Lantern, the Wick,", 100, 100]]);
+        expect(headingOf(prose, body, false)).toBeNull();
+    });
+
     it("keeps a name ending in its rank, not a line carrying other values", () => {
         const ranked = heading([
             ["WICK", 100, 30],
@@ -2651,6 +2662,30 @@ describe("entry detection", () => {
         const entries = detectEntries(ir, new Set());
         expect(entries.map((e) => e.heading.text)).toEqual(["GLOW SECTION", "DIM GLOW"]);
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
+    });
+
+    it("joins a heading broken off inside a bracket to its closing line set further below", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("WICK (ADVANCED,", 620, "h", 12),
+                run("CRAFTING)", 597, "h", 12),
+                run(body, 580, "b", 10),
+                run("LAMP", 540, "h", 12),
+                run("WARD", 517, "h", 12),
+                run(body, 500, "b", 10),
+            ],
+        );
+        const entries = detectEntries(ir, new Set());
+        // A closed heading is not continued from as far.
+        expect(entries.map((e) => e.heading.text)).toEqual([
+            "GLOW SECTION",
+            "WICK (ADVANCED, CRAFTING)",
+            "LAMP",
+            "WARD",
+        ]);
     });
 
     it("reads a line sharing a baseline with a table's runs without them", () => {

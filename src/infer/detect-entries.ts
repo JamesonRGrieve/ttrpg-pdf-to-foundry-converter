@@ -60,6 +60,8 @@ const DISPLAY_MAX_GAP_FACTOR = 2.5;
 const BROKEN_TITLE_FACTOR = 2;
 /** A heading line within this many heading-sizes below another continues it. */
 const HEADING_WRAP_FACTOR = 1.6;
+/** A heading broken off inside an open bracket continues on a heading line within this many sizes below. */
+const OPEN_HEADING_WRAP_FACTOR = 2;
 /** A gap above a body line wider than this many font-sizes opens a paragraph. */
 const PARAGRAPH_GAP_FACTOR = 1.5;
 /** Paragraph separator inside an entry body (what `toHtml` splits on). */
@@ -331,8 +333,14 @@ export function headingOf(
             !scrambledCase(line.text) &&
             !shortDisplay(line.text, size, body.size) &&
             !caseLostDisplay) ||
-        // (A line with no capitals at all is display type whose case was lost.)
-        (brokenOff && /\p{Ll}/u.test(line.text) && /\p{Lu}/u.test(line.text)) ||
+        // (A line with no capitals at all is display type whose case was lost;
+        // so is one in scrambled case, or with words in capitals and none in
+        // title case: small capitals wrapping their bracketed tags.)
+        (brokenOff &&
+            /\p{Ll}/u.test(line.text) &&
+            /\p{Lu}/u.test(line.text) &&
+            !scrambledCase(line.text) &&
+            !(CAPITALS_WORD.test(line.text) && !TITLE_CASED_WORD.test(line.text))) ||
         spread
     ) {
         return null;
@@ -949,14 +957,18 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         if (heading !== null && current !== null && prevLine !== null) {
             const open: Entry = current;
             // A heading line straight under a heading line of the same style,
-            // before any fields or body, is the same heading wrapped.
+            // before any fields or body, is the same heading wrapped. One broken
+            // off inside an open bracket ("Name (Advanced,") is set a little
+            // further from its closing line.
+            const bracketOpen = /\([^)]*$/u.test(open.heading.text);
             const wrappedHeading =
                 open.fields.length === 0 &&
                 bodyLines.length === 0 &&
                 open.heading.style === heading.style &&
                 prevLine.pageIndex === line.pageIndex &&
                 prevLine.column === line.column &&
-                prevLine.y - line.y <= HEADING_WRAP_FACTOR * heading.size;
+                prevLine.y - line.y <=
+                    (bracketOpen ? OPEN_HEADING_WRAP_FACTOR : HEADING_WRAP_FACTOR) * heading.size;
             if (wrappedHeading) {
                 open.heading.text = `${open.heading.text} ${heading.text}`;
                 continue;
