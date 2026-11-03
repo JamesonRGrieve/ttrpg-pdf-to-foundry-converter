@@ -64,4 +64,16 @@ describe("cue presets", () => {
         expect(sling.fields["system"]).toEqual({ class: "basic", cue: { preset: "solid" } });
         expect(club.fields["system"]).toEqual({ class: "melee" });
     });
+
+    it("draws a psychic power's damaging attack as the warp", () => {
+        const bolt = entity({
+            type: "psychicPower",
+            name: "Glow Bolt",
+            system: { isAttack: true, damage: { formula: "1d10+PR", type: "energy" } },
+        });
+        const ward = entity({ type: "psychicPower", name: "Glow Ward", system: { isAttack: false } });
+        applyCuePresets([bolt, ward]);
+        expect((bolt.fields["system"] as { cue?: unknown }).cue).toEqual({ preset: "warp" });
+        expect(ward.fields["system"]).toEqual({ isAttack: false });
+    });
 });

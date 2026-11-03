@@ -43,11 +43,23 @@ const isObject = (v: unknown): v is JsonObject => typeof v === "object" && v !==
 /** Give every weapon (a pack's own, or one embedded in an actor) the preset its type settles, unless it has one. */
 export function applyCuePresets(entities: readonly Entity[]): void {
     const apply = (type: unknown, system: unknown): void => {
-        if (type !== "weapon" || !isObject(system)) {
+        if ((type !== "weapon" && type !== "psychicPower") || !isObject(system)) {
             return;
         }
         const cue = isObject(system["cue"]) ? system["cue"] : {};
         if (typeof cue["preset"] === "string" && cue["preset"] !== "") {
+            return;
+        }
+        if (type === "psychicPower") {
+            // A power's damaging attack is warp force, as a force weapon's is.
+            const damage = isObject(system["damage"]) ? system["damage"] : {};
+            if (
+                system["isAttack"] === true &&
+                typeof damage["formula"] === "string" &&
+                damage["formula"] !== ""
+            ) {
+                system["cue"] = { ...cue, preset: PRESET_BY_TYPE["force"] ?? "warp" };
+            }
             return;
         }
         const cls = typeof system["class"] === "string" ? system["class"] : undefined;
