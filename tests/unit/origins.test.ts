@@ -86,6 +86,9 @@ describe("origin list parsing", () => {
         // A name column headed by a step lists that step's origins, not items.
         expect(namesOriginStep("Home World or Origin", TARGETS.ow.originSteps)).toBe(true);
         expect(namesOriginStep("Chapter", TARGETS.dw.originSteps)).toBe(true);
+        // A numbered label is a division of the book.
+        expect(namesOriginStep("CHAPTER IV: LAMPS & WICKS", TARGETS.dw.originSteps)).toBe(false);
+        expect(namesOriginStep("Chapter 3: Glow", TARGETS.dw.originSteps)).toBe(false);
         expect(namesOriginStep("Name", TARGETS.ow.originSteps)).toBe(false);
         expect(originStepNamedBy("Omens", STEPS)).toBeNull();
         // The step must be the caption's head noun, not a modifier of another.

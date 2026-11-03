@@ -20,7 +20,13 @@ import type { OriginStepDef } from "./targets.ts";
  */
 function labelPattern(label: string, plural: boolean, closing: boolean): RegExp {
     const words = label.split(/\s+/u).map((w) => w.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"));
-    return new RegExp(`\\b${words.join("\\s*")}${plural ? "s?" : ""}${closing ? "\\W*$" : "\\b"}`, "iu");
+    // A label numbered ("Chapter XIV:", "Section 3") names a division of the
+    // book, not the step.
+    const unnumbered = "(?!\\s*(?:[IVXLC]+|\\d+)\\b)";
+    return new RegExp(
+        `\\b${words.join("\\s*")}${plural ? "s?" : ""}${closing ? "\\W*$" : `\\b${unnumbered}`}`,
+        "iu",
+    );
 }
 
 /** The first of the target's steps one of whose labels `text` names. */
