@@ -448,6 +448,37 @@ describe("titled tables", () => {
         }
     });
 
+    it("reads a key standing alone at the row pitch as a section row, in the records' face", () => {
+        const record = (
+            y: number,
+            name: string,
+            hulls: string,
+            power: string,
+            space: string,
+        ): IRTextRun[] => [run(name, 60, y), run(hulls, 200, y), run(power, 340, y), run(space, 420, y)];
+        const ir = irOf([
+            run("Table 3-1: Lamp Parts", 60, 712, bold),
+            run("Part", 60, 698, bold),
+            run("Hulls", 200, 698, bold),
+            run("Power", 340, 698, bold),
+            run("Space", 420, 698, bold),
+            // Rows 15 pt apart in 10 pt type: a wrapped name would follow at ~12 pt.
+            ...record(684, "Wick Engine", "Small", "10", "3"),
+            ...record(669, "Lamp Engine", "Large", "12", "4"),
+            run("Glow Fields", 60, 654),
+            ...record(639, "Glow Field", "All", "1", "0"),
+            ...record(624, "Dim Hull", "All", "1", "0"),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.rows.map((r) => (r.isSectionHeader ? `§${r.sectionName}` : r.cells[0]?.text))).toEqual([
+            "Wick Engine",
+            "Lamp Engine",
+            "§Glow Fields",
+            "Glow Field",
+            "Dim Hull",
+        ]);
+    });
+
     it("prefixes a label's first words printed on a line of their own above the header", () => {
         const ir = irOf([
             run("Table 1-8: Lamp Fittings", 60, 712, bold),

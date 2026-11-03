@@ -130,6 +130,33 @@ function opensRecord(key: string, previousKey: string): boolean {
     return !FUNCTION_WORDS.has(lastWord);
 }
 
+/** Most leading, in type sizes, a wrapped line of a cell sits below the line before it. */
+const MAX_WRAP_LEADING = 1.4;
+
+/**
+ * A line holding only a capitalised key, set below the line above at the
+ * table's row pitch and wider than a cell's line leading, stands on its own: a
+ * section row set in the records' face ("Gellar Fields" between two parts),
+ * not the rest of a wrapped name, which follows at line leading.
+ */
+function atRowPitch(
+    row: LineRow,
+    line: readonly string[],
+    above: readonly string[],
+    gap: number,
+    rowPitch: number,
+): boolean {
+    const size = Math.max(...row.runs.map((r) => r.size));
+    return (
+        filled(line) === 1 &&
+        (line[0] ?? "").trim().length > 0 &&
+        opensRecord(line[0] ?? "", above[0] ?? "") &&
+        !awaitsRest(above, Number.POSITIVE_INFINITY) &&
+        gap >= rowPitch &&
+        gap > MAX_WRAP_LEADING * size
+    );
+}
+
 /**
  * Merge wrapped lines into their row. `rows` must be ordered top to bottom.
  * Besides spacing and fill (above), a continuation is set in exactly the faces
@@ -152,6 +179,7 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
     const recordFills = fills.filter((f) => f > 1);
     const typicalFill = mode(recordFills.length > 0 ? recordFills : fills);
     const fullest = Math.max(...rows.map((r) => filled(shape.cells(r))));
+    const rowPitch = percentile(sorted, 0.5);
     const out: T[] = [];
     // Key-only lines that open the record below them.
     const leads = new Set<T>();
@@ -189,6 +217,10 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             return;
         }
         const above = shape.cells(prev);
+        if (atRowPitch(row, line, above, gap, rowPitch)) {
+            out.push({ ...row, runs: [...row.runs] });
+            return;
+        }
         // A capitalised key opens a record unless the line is a mere fragment —
         // at most a third of a typical row's cells — at the leading inside a row.
         const fragment = filled(line) * FRAGMENT_DIVISOR <= typicalFill;

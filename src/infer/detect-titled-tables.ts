@@ -1283,6 +1283,9 @@ export function headerPeriod(headers: readonly string[]): number {
  * wrapped lines rejoin their row (tight spacing AND fewer filled columns than
  * a typical row).
  */
+/** Fewest cells a table's typical record fills for a key standing alone to name a section. */
+const KEYED_SECTION_FILL = 3;
+
 function readRows(body: readonly RawRow[], colBoundaries: number[]): TableRow[] {
     const lineCells = (row: RawRow): string[] =>
         colBoundaries.map((_, col) =>
@@ -1294,15 +1297,25 @@ function readRows(body: readonly RawRow[], colBoundaries: number[]): TableRow[] 
                 .trim(),
         );
     const rows = mergeContinuationRows(groupByKeyAnchors(body, colBoundaries), { cells: lineCells });
+    const fills = rows.map((row) => lineCells(row).filter((c) => c.length > 0).length);
+    const recordFill = percentile(
+        fills.filter((f) => f > 1).sort((a, b) => a - b),
+        0.5,
+    );
     const dataRows: TableRow[] = [];
-    for (const row of rows) {
+    for (const [i, row] of rows.entries()) {
         const cells = assignToColumns(row.runs, colBoundaries);
         const allBold = row.runs.every((r) => r.weight === "bold");
         const fewCells = cells.filter((c) => c.text.length > 0).length <= 2;
         // A label centred across the columns may touch several of them; with
         // no key it still names a section, not a record.
         const keyless = !cells.some((c) => c.colIndex === 0 && c.text.length > 0);
-        if (allBold && (fewCells || keyless)) {
+        // A key standing alone over records that fill several cells, no
+        // wrapped name's piece (merging joined those), names their section
+        // in the records' own face.
+        const keyAlone =
+            fills[i] === 1 && !keyless && recordFill >= KEYED_SECTION_FILL && (fills[i + 1] ?? 0) > 1;
+        if ((allBold && (fewCells || keyless)) || keyAlone) {
             const sectionText = row.runs
                 .map((r) => r.text)
                 .join(" ")

@@ -446,6 +446,24 @@ describe("row merging", () => {
         expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 90, 70, 50]);
     });
 
+    it("keeps a key-only line set at the row pitch, wider than line leading, apart", () => {
+        // Rows 14 pt apart in 8 pt type: a wrapped name would follow at ~10 pt.
+        const rows = [
+            textLine(200, ["Wick Engine", "Small", "3"]),
+            textLine(186, ["Lamp Engine", "Large", "4"]),
+            textLine(172, ["Glow Fields", "", ""]),
+            textLine(158, ["Glow Field", "All", "1"]),
+            textLine(144, ["Dim Hull", "All", "1"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Wick Engine",
+            "Lamp Engine",
+            "Glow Fields",
+            "Glow Field",
+            "Dim Hull",
+        ]);
+    });
+
     it("keeps a name wrapped around its row's centred values in one record", () => {
         const rows = [
             textLine(200, ["Glimmer", "", ""]),
