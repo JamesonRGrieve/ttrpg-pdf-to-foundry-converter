@@ -67,6 +67,15 @@ describe("origin list parsing", () => {
             toughness: -3,
         });
         expect(characteristicChanges("Increase his Agility or Intelligence by 3.")).toEqual({});
+        // A signed amount, and one amount shared by several characteristics.
+        expect(characteristicChanges("Increase Agility by +2 and gain 1 Fate Point.")).toEqual({
+            agility: 2,
+        });
+        expect(characteristicChanges("Increase Weapon Skill and Ballistic Skill each by +2.")).toEqual({
+            weaponSkill: 2,
+            ballisticSkill: 2,
+        });
+        expect(characteristicChanges("Increase Agility and the lamp's glow by 2.")).toEqual({});
         expect(
             signedCharacteristicChanges("+5 Fellowship, –5 Toughness, +2 Wounds, -3 Ballistic Skill."),
         ).toEqual({

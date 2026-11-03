@@ -182,19 +182,23 @@ const ROLL_BAND = /^\d+(?:\s*[-–]\s*\d+)?$/u;
 
 /**
  * "Increase this character's Perception by 5" / "Reduce … Agility
- * characteristic by 3" → characteristic key → points. A change offered between
- * characteristics ("Agility or Intelligence") is the player's choice, not a
- * fixed modifier.
+ * characteristic by 3" → characteristic key → points; the amount may carry
+ * its sign ("by +2"), and several characteristics may share it ("Weapon Skill
+ * and Ballistic Skill each by +2"). A change offered between characteristics
+ * ("Agility or Intelligence") is the player's choice, not a fixed modifier.
  */
 export function characteristicChanges(effect: string): Record<string, number> {
     const out: Record<string, number> = {};
     const re =
-        /\b(?<verb>increase|reduce|decrease)\s+(?:(?:this character['’]s|his|her|their|your)\s+)?(?<name>[\p{L} ]+?)\s+(?:characteristic\s+)?by\s+(?<points>\d+)/giu;
+        /\b(?<verb>increase|reduce|decrease)\s+(?:(?:this character['’]s|his|her|their|your)\s+)?(?<name>[\p{L} ]+?)\s+(?:characteristics?\s+)?(?:each\s+)?by\s+[+\-–−]?(?<points>\d+)/giu;
     for (const m of effect.matchAll(re)) {
-        const key = CHARACTERISTICS[m.groups?.["name"]?.trim().toLowerCase() ?? ""];
-        if (key !== undefined) {
+        const names = (m.groups?.["name"] ?? "").split(/\s+and\s+/iu).map((n) => n.trim().toLowerCase());
+        const keys = names.map((n) => CHARACTERISTICS[n]);
+        if (keys.every((k) => k !== undefined)) {
             const sign = /^increase$/iu.test(m.groups?.["verb"] ?? "") ? 1 : -1;
-            out[key] = sign * Number(m.groups?.["points"] ?? "0");
+            for (const key of keys) {
+                out[key] = sign * Number(m.groups?.["points"] ?? "0");
+            }
         }
     }
     return out;
