@@ -1493,6 +1493,15 @@ describe("entry typing", () => {
                 ["Glow", "y"],
             ]),
         ).toEqual([]);
+        // The label introducing the list of groups is none of them.
+        expect(
+            skillSpecialisations([
+                ["Skill Groups", "Reeds, Tides, Wicks"],
+                ["Reeds", "x"],
+                ["Tides", "y"],
+                ["Wicks", "z"],
+            ]),
+        ).toEqual(["Reeds", "Tides", "Wicks"]);
     });
 
     it("types vehicle traits apart from traits, and nothing under an umbrella naming a fielded kind", () => {

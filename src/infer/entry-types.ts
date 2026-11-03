@@ -971,7 +971,7 @@ const MEDAL_HONOURS = ["imperial", "campaign", "regimental"] as const;
 
 /** A skill's own field labels (the schema's): never one of its specialisations. */
 const SKILL_FIELD_LABELS =
-    /^(?:aptitudes?|skill use|use time|characteristic|special(?:isations?|izations?)|uses?|special uses?)$/iu;
+    /^(?:aptitudes?|skill use|use time|characteristic|special(?:isations?|izations?)|uses?|special uses?|skill groups?)$/iu;
 /** Fewest named fields after a skill's own that make it a specialist skill listing its specialisations. */
 const MIN_SPECIALISATIONS = 3;
 
