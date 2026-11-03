@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { JsonObject, JsonValue } from "../types/entity.ts";
+import type { Entity, JsonObject, JsonValue } from "../types/entity.ts";
 import type { Entry } from "./detect-entries.ts";
 import { identifierFromName } from "./identifiers.ts";
 import { caseLost, cleanName } from "./names.ts";
@@ -690,6 +690,44 @@ export function powerProseDamage(text: string): JsonObject | null {
         bonus: Number(dice?.groups?.["flat"] ?? 0),
         penetration: pen === undefined ? 0 : Number(pen),
     };
+}
+
+const objectOf = (v: unknown): JsonObject | null =>
+    typeof v === "object" && v !== null && !Array.isArray(v) ? (v as JsonObject) : null;
+const skillKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/**
+ * A power whose Focus Power test is a skill test is taken against the
+ * skill's characteristic: the one the document's own entry for that skill
+ * prints. A power left on the schema's default characteristic takes it; a
+ * skill the document does not describe leaves the power as read.
+ */
+export function applyFocusSkillCharacteristics(entities: readonly Entity[]): void {
+    const characteristicOf = new Map<string, string>();
+    for (const e of entities) {
+        const system = objectOf(e.fields["system"]);
+        const name = e.fields["name"];
+        const characteristic = system?.["characteristic"];
+        if (e.fields["type"] === "skill" && typeof name === "string" && typeof characteristic === "string") {
+            characteristicOf.set(skillKey(name), characteristic);
+        }
+    }
+    for (const e of entities) {
+        const focus = objectOf(objectOf(e.fields["system"])?.["focusPower"]);
+        const skill = focus?.["skill"];
+        if (
+            e.fields["type"] !== "psychicPower" ||
+            focus === null ||
+            typeof skill !== "string" ||
+            skill === ""
+        ) {
+            continue;
+        }
+        const characteristic = characteristicOf.get(skillKey(skill));
+        if (characteristic !== undefined && focus["characteristic"] === "willpower") {
+            focus["characteristic"] = characteristic;
+        }
+    }
 }
 
 /** A characteristic key from a printed name or abbreviation, or null. */

@@ -25,6 +25,7 @@ import { captionNames, detectStatRows } from "./detect-stat-rows.ts";
 import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import {
+    applyFocusSkillCharacteristics,
     CHARACTERISTICS,
     entryItem,
     entryType,
@@ -2406,6 +2407,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     applyTwoHandedClasses(entities, twoHandedClasses(ir.runs.map((r) => r.text).join(" ")));
     applyAmmunitionWeaponTypes(entities, out.usedWith);
     applyAmmunitionEffects(entities);
+    applyFocusSkillCharacteristics(entities);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
