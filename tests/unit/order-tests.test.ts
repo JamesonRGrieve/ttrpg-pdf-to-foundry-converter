@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { applyOrderTests } from "../../src/infer/order-tests.ts";
 import type { Entity, JsonObject } from "../../src/types/entity.ts";
 

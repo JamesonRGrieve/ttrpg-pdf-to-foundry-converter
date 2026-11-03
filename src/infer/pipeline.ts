@@ -67,6 +67,7 @@ import {
     reinforcementTerms,
     rejoinSmallCaps,
 } from "./npc.ts";
+import { applyOrderTests } from "./order-tests.ts";
 import {
     type OriginPathReading,
     type OriginRule,
@@ -82,7 +83,6 @@ import {
     sameOrigin,
     withSkillLevelBase,
 } from "./origin-paths.ts";
-import { applyOrderTests } from "./order-tests.ts";
 import { applyOriginPrerequisites } from "./origin-prerequisites.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
 import { isWeaponNameLine, panelWeapons } from "./panel-weapons.ts";

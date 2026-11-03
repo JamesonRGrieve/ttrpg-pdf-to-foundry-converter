@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { applyOriginPrerequisites } from "../../src/infer/origin-prerequisites.ts";
 import { TARGETS } from "../../src/infer/targets.ts";
 import { emit } from "../../src/stages/emit.ts";
