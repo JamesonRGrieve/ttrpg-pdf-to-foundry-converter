@@ -1536,6 +1536,34 @@ describe("entry typing", () => {
         expect(entryType(entry("Usingnavigator Powers", [], ["Navigators"]))).toBeNull();
     });
 
+    it("reads a navigator power's test from the first characteristic test its novice text asks for", () => {
+        const sections = ["Navigators", "Navigator Powers"];
+        const power = (novice: string) =>
+            entryItem(entry("Lamp Gaze", [["Novice", novice]], sections), "navigatorPower").system["test"];
+        // A test of something else first (a single test, the target's) is passed over.
+        expect(power("Make a single test. On a Difficult (–10) Willpower Test, he glows.")).toEqual({
+            characteristic: "willpower",
+            modifier: -10,
+            opposed: false,
+            opposedCharacteristic: "",
+        });
+        // An opposed test of one characteristic is opposed by the same.
+        expect(power("He then makes an Opposed Willpower test with the target.")).toEqual({
+            characteristic: "willpower",
+            modifier: 0,
+            opposed: true,
+            opposedCharacteristic: "willpower",
+        });
+        expect(power("With a successful Perception Test, he sees.")).toEqual({
+            characteristic: "perception",
+            modifier: 0,
+            opposed: false,
+            opposedCharacteristic: "",
+        });
+        // A characteristic the schema's test does not take is no test of the power.
+        expect(power("He makes a Toughness Test or is slain.")).toBeUndefined();
+    });
+
     it("types a ship's actions and an orders section's entries as orders", () => {
         const ship = ["Starships", "Starship Combat", "ACtions"];
         expect(entryType(entry("drift slowly", [], ship))).toBe("order");

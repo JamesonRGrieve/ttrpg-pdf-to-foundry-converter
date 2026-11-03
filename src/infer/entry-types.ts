@@ -990,6 +990,38 @@ export function skillSpecialisations(fields: readonly (readonly [string, string]
     return named.length >= MIN_SPECIALISATIONS ? named : [];
 }
 
+/** The characteristics the schema's navigator power test takes. */
+const NAVIGATOR_TEST_CHARACTERISTICS: readonly string[] = ["perception", "willpower"];
+/** "[Difficult (–10)] [Opposed] <Word> Test": an optional bracketed modifier, the word tested. */
+const CHARACTERISTIC_TEST =
+    /(?:\(\s*(?<sign>[+\-–−])\s*(?<amount>\d+)\s*\)\s*)?(?<opposed>opposed\s+)?(?<word>\p{L}+)\s+tests?\b/giu;
+
+/**
+ * A navigator power's test (the schema's `test`), read from the first test
+ * of a characteristic the schema's test takes that its text asks for: "a
+ * Difficult (–10) Willpower Test", "an Opposed Willpower test with the
+ * target" (opposed by the same characteristic). Tests of anything else (a
+ * target's, "a single test") are passed over.
+ */
+export function navigatorTest(text: string): JsonObject | null {
+    for (const m of text.matchAll(CHARACTERISTIC_TEST)) {
+        const groups = m.groups ?? {};
+        const characteristic = CHARACTERISTICS[(groups["word"] ?? "").toLowerCase()];
+        if (characteristic === undefined || !NAVIGATOR_TEST_CHARACTERISTICS.includes(characteristic)) {
+            continue;
+        }
+        const amount = groups["amount"];
+        const opposed = groups["opposed"] !== undefined;
+        return {
+            characteristic,
+            modifier: amount === undefined ? 0 : (groups["sign"] === "+" ? 1 : -1) * Number(amount),
+            opposed,
+            opposedCharacteristic: opposed ? characteristic : "",
+        };
+    }
+    return null;
+}
+
 /** A Roman numeral (a sidebar's or chapter's number), not a name. */
 const ROMAN = /^[IVXLC]+$/u;
 
@@ -1196,6 +1228,10 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             }
             if (Object.keys(levels).length > 0) {
                 system["levels"] = levels;
+            }
+            const test = navigatorTest(text("novice") ?? entry.body);
+            if (test !== null) {
+                system["test"] = test;
             }
             const sustain = text("sustain") ?? text("sustained");
             if (sustain !== undefined) {
