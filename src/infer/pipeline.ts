@@ -38,7 +38,7 @@ import {
 import { applyDefaultIcons } from "./icons.ts";
 import { applyIdentifiers } from "./identifiers.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
-import { withLigaturesJoined } from "./ligatures.ts";
+import { withLigaturesJoined, withLostLettersRestored } from "./ligatures.ts";
 import {
     cleanName,
     endsMidSentence,
@@ -2586,7 +2586,7 @@ function consolidate(
  * target is the user's choice of output schema.
  */
 export function infer(read: IR, log: Logger, target: TargetSchema): InferResult {
-    const ir = withLigaturesJoined(read);
+    const ir = withLostLettersRestored(withLigaturesJoined(read));
     const line = target.line;
     const book = inferBookSlug(ir);
     const numbering = inferPageNumbering(ir);
