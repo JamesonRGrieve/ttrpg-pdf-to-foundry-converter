@@ -896,6 +896,39 @@ export function kindEntry(entry: Entry, parentType: string | undefined, type: st
     return { ...entry, heading: { ...entry.heading, text: `${word} ${parent.trim()}` } };
 }
 
+/**
+ * Whether a field-less entry set smaller than its type's usual heading
+ * (`modalSize`) is a part of the entry of that type it sits under rather
+ * than an item of its own (or, under no entry of its type, furniture). A
+ * list's run-in entry is set as the list sets it, never a part; nor is one
+ * set in the style its parent's own siblings are set in — a parent printed
+ * larger than its siblings only seems to hold the siblings after it.
+ */
+export function isComponent(
+    entry: Entry,
+    entries: readonly Entry[],
+    type: string,
+    headingTypes: ReadonlyMap<string, string>,
+    modalSize: number,
+): boolean {
+    if (
+        entry.listedAs !== undefined ||
+        entry.fields.length > 0 ||
+        entry.heading.size >= modalSize - SUBHEADING_STEP
+    ) {
+        return false;
+    }
+    const parent = enclosingEntry(entries, entry);
+    if (parent === null || headingTypes.get(parent.heading.text) !== type) {
+        return true;
+    }
+    const sameSections = (e: Entry): boolean =>
+        e.sections.length === parent.sections.length && e.sections.every((s, i) => s === parent.sections[i]);
+    return !entries
+        .slice(0, entries.indexOf(parent))
+        .some((e) => sameSections(e) && e.heading.style === entry.heading.style);
+}
+
 /** An entry's printed text — its `Label: value` lines, then its body — one line per field. */
 function entryText(entry: Entry): string {
     return [...entry.fields.map(([label, value]) => `${label}: ${value}`), entry.body].join("\n");
@@ -1383,12 +1416,7 @@ function extractEntries(
             ...entry,
             heading: { ...entry.heading, text: stripHeadingLabel(entry.heading.text, labels) },
         };
-        // A list's run-in entry is set as the list sets it, never a component.
-        const component =
-            entry.listedAs === undefined &&
-            entry.fields.length === 0 &&
-            entry.heading.size < (modal.get(type) ?? 0) - SUBHEADING_STEP;
-        if (component) {
+        if (isComponent(typedEntry.entry, entries, type, headingTypes, modal.get(type) ?? 0)) {
             const kind = kindEntry(entry, headingTypes.get(entry.sections.at(-1) ?? ""), type);
             if (kind === null) {
                 continue;

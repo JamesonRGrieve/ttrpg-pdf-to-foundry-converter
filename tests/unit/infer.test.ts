@@ -97,6 +97,7 @@ import {
     criticalEffects,
     honourGroupsOf,
     kindEntry,
+    isComponent,
     characteristicClassItem,
     kindNamed,
     mergeInto,
@@ -3505,6 +3506,39 @@ describe("entry components", () => {
         expect(kindEntry(sub("WICK-GUARD"), "cybernetic", "cybernetic")).toBeNull();
         expect(kindEntry(sub("SPIKED"), "gear", "cybernetic")).toBeNull();
         expect(kindEntry(sub("SPIKED"), undefined, "cybernetic")).toBeNull();
+    });
+
+    it("reads no smaller heading as a part when set like its parent's siblings", () => {
+        const at = (text: string, size: number, style: string, sections: string[]): Entry => ({
+            heading: { text, size, style, pageIndex: 0 },
+            sections,
+            fields: [],
+            body: "Text.",
+        });
+        const outer = ["CONDITIONS"];
+        const sooty = at("SOOTY", 8.5, "small", outer);
+        // A misset heading, larger than its siblings, seems to hold the next one.
+        const dazzled = at("DAZZLED", 12, "large", outer);
+        const smoked = at("SMOKED", 8.5, "small", [...outer, "DAZZLED"]);
+        const types = new Map([
+            ["SOOTY", "condition"],
+            ["DAZZLED", "condition"],
+            ["SMOKED", "condition"],
+        ]);
+        const entries = [sooty, dazzled, smoked];
+        expect(isComponent(smoked, entries, "condition", types, 12)).toBe(false);
+        // Under no entry of its type it is furniture, as before.
+        expect(isComponent(sooty, entries, "condition", types, 12)).toBe(true);
+        // Set apart from its parent's siblings, it is one.
+        const lamp = at("LANTERN", 12, "large", ["GEAR"]);
+        const spiked = at("SPIKED", 8.5, "small", ["GEAR", "LANTERN"]);
+        const gear = new Map([
+            ["LANTERN", "gear"],
+            ["SPIKED", "gear"],
+        ]);
+        expect(
+            isComponent(spiked, [at("TORCH", 12, "large", ["GEAR"]), lamp, spiked], "gear", gear, 12),
+        ).toBe(true);
     });
 });
 
