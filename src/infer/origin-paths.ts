@@ -93,9 +93,12 @@ const CHARACTERISTIC_STEP = 5;
 
 /** A skill granted without a stated rank is granted at the scale's first rank. */
 const GRANTED_SKILL_LEVEL = "known";
-/** A sentence granting skills at a rank of the schema's scale: "… with A and B as Trained … Skills". */
+/**
+ * A sentence granting skills at a rank of the schema's scale: "… with A and B
+ * as Trained … Skills", "… gains A as a Trained … Skill".
+ */
 const RANKED_SKILLS =
-    /\bwith\s+(?<list>.+?)\s+as\s+(?:an?\s+)?(?<rank>known|trained|experienced|veteran)\b/iu;
+    /\b(?:with|gains?)\s+(?<list>.+?)\s+as\s+(?:an?\s+)?(?<rank>known|trained|experienced|veteran)\b/iu;
 /** Items of a prose list: "A, B and C". */
 const LIST_AND = /^(?:,\s*(?:and\s+)?|\s+and\s+)/iu;
 

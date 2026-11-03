@@ -256,6 +256,16 @@ describe("origin rules blocks", () => {
             { name: "Lantern Lore", specialization: "Reeds", level: "trained" },
             { name: "Wick-Use", specialization: "", level: "trained" },
         ]);
+        // A single skill the origin "gains" at a rank is granted at that rank.
+        const gains = entries.map((e) =>
+            e.heading.text === "STARTING SKILLS"
+                ? { ...e, body: "The Warden gains Lantern Lore (Reeds) as a Trained Advanced Skill." }
+                : e,
+        );
+        const [gained] = readOriginPaths(gains, steps, new Map([[70, ["II: Specialities"]]]));
+        expect(gained?.grants["skills"]).toEqual([
+            { name: "Lantern Lore", specialization: "Reeds", level: "trained" },
+        ]);
         expect(origin?.grants["choices"]).toEqual([
             {
                 type: "specialAbility",
