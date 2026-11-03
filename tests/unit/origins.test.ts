@@ -4,11 +4,13 @@ import type { Entry } from "../../src/infer/detect-entries.ts";
 import {
     characteristicChanges,
     characteristicModifiers,
+    citedOriginPages,
     equipmentItem,
     originCellName,
     namesOriginStep,
     originStepNamedBy,
     pairsSteps,
+    readCitedOrigins,
     readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
@@ -18,6 +20,7 @@ import {
     sameOrigin,
     signedCharacteristicChanges,
     splitTopLevel,
+    withCitedOrigins,
     withSkillLevelBase,
 } from "../../src/infer/origin-paths.ts";
 import { buildOriginPath } from "../../src/infer/schema.ts";
@@ -794,5 +797,60 @@ describe("origins granted by inline fields", () => {
             ],
         );
         expect(readInlineOrigins([single, priced, elsewhere], bc)).toEqual([]);
+    });
+});
+
+describe("origins on the pages a step's section cites", () => {
+    // Printed page = page index + 1.
+    const printed = (pageIndex: number): string => String(pageIndex + 1);
+    const lines = ["Creation"];
+    const entries: Entry[] = [
+        entry(
+            "STAGE 2: CHOOSE A BACKGROUND",
+            3,
+            lines,
+            "Pick where you served. You will find the backgrounds on pages 11-14.",
+        ),
+        entry("The Lamp Wardens", 10, lines, "Keepers of the long wicks."),
+        entry("TRIMMING", 10, [...lines, "The Lamp Wardens"], "Wicks are cut at dusk."),
+        entry(
+            "LAMP WARDENS CHARACTERS",
+            11,
+            [...lines, "The Lamp Wardens", "TRIMMING"],
+            "Lamp Wardens gain the following benefits: +5 Perception, +5 Willpower, and the Steady Hand ability.",
+        ),
+        entry("Reed Cutters", 12, lines, "Who work the marsh."),
+        entry("REED CUTTERS CHARACTERS", 13, [...lines, "Reed Cutters"], "They gain +5 Strength."),
+        // Past the cited pages: not an origin of the step.
+        entry("Bell Ringers", 20, lines, "Who ring the hours."),
+        entry("BELL RINGERS CHARACTERS", 20, [...lines, "Bell Ringers"], "They gain +5 Fellowship."),
+    ];
+
+    it("finds the pages a step's own section cites", () => {
+        expect(citedOriginPages(entries, STEPS)).toEqual(new Map([["background", [{ lo: 11, hi: 14 }]]]));
+    });
+
+    it("reads a heading repeated by a heading of its own beneath it there as an origin", () => {
+        const origins = readCitedOrigins(entries, STEPS, printed);
+        expect(origins.map((o) => [o.name, o.step.key, o.pageIndex, o.modifiers, o.description])).toEqual([
+            ["Lamp Wardens", "background", 11, { perception: 5, willpower: 5 }, "Keepers of the long wicks."],
+            ["Reed Cutters", "background", 13, { strength: 5 }, "Who work the marsh."],
+        ]);
+    });
+
+    it("drops a step's readings from other pages and reads its cited origins in their place", () => {
+        const stray = readCitedOrigins(entries, STEPS, () => "12")
+            .slice(0, 1)
+            .map((o) => ({ ...o, name: "Stray", pageIndex: 30 }));
+        const none: ReadonlySet<string> = new Set();
+        expect(withCitedOrigins(stray, entries, STEPS, printed, none).map((o) => o.name)).toEqual([
+            "Lamp Wardens",
+            "Reed Cutters",
+        ]);
+        // A reading on the cited pages stands, and the step is read from it alone.
+        const onPage = stray.map((o) => ({ ...o, pageIndex: 12 }));
+        expect(withCitedOrigins(onPage, entries, STEPS, printed, none).map((o) => o.name)).toEqual(["Stray"]);
+        // A step a table read is not read again.
+        expect(withCitedOrigins([], entries, STEPS, printed, new Set(["background"]))).toEqual([]);
     });
 });

@@ -79,6 +79,7 @@ import {
     namesOriginStep,
     pairsSteps,
     readEffectOrigins,
+    withCitedOrigins,
     readOriginTable,
     sameOrigin,
     withSkillLevelBase,
@@ -1592,10 +1593,8 @@ function extractOriginPaths(
     // A step the document lays out as rules blocks or a table is read from
     // those; inline grant fields elsewhere in it (a sample, a summary of what
     // an origin lists) are not origins of that step.
-    const read = new Set([
-        ...structured.map((o) => o.step.key),
-        ...out.entities.map((e) => /^(?:table:)?origin:(.+)$/u.exec(e.blockId)?.[1]),
-    ]);
+    const tabled = new Set(out.entities.map((e) => /^(?:table:)?origin:(.+)$/u.exec(e.blockId)?.[1]));
+    const read = new Set([...structured.map((o) => o.step.key), ...tabled]);
     const inline = readInlineOrigins(entries, out.target.originSteps).filter((o) => !read.has(o.step.key));
     // Steps read no other way may print each origin as a heading with its
     // rules as fields.
@@ -1603,7 +1602,13 @@ function extractOriginPaths(
     const effects = readEffectOrigins(entries, out.target.originSteps).filter(
         (o) => !read.has(o.step.key) && !readInline.has(o.step.key),
     );
-    const origins = [...structured, ...inline, ...effects];
+    const origins = withCitedOrigins(
+        [...structured, ...inline, ...effects],
+        entries,
+        out.target.originSteps,
+        (p) => out.page(p),
+        tabled,
+    );
     // An origin's own rules are talents of their own, which the origin grants;
     // rules printed apart from it join it when the document reads it.
     const apart = readOriginAbilities(entries, out.target.originSteps);

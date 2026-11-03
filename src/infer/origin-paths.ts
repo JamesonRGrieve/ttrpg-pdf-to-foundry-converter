@@ -1127,6 +1127,130 @@ export function readEffectOrigins(
     });
 }
 
+/** A printed page range a section cites: "… on pages 38–54". */
+const CITED_PAGES = /\bpages\s+(?<lo>\d+)\s*[-–]\s*(?<hi>\d+)\b/giu;
+/** A leading article a heading may set before the name its sections repeat ("The …"). */
+const LEADING_ARTICLE = /^the\s+/iu;
+
+/** A printed page range, inclusive. */
+export interface PageRange {
+    lo: number;
+    hi: number;
+}
+
+/**
+ * The printed page ranges a step's own section cites for its origins ("You
+ * will find a selection of <step>s on pages 38–54"), by step key.
+ */
+export function citedOriginPages(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): Map<string, PageRange[]> {
+    const out = new Map<string, PageRange[]>();
+    for (const entry of entries) {
+        const step = stepNamedIn(entry.heading.text, steps, true, true);
+        if (step === undefined) {
+            continue;
+        }
+        for (const m of entry.body.matchAll(CITED_PAGES)) {
+            const range = { lo: Number(m.groups?.["lo"]), hi: Number(m.groups?.["hi"]) };
+            if (range.lo < range.hi) {
+                out.set(step.key, [...(out.get(step.key) ?? []), range]);
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Origins found by the pages a step's own section cites for them
+ * (`citedOriginPages`): within those pages, a heading with a heading of its
+ * own beneath it that repeats its name and says more ("<Name>" over "<Name>
+ * Characters") is an origin of that step, named as the inner heading spells
+ * it; the inner heading's prose states what the origin gives, its
+ * characteristic changes its modifiers. `printedPage` gives a page's printed
+ * number.
+ */
+export function readCitedOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+    printedPage: (pageIndex: number) => string,
+): OriginPathReading[] {
+    const out: OriginPathReading[] = [];
+    const taken = new Set<Entry>();
+    for (const [key, ranges] of citedOriginPages(entries, steps)) {
+        const step = steps.find((s) => s.key === key);
+        for (const { lo, hi } of ranges) {
+            const within = (e: Entry): boolean => {
+                const page = Number(printedPage(e.heading.pageIndex));
+                return page >= lo && page <= hi;
+            };
+            entries.forEach((origin, i) => {
+                if (step === undefined || taken.has(origin) || !within(origin)) {
+                    return;
+                }
+                const own = origin.heading.text.trim().replace(LEADING_ARTICLE, "");
+                const rules = entries
+                    .slice(i + 1)
+                    .find(
+                        (e) =>
+                            within(e) &&
+                            e.sections.includes(origin.heading.text) &&
+                            wordPrefix(own, e.heading.text) !== null,
+                    );
+                const words = rules === undefined ? null : wordPrefix(own, rules.heading.text);
+                if (rules === undefined || words === null) {
+                    return;
+                }
+                taken.add(origin);
+                out.push({
+                    name:
+                        caseLost(words) || !/\p{Ll}/u.test(words)
+                            ? capitalizeWords(words.toLowerCase())
+                            : words,
+                    step,
+                    pageIndex: rules.heading.pageIndex,
+                    description: origin.body,
+                    grants: {},
+                    modifiers: {
+                        ...signedCharacteristicChanges(rules.body),
+                        ...characteristicChanges(rules.body),
+                    },
+                });
+            });
+        }
+    }
+    return out;
+}
+
+/**
+ * A document's origin readings with the cited pages applied: a step whose
+ * own section cites the pages its origins are printed on has them there, so
+ * a reading of it from other pages is not one of them; read no other way
+ * within those pages (nor from a table, `tabled`), its origins are
+ * `readCitedOrigins`'.
+ */
+export function withCitedOrigins(
+    readings: readonly OriginPathReading[],
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+    printedPage: (pageIndex: number) => string,
+    tabled: ReadonlySet<string | undefined>,
+): OriginPathReading[] {
+    const ranges = citedOriginPages(entries, steps);
+    const onCitedPages = (o: OriginPathReading): boolean => {
+        const cited = ranges.get(o.step.key);
+        const page = Number(printedPage(o.pageIndex));
+        return cited === undefined || cited.some((r) => page >= r.lo && page <= r.hi);
+    };
+    const kept = readings.filter(onCitedPages);
+    const keptSteps = new Set(kept.map((o) => o.step.key));
+    const cited = readCitedOrigins(entries, steps, printedPage).filter(
+        (o) => !keptSteps.has(o.step.key) && !tabled.has(o.step.key),
+    );
+    return [...kept, ...cited];
+}
+
 /**
  * The headings directly beneath `entries[index]`, read on until its section
  * closes; headings nested deeper are passed over (two columns can set a
