@@ -81,6 +81,7 @@ import {
     readOriginTable,
     sameOrigin,
 } from "./origin-paths.ts";
+import { applyOrderTests } from "./order-tests.ts";
 import { applyOriginPrerequisites } from "./origin-prerequisites.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
 import { isWeaponNameLine, panelWeapons } from "./panel-weapons.ts";
@@ -2410,6 +2411,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     applyAmmunitionEffects(entities);
     applyFocusSkillCharacteristics(entities);
     applyOriginPrerequisites(entities, target.originSteps);
+    applyOrderTests(entities);
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
