@@ -17,6 +17,7 @@ import {
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
+    resourceChanges,
     sameOrigin,
     signedCharacteristicChanges,
     splitTopLevel,
@@ -76,6 +77,18 @@ describe("origin list parsing", () => {
             ballisticSkill: 2,
         });
         expect(characteristicChanges("Increase Agility and the lamp's glow by 2.")).toEqual({});
+        // Changes to the character's resources.
+        expect(resourceChanges("Begin play with 1 Insanity Point and 1 Corruption Point.")).toEqual({
+            insanity: 1,
+            corruption: 1,
+        });
+        expect(resourceChanges("Increase Toughness by +2 and gain 1 Wound. Gain 2 Fate Points.")).toEqual({
+            wounds: 1,
+            fate: 2,
+        });
+        expect(resourceChanges("+5 Strength, +2 Wounds, and a lamp.")).toEqual({ wounds: 2 });
+        // A sign after a die is a rolled amount.
+        expect(resourceChanges("You suffer 1d5+1 Corruption Points.")).toEqual({});
         expect(
             signedCharacteristicChanges("+5 Fellowship, –5 Toughness, +2 Wounds, -3 Ballistic Skill."),
         ).toEqual({

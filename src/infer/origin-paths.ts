@@ -230,6 +230,48 @@ export function signedCharacteristicChanges(text: string): Record<string, number
     return out;
 }
 
+/** The schema's origin resources, as an effect names them. */
+const RESOURCE_NAMES: readonly [RegExp, string][] = [
+    [/^wounds?$/iu, "wounds"],
+    [/^fate\s+points?$/iu, "fate"],
+    [/^corruption\s+points?$/iu, "corruption"],
+    [/^insanity\s+points?$/iu, "insanity"],
+];
+
+/** One resource amount: "3 Corruption Points", "2 additional Wounds". */
+const RESOURCE_AMOUNT = String.raw`(?<points>\d+)\s+(?:additional\s+)?(?<what>wounds?|(?:fate|corruption|insanity)\s+points?)\b`;
+
+/**
+ * "Gain 1 Fate Point", "Begin play with 1 Insanity Point and 1 Corruption
+ * Point", "+2 Wounds" → resource key → points: what an effect adds to the
+ * character's wounds, Fate, Corruption or Insanity. A sign after a die
+ * ("1d5+1 Corruption Points") is a rolled amount, not a fixed one.
+ */
+export function resourceChanges(effect: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    const amount = RESOURCE_AMOUNT.replace(/\?<\w+>/gu, "?:");
+    const lead = new RegExp(
+        String.raw`(?:\b(?:gains?|begins?\s+play\s+with)\s+|(?<![\p{L}\d]\s*)\+\s*)(?<list>${amount}(?:\s*(?:,|and)\s+${amount})*)`,
+        "giu",
+    );
+    for (const m of effect.matchAll(lead)) {
+        for (const item of (m.groups?.["list"] ?? "").matchAll(new RegExp(RESOURCE_AMOUNT, "giu"))) {
+            const what = item.groups?.["what"] ?? "";
+            const key = RESOURCE_NAMES.find(([name]) => name.test(what))?.[1];
+            if (key !== undefined) {
+                out[key] = (out[key] ?? 0) + Number(item.groups?.["points"] ?? "0");
+            }
+        }
+    }
+    return out;
+}
+
+/** An origin reading's `resources`, when its effect changes any. */
+function withResources(effect: string): { resources?: Record<string, number> } {
+    const resources = resourceChanges(effect);
+    return Object.keys(resources).length === 0 ? {} : { resources };
+}
+
 /** Longest name set before a colon in an origin table's cell ("Feral World: …"). */
 const MAX_LEAD_NAME_LENGTH = 40;
 
@@ -280,6 +322,7 @@ export function readOriginTable(
             description: effect,
             grants: {},
             modifiers: { ...signedCharacteristicChanges(effect), ...characteristicChanges(effect) },
+            ...withResources(effect),
             effect,
             fromTable: true,
         });
@@ -1124,6 +1167,8 @@ export function readEffectOrigins(
                 description: body,
                 grants: {},
                 modifiers: { ...signedCharacteristicChanges(effect), ...characteristicChanges(effect) },
+                // An option offered among others is no fixed change to a resource.
+                ...withResources(entry.fields.map(([, value]) => value).join(PARAGRAPH_BREAK)),
                 effect,
                 ...(options.length === 0 ? {} : { rules: options.map(({ whole: _whole, ...rule }) => rule) }),
             },
@@ -1220,6 +1265,7 @@ export function readCitedOrigins(
                         ...signedCharacteristicChanges(rules.body),
                         ...characteristicChanges(rules.body),
                     },
+                    ...withResources(rules.body),
                 });
             });
         }
