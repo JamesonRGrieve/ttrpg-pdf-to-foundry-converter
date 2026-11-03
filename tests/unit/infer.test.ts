@@ -104,6 +104,8 @@ import {
     modalHeadingSizes,
     carriedSections,
     headedProse,
+    headedRules,
+    applyHeadedRules,
     nameKey,
     qualifiedBySection,
     siblingKinds,
@@ -3813,6 +3815,46 @@ describe("section-qualified table names", () => {
             "<p>A small lamp that burns for a whole night on one wick.</p>",
         );
         expect(prose.has(nameKey("Wick"))).toBe(false);
+    });
+
+    it("gives a ship component the labelled rules its catalogue heading prints as its effect", () => {
+        const at = (heading: string, fields: [string, string][]): Entry => ({
+            heading: { text: heading, size: 12, style: "h", pageIndex: 0 },
+            sections: [],
+            fields,
+            body: "A hold for lamps, set deep in the hull of the vessel.",
+        });
+        const rules = headedRules([
+            at("lamp hold", [
+                ["Bright Stores", "Gain +5 to Lamp Tests."],
+                ["Heavy", "Reduce Speed by 1."],
+            ]),
+            at("wick bay", []),
+            at("Lamp Hold", [["Other", "A later heading of the same name."]]),
+        ]);
+        expect(rules.has(nameKey("Wick Bay"))).toBe(false);
+        const item = (name: string, type: string, effect?: JsonValue): Entity => ({
+            blockId: name,
+            documentType: "Item",
+            group: "g",
+            pack: "p",
+            ordinal: 0,
+            fields: { name, type, system: effect === undefined ? {} : { effect } },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const hold = item("Lamp Hold", "shipComponent");
+        const repeat = item("Lamp Hold (Light Cruisers, Cruisers)", "shipComponent");
+        const kept = item("Lamp Hold", "shipComponent", { rt: "<p>Printed.</p>" });
+        const gear = item("Lamp Hold", "gear");
+        applyHeadedRules([hold, repeat, kept, gear], rules, "rt");
+        const expected = {
+            rt: "<p>Bright Stores: Gain +5 to Lamp Tests.</p><p>Heavy: Reduce Speed by 1.</p>",
+        };
+        expect((hold.fields["system"] as JsonObject)["effect"]).toEqual(expected);
+        expect((repeat.fields["system"] as JsonObject)["effect"]).toEqual(expected);
+        expect((kept.fields["system"] as JsonObject)["effect"]).toEqual({ rt: "<p>Printed.</p>" });
+        expect(gear.fields["system"]).toEqual({});
     });
 
     it("carries a section row closing one part of a split table to the next part", () => {

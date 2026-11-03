@@ -2373,6 +2373,53 @@ export function headedProse(entries: readonly Entry[]): Map<string, string> {
     return out;
 }
 
+/**
+ * Each heading's labelled rules by the heading's name: a ship component a
+ * table lists with no text of its own is catalogued under a heading of its
+ * name, whose `Name: rule` lines ("Hard to Breach: Add +3 to Hull
+ * Integrity") are what the component does. The first heading of a name
+ * that prints any keeps it.
+ */
+export function headedRules(entries: readonly Entry[]): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const e of entries) {
+        const key = nameKey(cleanName(e.heading.text));
+        if (key !== "" && !out.has(key) && e.fields.length > 0) {
+            out.set(
+                key,
+                e.fields.map(([label, value]) => `<p>${escapeHtml(`${label}: ${value}`)}</p>`).join(""),
+            );
+        }
+    }
+    return out;
+}
+
+/** A trailing bracketed qualifier: a repeat's other cell ("… (Light Cruisers, Cruisers)"). */
+const TRAILING_QUALIFIER = /\s*\([^()]*\)\s*$/u;
+
+/**
+ * A ship component with no effect takes the rules its catalogue heading
+ * prints (`headedRules`); a repeat named by its other cell
+ * (`distinguishRepeats`) is the same component, catalogued under its name.
+ */
+export function applyHeadedRules(
+    entities: readonly Entity[],
+    rules: ReadonlyMap<string, string>,
+    line: Line,
+): void {
+    for (const e of entities) {
+        const system = e.fields["system"];
+        if (e.fields["type"] !== "shipComponent" || !isJsonObject(system) || !isBlank(system["effect"])) {
+            continue;
+        }
+        const name = String(e.fields["name"]);
+        const html = rules.get(nameKey(name)) ?? rules.get(nameKey(name.replace(TRAILING_QUALIFIER, "")));
+        if (html !== undefined) {
+            system["effect"] = { [line]: html };
+        }
+    }
+}
+
 function consolidate(
     entities: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
@@ -2443,6 +2490,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
     const entities = consolidate(out.entities, descriptions, headedProse(detected), line);
+    applyHeadedRules(entities, headedRules(detected), line);
     embedNpcItems(entities);
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
