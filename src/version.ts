@@ -17,7 +17,7 @@
  */
 export const RELEASE = "2026-11-03-03-14";
 export const ENGINE_VERSION = "0.2.0";
-export const IR_VERSION = 43;
+export const IR_VERSION = 45;
 
 /** Where the latest release is published, as `{"release": "<RELEASE>"}`. */
 export const RELEASE_FEED_URL =

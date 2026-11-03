@@ -160,6 +160,35 @@ describe("column regions", () => {
         expect(ir.pages.map((p) => p.columns)).toEqual([2, 1, 2]);
     });
 
+    it("splits two short columns below a full-width table, a line opening on a run-in label full", () => {
+        const rows = [700, 688, 676].map((y) => raw(2, LEFT, y, 450, `spanning row ${y}`));
+        // Each column holds two full lines; one of the left's opens on a bold label.
+        const label = { ...raw(2, LEFT, 600, 40, "Bright:"), weight: "bold" as const };
+        const below = [
+            raw(2, LEFT, 612, MEASURE, "left one"),
+            label,
+            raw(2, LEFT + 43, 600, MEASURE - 43, "left two"),
+            raw(2, LEFT, 588, 60, "left end."),
+            raw(2, RIGHT, 612, MEASURE, "right one"),
+            raw(2, RIGHT, 600, MEASURE, "right two"),
+            raw(2, RIGHT, 588, 50, "right end."),
+        ];
+        const ir = normalize(doc([...twoColumnPages(), ...rows, ...below], [0, 2, 4]));
+        const columnOf = (text: string): number | undefined =>
+            ir.runs.find((r) => r.pageIndex === 2 && r.text === text)?.column;
+        expect(["spanning row 688", "left two", "left end.", "right one"].map(columnOf)).toEqual([
+            0, 1, 1, 2,
+        ]);
+        // A table's row, its cells set apart by wide gaps, is no full line.
+        const tableRows = [612, 600, 588].flatMap((y) => [
+            raw(2, LEFT, y, 60, `name ${y}`),
+            raw(2, LEFT + 180, y, 60, `cost ${y}`),
+            raw(2, RIGHT, y, MEASURE, `text ${y}`),
+        ]);
+        const kept = normalize(doc([...twoColumnPages(), ...rows, ...tableRows], [0, 2, 4]));
+        expect(kept.pages.map((p) => p.columns)).toEqual([2, 1, 2]);
+    });
+
     it("keeps a table whose cell gap meets the gutter as one column", () => {
         const cells = [700, 688, 676, 664].flatMap((y) => [
             raw(2, LEFT, y, 60, `name ${y}`),

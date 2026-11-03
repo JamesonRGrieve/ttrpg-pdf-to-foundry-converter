@@ -48,12 +48,14 @@ const COLUMN_EDGE_TOLERANCE = 2;
 /** Runs whose baselines lie within this many points share one line. */
 const LINE_TOLERANCE = 2.5;
 /** Full-measure prose lines each side of a region needs before it counts as two text columns. */
-const MIN_COLUMN_LINES = 3;
+const MIN_COLUMN_LINES = 2;
 /**
  * A run spanning at least this share of its side's width (margin to gutter,
  * gutter channel included) is a full-measure prose line.
  */
 const FULL_MEASURE_SHARE = 0.85;
+/** Widest gap, in font sizes, between two runs of one line of running text. */
+const RUN_IN_GAP_FACTOR = 1;
 /** A gap between lines this many times their typical gap sets a block apart. */
 const REGION_GAP_FACTOR = 2.5;
 /** Fewest pages of a parity a column layout recurs on to be one of the document's layouts. */
@@ -213,12 +215,35 @@ function documentLayouts(
 }
 
 /**
- * A side of a region reads as a prose column when several of its runs each
+ * A side of a region reads as a prose column when several of its lines each
  * span nearly the side's whole `width`, as full lines of running text do. A
- * table's cells, however aligned, never fill the width alone.
+ * table's cells, however aligned, never fill the width.
  */
-function proseColumn(runs: readonly RawTextRun[], width: number): boolean {
-    return runs.filter((r) => r.width >= FULL_MEASURE_SHARE * width).length >= MIN_COLUMN_LINES;
+function proseColumn(lines: readonly (readonly RawTextRun[])[], width: number): boolean {
+    return lines.filter((l) => lineMeasure(l) >= FULL_MEASURE_SHARE * width).length >= MIN_COLUMN_LINES;
+}
+
+/**
+ * How wide a line's runs in one column set it as running text: from the
+ * first run's start to the last one's end, when each run follows the one
+ * before at word spacing. A line opening on a bold run-in label ("Armour:")
+ * is set in two runs, neither of them full, and is still a full line; a
+ * table row's cells, set apart by wide gaps, measure none.
+ */
+function lineMeasure(runs: readonly RawTextRun[]): number {
+    const set = runs.filter((r) => r.width > 0).sort((a, b) => numAsc(a.x, b.x));
+    const [first] = set;
+    if (first === undefined) {
+        return 0;
+    }
+    let end = first.x + first.width;
+    for (const r of set.slice(1)) {
+        if (r.x - end > RUN_IN_GAP_FACTOR * r.fontSize) {
+            return 0;
+        }
+        end = Math.max(end, r.x + r.width);
+    }
+    return end - first.x;
 }
 
 /**
@@ -295,10 +320,9 @@ function regionLayout(
     // A column empty of text in a piece holds a picture; every other column
     // must be prose, and at least two must be.
     const allColumns = (piece: typeof lines): boolean => {
-        const pieceRuns = piece.flatMap((l) => l.runs);
         const columns = measures.map((measure, i) => {
-            const inColumn = pieceRuns.filter((r) => columnIn(r) === i);
-            return inColumn.length === 0 ? null : proseColumn(inColumn, measure);
+            const inColumn = piece.map((l) => l.runs.filter((r) => columnIn(r) === i));
+            return inColumn.every((l) => l.length === 0) ? null : proseColumn(inColumn, measure);
         });
         return !columns.includes(false) && columns.filter((c) => c === true).length >= MIN_PROSE_COLUMNS;
     };
