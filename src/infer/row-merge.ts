@@ -136,7 +136,7 @@ const MAX_WRAP_LEADING = 1.4;
 /**
  * A line holding only a capitalised key, set below the line above at the
  * table's row pitch and wider than a cell's line leading, stands on its own: a
- * section row set in the records' face ("Gellar Fields" between two parts),
+ * section row set in the records' face (a component type between two parts),
  * not the rest of a wrapped name, which follows at line leading.
  */
 function atRowPitch(

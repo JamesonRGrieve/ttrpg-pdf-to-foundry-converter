@@ -1632,6 +1632,14 @@ describe("entry typing", () => {
         expect(calm.system).not.toHaveProperty("isAttack");
     });
 
+    it("reads a skill a `Focus Power Test:` label's value names as the test's", () => {
+        const scry = entryItem(
+            entry("SCRY", [["Focus Power Test", "Lampsight"]], ["Psychic Powers", "Lampcraft"]),
+            "psychicPower",
+        );
+        expect(scry.system["focusPower"]).toMatchObject({ skill: "lampsight", characteristic: "willpower" });
+    });
+
     it("reads the damage a power's text states, as a profile box's", () => {
         expect(
             powerProseDamage(

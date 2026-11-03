@@ -1008,7 +1008,14 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                 }
             }
             system["discipline"] = printedDiscipline(entry.sections, entry.discipline);
-            const focus = text("focus power") ?? text("focus power test");
+            // A `Focus Power Test:` label names the test its value only names
+            // the subject of (a lone skill name).
+            const labelledTest = text("focus power test");
+            const focus =
+                text("focus power") ??
+                (labelledTest === undefined || /\btests?\b/iu.test(labelledTest)
+                    ? labelledTest
+                    : `${labelledTest} Test`);
             const threshold = text("threshold");
             if (focus !== undefined || threshold !== undefined) {
                 system["focusPower"] = focusPowerTest(focus, threshold);
