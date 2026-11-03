@@ -681,13 +681,27 @@ function withinHeaderSpan(header: RawRow, band: readonly IRTextRun[]): (r: IRTex
     );
     const right = Math.max(...labels.map((r) => r.x + r.width));
     const size = Math.max(...labels.map((r) => r.size));
+    const gapBefore = (r: IRTextRun): number => {
+        const before = band.filter((o) => o !== r && Math.abs(o.y - r.y) < LINE_Y_TOL && o.x < r.x);
+        return r.x - Math.max(...before.map((o) => o.x + o.width), Number.NEGATIVE_INFINITY);
+    };
+    // Text set to the right of the table's header, between it and the caption,
+    // opens a column of running text beside the table: no cell sits above the
+    // header, so whatever starts at that column's edge further down is that
+    // text's too.
+    const top = Math.max(...labels.map((r) => r.y));
+    const besideStarts = band
+        .filter((r) => r.y > top + LINE_Y_TOL && r.x > right && gapBefore(r) > CARRY_ON_FACTOR * r.size)
+        .map((r) => r.x);
+    const beside = Math.min(...besideStarts, Number.POSITIVE_INFINITY) - COLUMN_EDGE_TOLERANCE;
     return (r) => {
+        if (r.x > right && r.x >= beside) {
+            return false;
+        }
         if (r.x <= right + HEADER_REACH_FACTOR * size) {
             return true;
         }
-        const before = band.filter((o) => o !== r && Math.abs(o.y - r.y) < LINE_Y_TOL && o.x < r.x);
-        const end = Math.max(...before.map((o) => o.x + o.width), Number.NEGATIVE_INFINITY);
-        return r.x - end <= CARRY_ON_FACTOR * r.size;
+        return gapBefore(r) <= CARRY_ON_FACTOR * r.size;
     };
 }
 

@@ -394,6 +394,60 @@ describe("titled tables", () => {
         }
     });
 
+    it("leaves the running text set beside a table to its right out of the table", () => {
+        // Rows at the table's own step, the prose beside it at its leading,
+        // starting within two type sizes of the last label's end.
+        const small = (text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun =>
+            run(text, x, y, { size: 8, height: 7, width: 4 * text.length, ...opts });
+        const ir = irOf([
+            run("Table 2-5: Lamp Wards", 237, 258, bold),
+            run("the lamp burns low and the", 400, 254),
+            run("flame gutters out at once", 400, 242),
+            small("Name", 237, 237, bold),
+            small("Glow", 284, 237, bold),
+            small("Hush", 337, 237, bold),
+            small("Wick", 371, 237, bold),
+            run("leaving the room dark and", 400, 230),
+            run("still, unless a ward is kept", 400, 218),
+            small("Glass Ward", 237, 208),
+            small("12", 297, 208),
+            small("Half Action", 326, 208),
+            small("No", 378, 208),
+            run("burning in the window of the", 400, 206),
+            run("house through the night.", 400, 194),
+            small("Brass Ward", 237, 190),
+            small("15", 297, 190),
+            small("Half Action", 326, 190),
+            small("Yes", 378, 190),
+            run("Any ward may be lit again", 400, 182),
+            small("Tin Ward", 237, 172),
+            small("9", 297, 172),
+            small("Full Action", 326, 172),
+            small("No", 378, 172),
+            run("with a Half Action and a", 400, 170),
+            run("Willpower Test at no penalty.", 400, 158),
+            small("Iron Ward", 237, 155),
+            small("11", 297, 155),
+            small("Full Action", 326, 155),
+            small("Yes", 378, 155),
+        ]);
+        const [table] = detectTitledTables(ir);
+        expect(table?.rows.map((r) => r.cells.map((c) => c.text))).toEqual([
+            ["Glass Ward", "12", "Half Action", "No"],
+            ["Brass Ward", "15", "Half Action", "Yes"],
+            ["Tin Ward", "9", "Full Action", "No"],
+            ["Iron Ward", "11", "Full Action", "Yes"],
+        ]);
+        const texts = new Set(table?.runs.map((r) => r.text));
+        for (const beside of [
+            "flame gutters out at once",
+            "leaving the room dark and",
+            "house through the night.",
+        ]) {
+            expect(texts.has(beside)).toBe(false);
+        }
+    });
+
     it("prefixes a label's first words printed on a line of their own above the header", () => {
         const ir = irOf([
             run("Table 1-8: Lamp Fittings", 60, 712, bold),

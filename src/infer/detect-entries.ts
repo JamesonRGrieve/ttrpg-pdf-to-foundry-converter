@@ -688,7 +688,81 @@ export function runningHeads(ir: IR): Map<number, string[]> {
     return heads;
 }
 
-export function detectEntries(ir: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
+/** Fewest lines of text on each side of a table for it to be an inset between columns. */
+const MIN_BESIDE_LINES = 3;
+/** Lines of leading above and below a table within which text sits beside it. */
+const BESIDE_REACH_LINES = 2;
+/** Ordinary leading, in type sizes. */
+const LINE_LEADING = 1.2;
+/** Points within which a column of the page above starts where the text beside a table does. */
+const BESIDE_EDGE_TOLERANCE = 4;
+
+/**
+ * A table set between two columns of running text: the text on each side of
+ * it is no single column, though the page's column detection may give the
+ * whole band one (the table bridges the gutter). Each side is read as the
+ * column it carries on — the page's column above it starting at its edge —
+ * or, with none, the text right of the table as a column of its own after
+ * the left's.
+ */
+export function besideInsetTables(ir: IR, tableRuns: ReadonlySet<IRTextRun>): IR {
+    const visible = ir.runs.filter((r) => r.text.trim().length > 0);
+    const byColumn = new Map<string, IRTextRun[]>();
+    for (const r of visible) {
+        const key = `${r.pageIndex}:${r.column}`;
+        byColumn.set(key, [...(byColumn.get(key) ?? []), r]);
+    }
+    const moved = new Map<IRTextRun, IRTextRun>();
+    for (const group of byColumn.values()) {
+        const table = group.filter((r) => tableRuns.has(r));
+        const [first] = group;
+        if (table.length === 0 || first === undefined) {
+            continue;
+        }
+        const left = Math.min(...table.map((r) => r.x));
+        const right = Math.max(...table.map((r) => r.x + r.width));
+        const sizes = group.map((r) => r.size).sort(numAsc);
+        const reach = BESIDE_REACH_LINES * LINE_LEADING * percentile(sizes, 0.5);
+        const top = Math.max(...table.map((r) => r.y)) + reach;
+        const bottom = Math.min(...table.map((r) => r.y)) - reach;
+        const near = group.filter((r) => !tableRuns.has(r) && r.y <= top && r.y >= bottom);
+        const before = near.filter((r) => r.x + r.width <= left);
+        const after = near.filter((r) => r.x >= right);
+        const lineCount = (runs: readonly IRTextRun[]): number =>
+            new Set(runs.map((r) => Math.round(r.y))).size;
+        if (lineCount(before) < MIN_BESIDE_LINES || lineCount(after) < MIN_BESIDE_LINES) {
+            continue;
+        }
+        const continued = (side: readonly IRTextRun[], fallback: number): number => {
+            const edge = Math.min(...side.map((r) => r.x));
+            const counts = new Map<number, number>();
+            for (const r of visible) {
+                if (
+                    r.pageIndex === first.pageIndex &&
+                    r.column !== first.column &&
+                    r.y > top &&
+                    Math.abs(r.x - edge) <= BESIDE_EDGE_TOLERANCE
+                ) {
+                    counts.set(r.column, (counts.get(r.column) ?? 0) + 1);
+                }
+            }
+            const [best] = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+            return best?.[0] ?? fallback;
+        };
+        for (const [side, column] of [
+            [before, continued(before, first.column)],
+            [after, continued(after, first.column + 0.5)],
+        ] as const) {
+            for (const r of side) {
+                moved.set(r, { ...r, column });
+            }
+        }
+    }
+    return moved.size === 0 ? ir : { ...ir, runs: ir.runs.map((r) => moved.get(r) ?? r) };
+}
+
+export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entry[] {
+    const ir = besideInsetTables(read, tableRuns);
     const body = bodyStyle(ir);
     const marginal = marginalIn(ir);
     // A table's runs are no text: a line sharing a baseline with a table's

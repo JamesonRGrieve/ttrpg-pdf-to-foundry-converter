@@ -2539,6 +2539,61 @@ describe("entry detection", () => {
         ]);
     });
 
+    it("reads the text on each side of a table set between columns as the column it carries on", () => {
+        // Two columns above; below, one band holds the left column's text, a
+        // table and the right column's text on shared baselines.
+        const at = (text: string, x: number, y: number, column: number, size = 10): IRTextRun => ({
+            ...run(text, y, size === 10 ? "b" : "h", size),
+            x,
+            width: text.length * size * 0.5,
+            column,
+        });
+        const left = [
+            "lamps are lit at dusk",
+            "and burn until the",
+            "watch is changed at",
+            "the second bell.",
+        ];
+        const right = ["the wick is trimmed", "short so that it", "smoulders without", "any flame at all."];
+        const cells = [
+            ["Name", "Glow"],
+            ["Tallow", "3"],
+            ["Oil", "5"],
+            ["Glass", "7"],
+        ];
+        const table = cells.flatMap(([name, glow], i) => [
+            at(name ?? "", 240, 590 - 12 * i - 3, 2),
+            at(glow ?? "", 320, 590 - 12 * i - 3, 2),
+        ]);
+        const ir = irOf(
+            [0],
+            [
+                at("DIM GLOW", 60, 700, 0, 12),
+                ...["a dim glow is the", "least of lamps, and", "the lamp is cheap."].map((t, i) =>
+                    at(t, 60, 680 - 12 * i, 0),
+                ),
+                at("WICK WARD", 400, 700, 1, 12),
+                ...["a ward keeps the", "lamp from going out", "when the wind rises,"].map((t, i) =>
+                    at(t, 400, 680 - 12 * i, 1),
+                ),
+                ...left.map((t, i) => at(t, 60, 590 - 12 * i, 2)),
+                ...right.map((t, i) => at(t, 400, 590 - 12 * i, 2)),
+                ...table,
+            ],
+        );
+        const entries = detectEntries(ir, new Set(table));
+        const dim = entries.find((e) => e.heading.text === "DIM GLOW");
+        const ward = entries.find((e) => e.heading.text === "WICK WARD");
+        expect(dim?.body).toContain(
+            "lamps are lit at dusk and burn until the watch is changed at the second bell.",
+        );
+        expect(dim?.body).not.toContain("wick is trimmed");
+        expect(ward?.body).toContain(
+            "the wick is trimmed short so that it smoulders without any flame at all.",
+        );
+        expect(ward?.body).not.toContain("lamps are lit");
+    });
+
     it("ends a block of values set apart in their own column at the line back at the margin", () => {
         const bodyRight = 60 + body.length * 5;
         const field = (label: string, value: string, y: number): IRTextRun[] => [
