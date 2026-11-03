@@ -899,7 +899,8 @@ export function kindEntry(entry: Entry, parentType: string | undefined, type: st
 /**
  * Whether a field-less entry set smaller than its type's usual heading
  * (`modalSize`) is a part of the entry of that type it sits under rather
- * than an item of its own (or, under no entry of its type, furniture). A
+ * than an item of its own (or, under no entry of its type, furniture, unless
+ * it is set like its own section's run of such entries). A
  * list's run-in entry is set as the list sets it, never a part; nor is one
  * set in the style its parent's own siblings are set in — a parent printed
  * larger than its siblings only seems to hold the siblings after it.
@@ -920,7 +921,7 @@ export function isComponent(
     }
     const parent = enclosingEntry(entries, entry);
     if (parent === null || headingTypes.get(parent.heading.text) !== type) {
-        return true;
+        return !inSectionStyle(entry, entries, type, headingTypes);
     }
     const sameSections = (e: Entry): boolean =>
         e.sections.length === parent.sections.length && e.sections.every((s, i) => s === parent.sections[i]);
@@ -928,6 +929,54 @@ export function isComponent(
         .slice(0, entries.indexOf(parent))
         .some((e) => sameSections(e) && e.heading.style === entry.heading.style);
 }
+
+/**
+ * Whether an entry is set in the heading style its type's entries are usually
+ * set in within its own section (the entries under the same sections, nested
+ * ones included): a catalogue printed smaller than the type's entries elsewhere
+ * in the document ("Conditions" in a chapter whose larger ones are vehicle
+ * damage) is still that section's run of entries, not furniture. The style must
+ * be shared by a few of them and by more than any other style there, and each
+ * must describe itself in running text (an index's lines, set alike, hold page
+ * numbers).
+ */
+function inSectionStyle(
+    entry: Entry,
+    entries: readonly Entry[],
+    type: string,
+    headingTypes: ReadonlyMap<string, string>,
+): boolean {
+    const described = (e: Entry): boolean => {
+        const words = e.body.match(/\p{L}{2,}/gu)?.length ?? 0;
+        const numbers = e.body.match(/\p{N}+/gu)?.length ?? 0;
+        return words >= DESCRIBED_WORDS && numbers * PAGE_NUMBER_SHARE <= words;
+    };
+    if (!described(entry)) {
+        return false;
+    }
+    const scope = entry.sections;
+    const counts = new Map<string, number>();
+    for (const e of entries) {
+        if (
+            e.sections.length >= scope.length &&
+            scope.every((s, i) => e.sections[i] === s) &&
+            headingTypes.get(e.heading.text) === type &&
+            described(e)
+        ) {
+            counts.set(e.heading.style, (counts.get(e.heading.style) ?? 0) + 1);
+        }
+    }
+    const own = counts.get(entry.heading.style) ?? 0;
+    return (
+        own >= MIN_TYPED_SIBLINGS &&
+        [...counts].every(([style, n]) => style === entry.heading.style || n < own)
+    );
+}
+
+/** The words of running text from which an entry's body describes it. */
+const DESCRIBED_WORDS = 8;
+/** Running text holds at most one number to this many words; an index's lines hold a page number to every few. */
+const PAGE_NUMBER_SHARE = 4;
 
 /** An entry's printed text — its `Label: value` lines, then its body — one line per field. */
 function entryText(entry: Entry): string {

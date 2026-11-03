@@ -3540,6 +3540,37 @@ describe("entry components", () => {
             isComponent(spiked, [at("TORCH", 12, "large", ["GEAR"]), lamp, spiked], "gear", gear, 12),
         ).toBe(true);
     });
+
+    it("reads a section's own run of smaller entries as entries, not furniture", () => {
+        const at = (text: string, size: number, style: string, sections: string[], body?: string): Entry => ({
+            heading: { text, size, style, pageIndex: 0 },
+            sections,
+            fields: [],
+            body: body ?? "The character suffers this until the end of his next turn, or longer.",
+        });
+        const outer = ["HAZARDS"];
+        const sooty = at("SOOTY", 8.5, "small", outer);
+        const smoked = at("SMOKED", 8.5, "small", outer);
+        const run = [sooty, smoked, at("SINGED", 8.5, "small", outer)];
+        // A part set in another style, under the same untyped section.
+        const part = at("Left Sleeve", 8, "part", outer);
+        const parts = [part, at("Right Sleeve", 8, "part", outer)];
+        const entries = [...run, ...parts];
+        const types = new Map(entries.map((e) => [e.heading.text, "condition"]));
+        // The type's usual heading elsewhere in the document is 12.
+        expect(isComponent(sooty, entries, "condition", types, 12)).toBe(false);
+        expect(isComponent(part, entries, "condition", types, 12)).toBe(true);
+        // Two alone are too few to call a run.
+        expect(isComponent(sooty, [sooty, smoked], "condition", types, 12)).toBe(true);
+        // An index's lines, set alike, hold page numbers, not running text.
+        const lines = (body: string): Entry[] =>
+            ["SOOT 12", "SMOKE 14", "SINGE 9"].map((t) => at(t, 8.5, "small", outer, body));
+        const index = lines("40, 41 112");
+        const indexTypes = new Map(index.map((e) => [e.heading.text, "condition"]));
+        expect(index.every((e) => isComponent(e, index, "condition", indexTypes, 12))).toBe(true);
+        const named = lines("Ash Pits 40 Soot Falls 41 Smoke Signals 112 Singed Cloth 9 Tinder 30");
+        expect(named.every((e) => isComponent(e, named, "condition", indexTypes, 12))).toBe(true);
+    });
 });
 
 describe("statblock prose", () => {
