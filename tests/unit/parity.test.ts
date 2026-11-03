@@ -84,6 +84,38 @@ describe("leafScore", () => {
         expect(leafScore([{ name: "Glow Lore", uuid: "Compendium.x" }], [{ name: "Wick Lore" }])).toBe(0);
     });
 
+    it("compares an origin's granted members as the schema loads them", () => {
+        const r = scoreBook(
+            [
+                {
+                    name: "Lamp Order",
+                    type: "originPath",
+                    system: {
+                        grants: {
+                            talents: [{ name: "Glow Sight", specialization: "", level: "trained" }],
+                            equipment: [{ name: "Lantern" }],
+                        },
+                    },
+                },
+            ],
+            [
+                {
+                    name: "Lamp Order",
+                    type: "originPath",
+                    system: {
+                        grants: {
+                            talents: [{ name: "Glow Sight", specialization: "" }],
+                            equipment: [{ name: "Lantern", quantity: 1 }],
+                        },
+                    },
+                },
+            ],
+            "dh2",
+        );
+        expect(r.types["originPath"]?.fields["grants.talents"]).toEqual({ checks: 1, score: 1 });
+        expect(r.types["originPath"]?.fields["grants.equipment"]).toEqual({ checks: 1, score: 1 });
+    });
+
     it("compares a member naming another document by a link under any key without the link", () => {
         expect(
             leafScore(

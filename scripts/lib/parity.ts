@@ -129,6 +129,38 @@ export const NOT_IN_SCHEMA: ReadonlySet<string> = new Set([
     "navigatorPower:rollConfig",
 ]);
 
+/**
+ * The keys (with their initial values) of an origin's granted members as the
+ * schema declares them (`grants.<list>` SchemaFields): a key the schema does
+ * not declare is dropped on load, an absent one takes its initial value.
+ */
+const ORIGIN_GRANT_MEMBERS: Readonly<Record<string, Readonly<Record<string, Json>>>> = {
+    skills: { name: "", specialization: "", level: "trained" },
+    talents: { name: "", specialization: "", uuid: "" },
+    traits: { name: "", level: null, uuid: "" },
+    equipment: { name: "", quantity: 1, uuid: "" },
+    specialAbilities: { name: "", description: "" },
+};
+
+/** An origin's `system` with its granted members read as the schema loads them; other types as they are. */
+export function withSchemaMembers(type: string, system: Json | undefined): Json | undefined {
+    if (type !== "originPath" || !isObject(system) || !isObject(system["grants"])) {
+        return system;
+    }
+    const grants: { [k: string]: Json } = { ...system["grants"] };
+    for (const [list, keys] of Object.entries(ORIGIN_GRANT_MEMBERS)) {
+        const members = grants[list];
+        if (Array.isArray(members)) {
+            grants[list] = members.map((m) =>
+                isObject(m)
+                    ? Object.fromEntries(Object.entries(keys).map(([k, initial]) => [k, m[k] ?? initial]))
+                    : m,
+            );
+        }
+    }
+    return { ...system, grants };
+}
+
 /** Armour-point tokens of a legacy stat-block line → the schema's hit locations. */
 const AP_TOKENS: Readonly<Record<string, string>> = {
     h: "head",
@@ -801,8 +833,8 @@ export function scoreBook(
         }
         r.matched += 1;
         r.tiers[match.tier] = (r.tiers[match.tier] ?? 0) + 1;
-        const wantLeaves = leaves(load(type, want["system"]), line);
-        const gotLeaves = leaves(load(type, got["system"]), line);
+        const wantLeaves = leaves(withSchemaMembers(type, load(type, want["system"])), line);
+        const gotLeaves = leaves(withSchemaMembers(type, load(type, got["system"])), line);
         for (const path of [...wantLeaves.keys()]) {
             const segments = path.split(".");
             if (
