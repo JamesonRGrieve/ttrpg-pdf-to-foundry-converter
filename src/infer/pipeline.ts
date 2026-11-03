@@ -487,7 +487,10 @@ function extractTables(
 ): { tables: number; unclassified: number; tableRuns: Set<IRTextRun> } {
     const titled = detectTitledTables(ir);
     const titledPages = new Set(titled.map((t) => t.pageIndex));
-    const tables = [...titled, ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex))];
+    const tables = continuedTables([
+        ...titled,
+        ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex)),
+    ]);
     let unclassified = 0;
     const carried = carriedSections(tables);
     // The document's running text, lower-cased, read once when a row needs it.
@@ -2239,6 +2242,45 @@ export function fitModifications(entities: readonly Entity[], line: Line, book: 
         }
     }
 }
+
+/**
+ * A table printed over several pages sets its caption and header row once:
+ * a part with neither, on the page after the part before it (or the same
+ * page) and with as many columns as that part's headers, is the same table
+ * and takes its caption and headers. Another shape of row, or a page
+ * between, is another table.
+ */
+export function continuedTables<T extends DetectedTable>(tables: readonly T[]): T[] {
+    const byPage = [...tables].sort((a, b) => a.pageIndex - b.pageIndex);
+    const widthOf = (t: DetectedTable): number =>
+        Math.max(0, ...t.rows.flatMap((r) => r.cells.map((c) => c.colIndex + 1)));
+    const inherited = new Map<T, { headers: string[]; tableTitle: string | null }>();
+    let previous: { table: T; headers: string[]; tableTitle: string | null } | null = null;
+    for (const table of byPage) {
+        const own = { headers: table.headers, tableTitle: table.tableTitle };
+        if (
+            table.headers.length === 0 &&
+            table.tableTitle === null &&
+            previous !== null &&
+            previous.headers.length > 0 &&
+            table.pageIndex - previous.table.pageIndex <= CONTINUED_PAGE_REACH &&
+            widthOf(table) === previous.headers.length &&
+            widthOf(table) === widthOf(previous.table)
+        ) {
+            inherited.set(table, { headers: previous.headers, tableTitle: previous.tableTitle });
+            previous = { table, headers: previous.headers, tableTitle: previous.tableTitle };
+            continue;
+        }
+        previous = { table, ...own };
+    }
+    return tables.map((t) => {
+        const from = inherited.get(t);
+        return from === undefined ? t : { ...t, headers: from.headers, tableTitle: from.tableTitle };
+    });
+}
+
+/** Pages a table may run on past the part before it. */
+const CONTINUED_PAGE_REACH = 1;
 
 /**
  * A section row closing one part of a table the layout split into parts

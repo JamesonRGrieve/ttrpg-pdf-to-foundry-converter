@@ -103,6 +103,7 @@ import {
     preferTableBenefit,
     modalHeadingSizes,
     carriedSections,
+    continuedTables,
     headedProse,
     headedRules,
     applyHeadedRules,
@@ -3892,6 +3893,35 @@ describe("section-qualified table names", () => {
         // A captioned table's sub-table may set fewer columns of its own.
         const narrower = { ...table([row(["Spark", "1"])]), headers: ["Name", "Cost"] };
         expect(carriedSections([first, narrower]).get(narrower)).toBe("Ember Weapons");
+    });
+
+    it("gives a headerless table running on from a captioned one its caption and headers", () => {
+        const headed: DetectedTable = {
+            pageIndex: 10,
+            headers: ["Talent Name", "Prerequisite", "Benefit"],
+            rows: [row(["Glow Sense", "Per 30", "See lamps."])],
+            tableTitle: "Talents",
+        };
+        const next = (pageIndex: number, cells: string[]): DetectedTable => ({
+            pageIndex,
+            headers: [],
+            rows: [row(cells), row(cells)],
+            tableTitle: null,
+        });
+        const sameColumns = next(11, ["Wick Ward", "-", "Ward wicks."]);
+        const thenAnother = next(11, ["Ember Eye", "Per 40", "See embers."]);
+        const fewer = next(12, ["Spark", "1"]);
+        const far = next(14, ["Dim Lore", "-", "Dim lamps."]);
+        const out = continuedTables([headed, sameColumns, thenAnother, fewer, far]);
+        expect(out[0]).toBe(headed);
+        for (const t of [out[1], out[2]]) {
+            expect(t?.headers).toEqual(headed.headers);
+            expect(t?.tableTitle).toBe("Talents");
+            expect(t?.rows).toHaveLength(2);
+        }
+        // Another shape of row, or a page gap, is another table.
+        expect(out[3]).toBe(fewer);
+        expect(out[4]).toBe(far);
     });
 
     it("names a variety under a kind section by the full name the document prints", () => {
