@@ -110,6 +110,19 @@ const CHARACTERISTIC_FIELD = "Characteristic";
  * read as one entry, the characteristic kept as a field.
  */
 export function joinSkillCharacteristics(entries: readonly Entry[]): Entry[] {
+    const namesCharacteristic = (e: Entry | undefined): boolean =>
+        CHARACTERISTICS[e?.heading.text.trim().toLowerCase() ?? ""] !== undefined;
+    // The style the document sets a skill's characteristic heading in: a
+    // heading so set under a skill's carries its prose even when it names
+    // no single characteristic ("Various").
+    const characteristicStyles = new Set(
+        entries.flatMap((e, i) => {
+            const next = entries[i + 1];
+            return next !== undefined && skillTypeTag(e.heading.text) !== null && namesCharacteristic(next)
+                ? [next.heading.style]
+                : [];
+        }),
+    );
     const out: Entry[] = [];
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
@@ -117,11 +130,11 @@ export function joinSkillCharacteristics(entries: readonly Entry[]): Entry[] {
         if (entry === undefined) {
             continue;
         }
-        const characteristic = next?.heading.text.trim().toLowerCase() ?? "";
         if (
             next !== undefined &&
             skillTypeTag(entry.heading.text) !== null &&
-            CHARACTERISTICS[characteristic] !== undefined
+            skillTypeTag(next.heading.text) === null &&
+            (namesCharacteristic(next) || characteristicStyles.has(next.heading.style))
         ) {
             out.push({
                 ...entry,

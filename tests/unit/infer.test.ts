@@ -2113,6 +2113,27 @@ describe("entry typing", () => {
             isBasic: false,
         });
         expect(item?.variantized["uses"]).toBe("Trimming wicks in the dark.");
+        // A heading set like the characteristic headings but naming none ("Various") still carries
+        // its skill's prose and fields; another skill heading is never one.
+        const styled = (text: string, style: string, fields: [string, string][] = [], body = ""): Entry => ({
+            ...entry(text, fields, lore, body),
+            heading: { text, size: 11, style, pageIndex: 0 },
+        });
+        const joined = joinSkillCharacteristics([
+            styled("WICKCRAFT (ADVANCED)", "skill"),
+            styled("Agility", "char", [], "Trimming wicks."),
+            styled("LAMPLORE (ADVANCED, CRAFTING)", "skill"),
+            styled("Various", "char", [["Skill Groups", "Tallow, Reed"]], "Making lamps."),
+            styled("HUSH (BASIC)", "skill"),
+            styled("GLOW (BASIC)", "skill"),
+        ]);
+        expect(joined.map((e) => [e.heading.text, e.body])).toEqual([
+            ["WICKCRAFT (ADVANCED)", "Trimming wicks."],
+            ["LAMPLORE (ADVANCED, CRAFTING)", "Making lamps."],
+            ["HUSH (BASIC)", ""],
+            ["GLOW (BASIC)", ""],
+        ]);
+        expect(joined[1]?.fields).toContainEqual(["Skill Groups", "Tallow, Reed"]);
         expect(entryItem(entry("TALENT: WARM HAND", [], lore), "talent").name).toBe("Warm Hand");
         // What a talent covers is no tag.
         expect(headingKindTag("Resistance (Psychic Powers)")).toBeNull();
