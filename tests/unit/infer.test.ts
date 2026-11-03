@@ -2715,6 +2715,49 @@ describe("entry detection", () => {
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
     });
 
+    it("runs a field value on into a line opening in lower case, wherever that line starts", () => {
+        const bold = (text: string, y: number, x: number): IRTextRun => ({
+            ...run(text, y, "b", 10),
+            x,
+            weight: "bold",
+        });
+        const value = (text: string, y: number, x: number): IRTextRun => ({ ...run(text, y, "b", 10), x });
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("LAMP ROUNDS", 660, "h", 12),
+                run(body, 640, "b", 10),
+                // A short value line (a text layer under-reporting its width),
+                // its sentence carried on by a line back at the margin.
+                bold("Effects:", 620, 71),
+                value("Glow Tests to see shots made", 620, 115),
+                run("with lamp rounds suffer a penalty of ten.", 608, "b", 10),
+                bold("Used With:", 590, 71),
+                value("All lamps.", 590, 125),
+                run(body, 578, "b", 10),
+                // A finished list of names, or small capitals in lost case, is no open sentence.
+                run("WICK WARD", 540, "h", 12),
+                bold("Req:", 520, 71),
+                value("Toughness 40", 520, 95),
+                run("for as long as the ward lasts.", 508, "b", 10),
+                bold("Special:", 490, 71),
+                value("flame, spray", 490, 115),
+                run("wICK lAnTErn Class hEAVy", 478, "b", 10),
+            ],
+        );
+        const entries = detectEntries(ir, new Set());
+        expect(entries.find((e) => e.heading.text === "LAMP ROUNDS")?.fields).toEqual([
+            ["Effects", "Glow Tests to see shots made with lamp rounds suffer a penalty of ten."],
+            ["Used With", "All lamps."],
+        ]);
+        expect(entries.find((e) => e.heading.text === "WICK WARD")?.fields).toEqual([
+            ["Req", "Toughness 40"],
+            ["Special", "flame, spray"],
+        ]);
+    });
+
     it("joins a heading broken off inside a bracket to its closing line set further below", () => {
         const ir = irOf(
             [0],

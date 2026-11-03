@@ -919,19 +919,20 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         lastBody = null;
     };
     /** `line` follows `above` at line spacing, in its column and at its left edge. */
-    const closesUp = (above: TextLine, line: TextLine): boolean => {
+    /** The line follows the one above in its column at line spacing. */
+    const followsInColumn = (above: TextLine, line: TextLine): boolean => {
         if (above.pageIndex !== line.pageIndex || above.column !== line.column) {
             return false;
         }
         const size = Math.max(...line.runs.map((r) => r.size));
         const gap = above.y - line.y;
-        return (
-            gap > 0 &&
-            gap <= PARAGRAPH_GAP_FACTOR * size &&
-            Math.abs((visibleRuns(line)[0]?.x ?? Number.NaN) - (visibleRuns(above)[0]?.x ?? Number.NaN)) <=
-                JUSTIFIED_TOLERANCE
-        );
+        return gap > 0 && gap <= PARAGRAPH_GAP_FACTOR * size;
     };
+    /** …and starts where it starts. */
+    const closesUp = (above: TextLine, line: TextLine): boolean =>
+        followsInColumn(above, line) &&
+        Math.abs((visibleRuns(line)[0]?.x ?? Number.NaN) - (visibleRuns(above)[0]?.x ?? Number.NaN)) <=
+            JUSTIFIED_TOLERANCE;
     /** A wider gap than line spacing above a body line opens a new paragraph. */
     const opensParagraph = (line: TextLine): boolean => {
         if (lastBody === null || lastBody.pageIndex !== line.pageIndex || lastBody.column !== line.column) {
@@ -1024,7 +1025,20 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             endsSentence(last[1]) &&
             closesUp(lastFieldLine, line) &&
             line.right <= lastFieldLine.right + WRAP_SLACK;
-        if ((lastFieldWrapped || runsOn) && last !== undefined && !atMargin) {
+        // A value left mid-sentence runs on into the line beneath it that opens
+        // in lower case — no paragraph does — wherever that line starts (a
+        // text layer may under-report the value line's width). A finished
+        // list of names ("Toughness 40") is no sentence left open, and small
+        // capitals whose case was lost ("lA S c A n n o n") open no sentence.
+        const lowerRunsOn =
+            lastFieldLine !== null &&
+            last !== undefined &&
+            !endsSentence(last[1]) &&
+            !nameListValue(last[1]) &&
+            /^\p{Ll}/u.test(line.text) &&
+            !scrambledCase(line.text) &&
+            followsInColumn(lastFieldLine, line);
+        if ((lastFieldWrapped || runsOn || lowerRunsOn) && last !== undefined && !atMargin) {
             if (held !== null && held.field === last) {
                 held.lines.push(line);
             } else if (lastFieldWrapped && nameListValue(last[1]) && /^\p{Lu}/u.test(line.text)) {
