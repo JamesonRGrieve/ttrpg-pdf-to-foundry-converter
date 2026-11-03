@@ -650,6 +650,19 @@ describe("origins granted by inline fields", () => {
         ]);
         expect(asked.map((o) => o.name)).toEqual(["Flamewright"]);
         expect(asked[0]?.grantsPsychicPowers).toBeUndefined();
+        // A psy rating others have, named in a rule, grants none.
+        const mentioned = read([
+            ["Starting Talents", "Steady Hand"],
+            ["Benefits", "• Gains the Hush talent. • Anyone who has a psy rating finds the character cold."],
+            ["Starting Gear", "Lantern"],
+        ]);
+        expect(mentioned[0]?.grantsPsychicPowers).toBeUndefined();
+        const stated = read([
+            ["Starting Talents", "Steady Hand"],
+            ["Benefits", "• Gains the Hush trait and a psy rating of 1."],
+            ["Starting Gear", "Lantern"],
+        ]);
+        expect(stated[0]?.grantsPsychicPowers).toBe(true);
     });
 
     it("reads nothing from a single grant, a priced block, or a section naming no step", () => {

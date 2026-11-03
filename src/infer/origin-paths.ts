@@ -491,7 +491,7 @@ function grantsOf(
         // A granted Psy Rating makes the character a psyker (#681); one asked
         // for by a prerequisite or price does not.
         if (field === undefined || !PRICE_FIELDS.has(field)) {
-            psyker ||= PSY_RATING.test(entry.heading.text) || PSY_RATING.test(value);
+            psyker ||= PSY_RATING.test(entry.heading.text) || GRANTED_PSY_RATING.test(value);
         }
         switch (field) {
             case "xpCost": {
@@ -663,6 +663,15 @@ function grantsOf(
 
 /** A Psy Rating named in a grant: the schema's psy rating, which only a psyker has. */
 const PSY_RATING = /\bpsy(?:chic)?\s+rating\b/iu;
+
+/**
+ * A psy rating a field's text grants: stated with its value ("Psy Rating 2",
+ * "a psy rating of 1", "Psy Rating (x2)"), or in a sentence saying the
+ * character gains it. One that others have, named in a rule ("anyone who
+ * has a psy rating"), grants none.
+ */
+const GRANTED_PSY_RATING =
+    /\bgains?\b[^.•]*\bpsy(?:chic)?\s+rating\b|\bpsy(?:chic)?\s+rating\s*(?:of\s+)?\(?\s*(?:\d|[x×]\s*\d)/iu;
 
 /** A value printed as a signed change ("+2", "−1", "-3"): its number, or null when unsigned. */
 function signedBonus(value: string): number | null {
