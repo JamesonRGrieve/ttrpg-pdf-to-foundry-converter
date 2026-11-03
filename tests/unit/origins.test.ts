@@ -18,9 +18,10 @@ import {
     sameOrigin,
     signedCharacteristicChanges,
     splitTopLevel,
+    withSkillLevelBase,
 } from "../../src/infer/origin-paths.ts";
 import { buildOriginPath } from "../../src/infer/schema.ts";
-import { DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
+import { baseSkillLevel, DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
 
 const STEPS = DEFAULT_TARGET.originSteps;
 /** No page carries running text. */
@@ -684,6 +685,22 @@ describe("origins granted by inline fields", () => {
             bc,
         );
         expect(origins[0]?.grantsPsychicPowers).toBe(true);
+    });
+
+    it("grants a skill at the first level of the line's skill ladder", () => {
+        expect(baseSkillLevel("dh2")).toBe("known");
+        expect(baseSkillLevel("rt")).toBe("trained");
+        const grants = {
+            skills: [
+                { name: "Lamp Lore", specialization: "", level: "known" },
+                { name: "Glowcraft", specialization: "", level: "experienced" },
+            ],
+        };
+        expect(withSkillLevelBase(grants, "trained")["skills"]).toEqual([
+            { name: "Lamp Lore", specialization: "", level: "trained" },
+            { name: "Glowcraft", specialization: "", level: "experienced" },
+        ]);
+        expect(withSkillLevelBase(grants, "known")).toEqual(grants);
     });
 
     it("reads a skill without the characteristic tag printed after it", () => {

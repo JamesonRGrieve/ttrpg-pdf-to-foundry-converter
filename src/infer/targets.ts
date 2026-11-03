@@ -185,6 +185,18 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
 
 export const DEFAULT_TARGET: TargetSchema = TARGETS[DEFAULT_LINE];
 
+/**
+ * Lines whose skill ladder (the schema's skill levels for the line) starts at
+ * `trained` (trained, +10, +20); the others start at `known` (known, trained,
+ * experienced, veteran).
+ */
+const TRAINED_LADDER: ReadonlySet<Line> = new Set(["rt", "dh1", "dw"]);
+
+/** The first level of a line's skill ladder: the level a skill is granted at when none is stated. */
+export function baseSkillLevel(line: Line): "known" | "trained" {
+    return TRAINED_LADDER.has(line) ? "trained" : "known";
+}
+
 export const DND5E_TARGETS: Readonly<Record<Dnd5eRules, Dnd5eTarget>> = {
     "2014": { system: "dnd5e", id: "dnd5e-2014", rules: "2014", backgroundAbilityScores: null },
     "2024": {

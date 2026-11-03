@@ -390,6 +390,26 @@ function listGrants(
 }
 
 /**
+ * Grants with each skill granted at the reading's base level (`known`, the
+ * first rank of a ladder starting there) at `base` instead: the first level of
+ * the target line's ladder. A stated higher level stays.
+ */
+export function withSkillLevelBase(grants: JsonObject, base: string): JsonObject {
+    const skills = grants["skills"];
+    if (base === GRANTED_SKILL_LEVEL || !Array.isArray(skills)) {
+        return grants;
+    }
+    return {
+        ...grants,
+        skills: skills.map((s) =>
+            s !== null && typeof s === "object" && !Array.isArray(s) && s["level"] === GRANTED_SKILL_LEVEL
+                ? { ...s, level: base }
+                : s,
+        ),
+    };
+}
+
+/**
  * A skill without the characteristic it tests printed after it in brackets
  * ("Command (Fel)", "Common Lore (Imperium) (Int)"): the tag is no
  * specialisation.

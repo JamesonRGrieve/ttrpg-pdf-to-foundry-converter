@@ -80,6 +80,7 @@ import {
     readEffectOrigins,
     readOriginTable,
     sameOrigin,
+    withSkillLevelBase,
 } from "./origin-paths.ts";
 import { applyOrderTests } from "./order-tests.ts";
 import { applyOriginPrerequisites } from "./origin-prerequisites.ts";
@@ -102,7 +103,7 @@ import {
     type ItemType,
     type Line,
 } from "./schema.ts";
-import type { TargetSchema } from "./targets.ts";
+import { baseSkillLevel, type TargetSchema } from "./targets.ts";
 import { applyTwoHandedClasses, twoHandedClasses } from "./two-handed.ts";
 import type { ContentType, DetectedNumericGrid, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
@@ -1481,7 +1482,7 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
             book: out.sourceBook,
             page: out.page(origin.pageIndex),
             description: toHtml(origin.description),
-            grants: origin.grants,
+            grants: withSkillLevelBase(origin.grants, baseSkillLevel(out.line)),
             characteristics: origin.modifiers,
             ...(origin.resources === undefined ? {} : { resources: origin.resources }),
             ...(origin.grantsPsychicPowers === true ? { grantsPsychicPowers: true } : {}),
