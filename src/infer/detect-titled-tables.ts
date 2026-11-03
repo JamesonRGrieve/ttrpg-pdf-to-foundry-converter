@@ -3,6 +3,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { type BaselineLine, groupByBaseline } from "../util/baselines.ts";
 import { bodyStyle } from "../util/body-style.ts";
 import { columnAt } from "../util/columns.ts";
+import { numAsc } from "../util/ordered.ts";
 import { inMarginBand, inSideMargin, type MarginBands, marginBandsOf } from "../util/page-bands.ts";
 import { percentile } from "../util/stats.ts";
 import { NOTE_MARKERS, wordBreakBetween } from "../util/text.ts";
@@ -158,6 +159,69 @@ const HEADED_KEY_SHARE = 0.8;
  * above).
  */
 export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
+    const variants = variantLines(lines, colBoundaries);
+    if (variants.size === 0) {
+        return groupAnchored(lines, colBoundaries);
+    }
+    const rows = groupAnchored(
+        lines.filter((l) => !variants.has(l)),
+        colBoundaries,
+    );
+    const own = [...variants].map(([line, key]) => ({
+        y: line.y,
+        runs: [{ ...key, y: line.y }, ...line.runs],
+    }));
+    return [...rows, ...own].sort((a, b) => b.y - a.y);
+}
+
+/** Most words a value cell of a variant row holds: values, not wrapped text. */
+const VARIANT_CELL_WORDS = 4;
+
+/**
+ * Lines of values under a keyed row with no key of their own (a component's
+ * figures for a second hull size, set on the next line): each fills the very
+ * columns its key's line fills, with short cells, some of them numbers, so it
+ * is a row of that key rather than wrapped text. Mapped to the key run above.
+ */
+function variantLines(lines: readonly RawRow[], colBoundaries: readonly number[]): Map<RawRow, IRTextRun> {
+    const out = new Map<RawRow, IRTextRun>();
+    const cells = (row: RawRow): Map<number, string> => {
+        const m = new Map<number, string>();
+        for (const r of row.runs.filter((x) => x.text.trim().length > 0)) {
+            const col = columnOfRun(r.x, colBoundaries);
+            m.set(col, `${m.get(col) ?? ""} ${r.text}`.trim());
+        }
+        return m;
+    };
+    const values = (m: Map<number, string>): number[] => [...m.keys()].filter((c) => c > 0).sort(numAsc);
+    const short = (m: Map<number, string>): boolean =>
+        values(m).every((c) => (m.get(c) ?? "").split(/\s+/u).length <= VARIANT_CELL_WORDS) &&
+        values(m).some((c) => /^(?:[+\-–−]?\d+|[-–—])$/u.test(m.get(c) ?? ""));
+    let anchor: { line: RawRow; cells: Map<number, string>; key: IRTextRun } | null = null;
+    for (const line of lines) {
+        const m = cells(line);
+        const key = line.runs.find((r) => r.text.trim().length > 0 && columnOfRun(r.x, colBoundaries) === 0);
+        if (key !== undefined) {
+            anchor = { line, cells: m, key };
+            continue;
+        }
+        const own = values(m);
+        const keyed = anchor === null ? [] : values(anchor.cells);
+        if (
+            anchor !== null &&
+            own.length >= 2 &&
+            own.length === keyed.length &&
+            own.every((c, i) => c === keyed[i]) &&
+            short(m) &&
+            short(anchor.cells)
+        ) {
+            out.set(line, anchor.key);
+        }
+    }
+    return out;
+}
+
+function groupAnchored(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
     const keyRun = (row: RawRow): IRTextRun | undefined =>
         row.runs.find((r) => r.text.trim().length > 0 && columnOfRun(r.x, colBoundaries) === 0);
     // A bold line among records that are not is a section row ("Chain

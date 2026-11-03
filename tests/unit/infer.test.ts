@@ -2274,6 +2274,42 @@ describe("table continuations", () => {
         ]);
     });
 
+    it("reads a line of values under a keyed row, with no key of its own, as that key's variant row", () => {
+        const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
+        // Lamps by size: the second size of the Wick Lamp prints only its own values.
+        const rows = groupByKeyAnchors(
+            [
+                {
+                    y: 472,
+                    runs: [
+                        at("Wick Lamp", 20, 472),
+                        at("Small, Medium", 100, 472),
+                        at("1", 200, 472),
+                        at("-", 250, 472),
+                    ],
+                },
+                { y: 458, runs: [at("Large", 100, 458), at("2", 200, 458), at("-", 250, 458)] },
+                {
+                    y: 444,
+                    runs: [
+                        at("Oil Lamp", 20, 444),
+                        at("Small", 100, 444),
+                        at("2", 200, 444),
+                        at("+1", 250, 444),
+                    ],
+                },
+                { y: 430, runs: [at("Large", 100, 430), at("3", 200, 430), at("+1", 250, 430)] },
+            ],
+            [0, 80, 180, 240],
+        );
+        expect(rows.map((r) => r.runs.map((x) => x.text))).toEqual([
+            ["Wick Lamp", "Small, Medium", "1", "-"],
+            ["Wick Lamp", "Large", "2", "-"],
+            ["Oil Lamp", "Small", "2", "+1"],
+            ["Oil Lamp", "Large", "3", "+1"],
+        ]);
+    });
+
     it("gives a key heading its row every line down to the next key", () => {
         const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
         // Each key sits on its row's first line; a row's last line lies nearer
