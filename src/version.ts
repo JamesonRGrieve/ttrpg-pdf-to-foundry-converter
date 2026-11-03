@@ -15,7 +15,7 @@
  *   longer be reused (with `IR_VERSION`, on any change to normalization or to
  *   the OCR arbitration that feeds it).
  */
-export const RELEASE = "2026-11-03-03-14";
+export const RELEASE = "2026-11-03-05-11";
 export const ENGINE_VERSION = "0.2.0";
 export const IR_VERSION = 45;
 
