@@ -61,6 +61,12 @@ export function caseLost(name: string): boolean {
     if (/^\P{L}*\p{Ll}/u.test(name) && /\p{Lu}/u.test(name)) {
         return true;
     }
+    // …nor jumps from lower case to a run of capitals ("CoMMAND"), or to a
+    // capital ending the word ("FroM"): a real name's inner capital opens a
+    // word part ("McAllister")…
+    if (/\p{Ll}\p{Lu}{2}|\p{Ll}\p{Lu}(?!\p{L})/u.test(name)) {
+        return true;
+    }
     const jumps = name.match(/\p{Ll}\p{Lu}/gu)?.length ?? 0;
     // …nor jumps to a capital mid-word beside a word wholly in capitals ("HasHian TRELS")…
     const capitalsWord = /(?<!\p{L})\p{Lu}{2,}(?!\p{L})/u.test(name);

@@ -377,6 +377,11 @@ describe("names", () => {
         expect(titleCase("LanTern KEEPER")).toBe("Lantern Keeper");
         expect(titleCase("Lantern of ASHWICK")).toBe("Lantern of Ashwick");
         expect(titleCase("Lantern Mk IV")).toBe("Lantern Mk IV");
+        // One jump to capitals that run on, or that end the word, is lost case too.
+        expect(titleCase("LaMMPS")).toBe("Lammps");
+        expect(titleCase("WiCKS of the lamp")).toBe("Wicks of the Lamp");
+        expect(titleCase("GloW field")).toBe("Glow Field");
+        expect(titleCase("WarD")).toBe("Ward");
         expect(cleanName("  QUIET TREAD† :")).toBe("Quiet Tread");
         expect(cleanName("Hood/ Cowl")).toBe("Hood/Cowl");
         expect(cleanName("Hard (-20)/ GM's call")).toBe("Hard (-20)/ GM's call");
