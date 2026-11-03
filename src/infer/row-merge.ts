@@ -194,7 +194,8 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
         const line = shape.cells(row);
         // A name on its own line, nearer the record below than the line above
         // (a record or a section row), is that record's first line: its
-        // values sit beside its last line.
+        // values sit beside its last line. That record may leave cells empty
+        // (values given in a note), so it need only be no fragment itself.
         const next = rows[i + 1];
         const gapBelow = gaps[i];
         if (
@@ -204,7 +205,7 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             next !== undefined &&
             gapBelow !== undefined &&
             gapBelow < gap &&
-            filled(shape.cells(next)) >= typicalFill &&
+            filled(shape.cells(next)) * FRAGMENT_DIVISOR > typicalFill &&
             sameFaces(row, next)
         ) {
             const lead = { ...row, runs: [...row.runs] };

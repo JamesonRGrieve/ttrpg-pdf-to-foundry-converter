@@ -554,6 +554,18 @@ describe("row merging", () => {
             "Lamps",
             "Wick Cannon",
         ]);
+        // …also when that record leaves a cell empty (its value in a note).
+        const sparse = [
+            textLine(200, ["Wick Gun", "Heavy", "Rare", "3"]),
+            textLine(186, ["Lamp Glow", "", "", ""]),
+            textLine(180, ["Cannon", "Heavy", "", "4"]),
+            textLine(166, ["Dim Gun", "Light", "Rare", "1"]),
+        ];
+        expect(mergeContinuationRows(sparse, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Wick Gun",
+            "Lamp Glow Cannon",
+            "Dim Gun",
+        ]);
     });
 
     it("joins a line carrying the rest of a list cell that broke off, but not a numbered record", () => {
