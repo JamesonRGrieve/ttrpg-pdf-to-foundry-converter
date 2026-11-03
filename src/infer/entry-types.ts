@@ -1291,7 +1291,7 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             if (placed !== null) {
                 system["availabilityByPlace"] = placed.byPlace;
             }
-            const effect = text("effect");
+            const effect = text("effect") ?? text("effects");
             variantized["effect"] = effect === undefined ? html : toHtml(effect);
         }
     }

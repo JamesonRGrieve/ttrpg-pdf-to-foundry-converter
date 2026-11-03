@@ -1317,6 +1317,20 @@ describe("entry typing", () => {
         expect(entryType(entry("Psychic Techniques", fields, ["Psychic Powers"]))).toBeNull();
     });
 
+    it("reads an item's effect from an Effects field as from an Effect field", () => {
+        const rounds = entry(
+            "LAMP ROUNDS",
+            [
+                ["Effects", "The weapon's Glow increases to 8."],
+                ["Used With", "All lamps."],
+            ],
+            ["Armoury", "Special Ammunition"],
+        );
+        expect(entryItem(rounds, "ammunition").variantized["effect"]).toBe(
+            "<p>The weapon's Glow increases to 8.</p>",
+        );
+    });
+
     it("types an oath by its name and effect under a section about oaths", () => {
         const oath = entry(
             "OATH OF THE LAMP",
