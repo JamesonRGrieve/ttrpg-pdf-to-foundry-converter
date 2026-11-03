@@ -3,7 +3,13 @@ import type { Entity, JsonObject, JsonValue } from "../types/entity.ts";
 import type { Entry } from "./detect-entries.ts";
 import { identifierFromName } from "./identifiers.ts";
 import { caseLost, cleanName } from "./names.ts";
-import { DAMAGE_TYPES, parseAvailability, parseAvailabilityByPlace, parseWeight } from "./notation.ts";
+import {
+    DAMAGE_TYPES,
+    parseAvailability,
+    parseAvailabilityByPlace,
+    parseGearCategory,
+    parseWeight,
+} from "./notation.ts";
 import { toHtml, type ItemType } from "./schema.ts";
 
 /**
@@ -34,6 +40,14 @@ export function mutationCategory(sections: readonly string[]): string | null {
     return null;
 }
 
+/** A gear category's word, singular or plural: a heading naming it is about the category. */
+const GEAR_SECTION = /\bdrugs?\b|\bconsumables?\b/iu;
+
+/** A heading about a gear category itself ("Too Many Drugs"), its own tag ("Wick (Drug)") aside. */
+export function namesGearCategory(heading: string): boolean {
+    return GEAR_SECTION.test(heading.replace(/\([^()]*\)/gu, ""));
+}
+
 /**
  * Section-heading words → the item type catalogued beneath. Only for kinds
  * printed WITHOUT a field block; talents, skills and psychic powers identify
@@ -59,6 +73,8 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/navigator\s*powers?\b/iu, "navigatorPower"],
     [/\bvehicle traits?\b/iu, "vehicleTrait"],
     [/\bmedals?\b/iu, "medal"],
+    // The schema's gear categories a section of prose entries may name.
+    [/\bdrugs\b|\bconsumables\b/iu, "gear"],
     [/\btraits?\b/iu, "trait"],
 ];
 
@@ -240,6 +256,11 @@ function sectionType(sections: readonly string[]): { type: ItemType; section: st
             return null;
         }
         const type = typeNamedBy(section);
+        // A gear category names the entries directly under it, not those of
+        // a section nested inside (a creature's statblock that follows).
+        if (type === "gear" && i !== sections.length - 1) {
+            continue;
+        }
         if (type !== null) {
             return { type, section };
         }
@@ -420,6 +441,11 @@ export function entryType(entry: Entry): ItemType | null {
     // an orders section, as one naming its own kind does — or closing on the
     // plural its section closes on ("Initial Powers" under "… Powers").
     const groupNoun = lastWord(section);
+    // A gear heading about the category itself ("Too Many Drugs"), its
+    // own tag aside ("Wick (Drug)"), heads rules, not an item.
+    if (type === "gear" && namesGearCategory(heading)) {
+        return null;
+    }
     if (
         typeNamedBy(heading) === type ||
         (type === "order" && /\bactions\b/iu.test(heading)) ||
@@ -1268,6 +1294,17 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             system["hasLevel"] = /\(\s*x\s*\)/iu.test(name);
             variantized["effect"] = toHtml(text("effect") ?? entry.body);
             break;
+        case "gear": {
+            // The nearest section naming a gear category ("Lamp Oils and Consumables").
+            const category = [...entry.sections]
+                .reverse()
+                .map(parseGearCategory)
+                .find((c) => c !== null);
+            if (category !== undefined) {
+                system["category"] = category;
+            }
+            break;
+        }
         case "mutation": {
             const category = mutationCategory(entry.sections);
             if (category !== null) {

@@ -31,6 +31,7 @@ import {
     entryType,
     joinPactGroups,
     joinSkillCharacteristics,
+    namesGearCategory,
     splitTalentLists,
     typeNamedBy,
     withDisciplines,
@@ -1425,6 +1426,47 @@ export function siblingKinds(
     return out;
 }
 
+/**
+ * A section naming a gear category ("Lamp Drugs") catalogues one unbroken
+ * run of entries set alike under it. A heading after the run is broken — by
+ * an entry of no type, or one set otherwise — is the text that follows the
+ * catalogue under a section the page never closed, not more gear. A heading
+ * about the category itself ("Too Many Drugs") is rules: no gear, and no
+ * break. Returns `kinds` without such headings.
+ */
+export function gearRuns(
+    entries: readonly Entry[],
+    kinds: ReadonlyMap<Entry, ItemType>,
+): Map<Entry, ItemType> {
+    const out = new Map(kinds);
+    const runs = new Map<string, { style: string; broken: boolean }>();
+    for (const entry of entries) {
+        const key = entry.sections.join("\u0000");
+        const run = runs.get(key);
+        const kind = kinds.get(entry);
+        const gear = kind === "gear";
+        if (namesGearCategory(entry.heading.text)) {
+            if (gear) {
+                out.delete(entry);
+            }
+            continue;
+        }
+        if (run === undefined) {
+            if (gear) {
+                runs.set(key, { style: entry.heading.style, broken: false });
+            }
+            continue;
+        }
+        if (run.broken || kind === undefined || (gear && entry.heading.style !== run.style)) {
+            run.broken = true;
+            if (gear) {
+                out.delete(entry);
+            }
+        }
+    }
+    return out;
+}
+
 function extractEntries(
     entries: readonly Entry[],
     out: EntityCollector,
@@ -1444,10 +1486,8 @@ function extractEntries(
             }
         }
     });
-    const kinds = siblingKinds(
-        entries.filter((entry) => !vehicles.has(entry) && !ships.has(entry)),
-        entryType,
-    );
+    const unclaimed = entries.filter((entry) => !vehicles.has(entry) && !ships.has(entry));
+    const kinds = gearRuns(unclaimed, siblingKinds(unclaimed, entryType));
     const typed = entries.flatMap((entry) => {
         const type = kinds.get(entry);
         return type === undefined ? [] : [{ entry, type }];
@@ -2286,6 +2326,24 @@ function sourceOf(e: Entity, line: Line): JsonObject | null {
 
 const TABLE_READING = "table:";
 const ENTRY_READING = "entry:";
+
+/**
+ * A heading read as gear under a gear category's section that names a
+ * creature whose statblock the document prints ("Lamp Beasts" over the
+ * "Lamp Beast" profile) introduces that creature, not an item: it is dropped.
+ */
+export function dropCreatureGear(entities: Entity[]): void {
+    const nameOf = (e: Entity): string => String(e.fields["name"] ?? "");
+    const creatures = new Set(
+        entities.filter((e) => e.documentType === "Actor").map((e) => singularWordsKey(nameOf(e))),
+    );
+    for (let i = entities.length - 1; i >= 0; i -= 1) {
+        const e = entities[i];
+        if (e?.blockId === `${ENTRY_READING}gear` && creatures.has(singularWordsKey(nameOf(e)))) {
+            entities.splice(i, 1);
+        }
+    }
+}
 /** Marks a table reading from a row keyed by a roll. */
 export const ROLLED_ROW = ":rolled";
 
@@ -2604,6 +2662,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
         descriptions,
     );
     const grids = extractActors(ir, numeric, detected, out);
+    dropCreatureGear(out.entities);
     extractOriginPaths(detected, runningHeads(ir), out);
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);

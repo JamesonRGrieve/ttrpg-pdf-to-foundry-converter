@@ -105,6 +105,8 @@ import {
     modalHeadingSizes,
     carriedSections,
     continuedTables,
+    dropCreatureGear,
+    gearRuns,
     headedProse,
     headedRules,
     applyHeadedRules,
@@ -118,7 +120,15 @@ import {
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
 import { mapRow, type RowCells } from "../../src/infer/rows.ts";
-import { buildItem, costShape, DEFAULT_LINE, type Line, packName, toHtml } from "../../src/infer/schema.ts";
+import {
+    buildItem,
+    costShape,
+    DEFAULT_LINE,
+    type ItemType,
+    type Line,
+    packName,
+    toHtml,
+} from "../../src/infer/schema.ts";
 import { TARGETS } from "../../src/infer/targets.ts";
 import type { DetectedTable, TableRow } from "../../src/infer/types.ts";
 import { createLogger } from "../../src/logger.ts";
@@ -1487,6 +1497,76 @@ describe("entry typing", () => {
         expect(entryItem(entry("Wick Cross", [], ["Campaign Medals"]), "medal").system["honourType"]).toBe(
             "campaign",
         );
+    });
+
+    it("reads a prose entry under a section naming a gear category as gear of that category", () => {
+        const tonic = entry("Wick Tonic", [], ["Armoury", "DRUGS AND CONSUMABLES"], "A bitter draught.");
+        expect(entryType(tonic)).toBe("gear");
+        expect(entryItem(tonic, "gear").system["category"]).toBe("drugs");
+        // A singular mention ("Using a drug") names no catalogue.
+        expect(entryType(entry("Wick Tonic", [], ["Armoury", "On Drug Use"], "Text."))).toBeNull();
+        // A heading about the category heads rules; its own tag aside, a name is gear.
+        const drugs = ["Armoury", "DRUGS"];
+        expect(entryType(entry("Too Many Drugs", [], drugs, "Text."))).toBeNull();
+        expect(entryType(entry("Wick Tonic (Drug)", [], drugs, "Text."))).toBe("gear");
+        // A section nested inside is no catalogue of the category.
+        expect(entryType(entry("Lamp Beast", [], [...drugs, "WICK TONIC"], "Text."))).toBeNull();
+    });
+
+    it("ends a gear category's catalogue where its run of entries breaks", () => {
+        const at = (text: string, style: string): Entry => ({
+            heading: { text, size: 8.5, style, pageIndex: 0 },
+            sections: ["COMBAT DRUGS"],
+            fields: [],
+            body: "Text.",
+        });
+        const tonic = at("Wick Tonic", "s");
+        const rules = at("Too Many Drugs", "s");
+        const salts = at("Lamp Salts", "s");
+        const lore = at("Lamp Lore (Advanced)", "s");
+        // Untyped: a creature's write-up under a section the page never closed.
+        const beast = at("Lamp Beast", "s");
+        const brood = at("Lamp Brood", "s");
+        const caption = at("Lamp Brood (Elite)", "bold");
+        const all = [tonic, rules, salts, lore, beast, brood, caption];
+        const kinds = new Map<Entry, ItemType>(
+            all.filter((e) => e !== beast).map((e) => [e, e === lore ? "skill" : "gear"]),
+        );
+        // Another type within the run does not break it; an untyped heading does.
+        expect([...gearRuns(all, kinds).entries()]).toEqual([
+            [tonic, "gear"],
+            [salts, "gear"],
+            [lore, "skill"],
+        ]);
+        // Set otherwise, a heading breaks the run too.
+        const otherwise = [tonic, caption, salts];
+        const few = new Map<Entry, ItemType>(otherwise.map((e) => [e, "gear"]));
+        expect([...gearRuns(otherwise, few).keys()]).toEqual([tonic]);
+    });
+
+    it("drops gear read from a heading that introduces a creature's statblock", () => {
+        const doc = (documentType: "Actor" | "Item", name: string, blockId: string): Entity => ({
+            blockId,
+            documentType,
+            group: "dh2",
+            pack: "p",
+            ordinal: 0,
+            fields: { name },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const entities = [
+            doc("Item", "Lamp Beasts", "entry:gear"),
+            doc("Item", "Wick Tonic", "entry:gear"),
+            doc("Item", "Lamp Beast", "table:weapon"),
+            doc("Actor", "Lamp Beast", "grid"),
+        ];
+        dropCreatureGear(entities);
+        expect(entities.map((e) => `${e.documentType} ${String(e.fields["name"])}`)).toEqual([
+            "Item Wick Tonic",
+            "Item Lamp Beast",
+            "Actor Lamp Beast",
+        ]);
     });
 
     it("reads a skill's use time and, where it lists them as fields, its specialisations", () => {
