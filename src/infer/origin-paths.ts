@@ -372,7 +372,9 @@ function listGrants(
         type === "skill" || type === "talent" ? /^\s*[\p{Lu}\p{N}]/u.test(i) : /\p{L}/u.test(i);
     // The list may close its sentence: the full stop is not part of the last item.
     const items = splitTopLevel(text.replace(/\.\s*$/u, ""), LIST_SEPARATOR);
-    for (const item of items.filter((i) => !readsAsProse(i) && named(i))) {
+    for (const item of items
+        .filter((i) => !readsAsProse(i) && named(i))
+        .flatMap((i) => mixedSpecialisations(i) ?? [i])) {
         const alternatives = splitTopLevel(item, ALTERNATIVE);
         const specialisation = specialisationChoice(item, type, label);
         if (alternatives.length > 1) {
@@ -384,6 +386,25 @@ function listGrants(
         }
     }
     return { granted, choices };
+}
+
+/**
+ * "Name (A, and B or C)": specialisations listed apart, some held and some to
+ * be chosen between, read as one item each ("Name (A)", "Name (B or C)").
+ * Null for any other item.
+ */
+function mixedSpecialisations(item: string): string[] | null {
+    const m = /^(?<name>[^(]+?)\s*\((?<inner>[^()]*)\)\s*$/u.exec(item);
+    const name = m?.groups?.["name"]?.trim();
+    const inner = m?.groups?.["inner"];
+    if (name === undefined || inner === undefined || !/,/u.test(inner) || !/\s+or\s+/iu.test(inner)) {
+        return null;
+    }
+    const parts = inner
+        .split(",")
+        .map((p) => p.replace(/^\s*and\s+/iu, "").trim())
+        .filter((p) => p.length > 0);
+    return parts.length > 1 ? parts.map((p) => `${name} (${p})`) : null;
 }
 
 /** A named option: `{ name, label, value }` plus any extra fields. */

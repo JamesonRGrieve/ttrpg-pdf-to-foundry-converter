@@ -686,6 +686,42 @@ describe("origins granted by inline fields", () => {
         expect(origins[0]?.grantsPsychicPowers).toBe(true);
     });
 
+    it("grants a talent's listed specialisations and offers the alternatives among them", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Flamewright"],
+                    [
+                        ["Starting Skills", "Lamp Lore"],
+                        ["Starting Talents", "Wick Training (Tallow, and Beeswax or Oil)"],
+                        ["Starting Gear", "Lantern"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins[0]?.grants["talents"]).toEqual([{ name: "Wick Training", specialization: "Tallow" }]);
+        expect(origins[0]?.grants["choices"]).toEqual([
+            {
+                type: "talent",
+                label: "Starting Talents",
+                count: 1,
+                options: [
+                    {
+                        name: "Wick Training",
+                        label: "Wick Training",
+                        value: "Wick Training",
+                        specializations: ["Beeswax", "Oil"],
+                    },
+                ],
+            },
+        ]);
+    });
+
     it("reads nothing from a single grant, a priced block, or a section naming no step", () => {
         const sections = ["Lamps", "Stage 1: Choose a Race"];
         const single = at("GLOW", "sub", sections, [["Starting Skills", "Hush"]]);
