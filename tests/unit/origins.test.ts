@@ -665,6 +665,27 @@ describe("origins granted by inline fields", () => {
         expect(stated[0]?.grantsPsychicPowers).toBe(true);
     });
 
+    it("flags an origin granting the psyker trait as making a psyker", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Flamewright"],
+                    [
+                        ["Starting Talents", "Steady Hand"],
+                        ["Starting Traits", "Psyker"],
+                        ["Starting Gear", "Lantern"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins[0]?.grantsPsychicPowers).toBe(true);
+    });
+
     it("reads nothing from a single grant, a priced block, or a section naming no step", () => {
         const sections = ["Lamps", "Stage 1: Choose a Race"];
         const single = at("GLOW", "sub", sections, [["Starting Skills", "Hush"]]);

@@ -638,6 +638,8 @@ function grantsOf(
             }
         }
     }
+    // The psyker trait granted makes the character a psyker as a psy rating does.
+    psyker ||= traits.some((t) => PSYKER.test(String(t["name"] ?? "")));
     return {
         ...(rules.length === 0 ? {} : { rules }),
         ...(xpCost === undefined ? {} : { xpCost }),
@@ -663,6 +665,9 @@ function grantsOf(
 
 /** A Psy Rating named in a grant: the schema's psy rating, which only a psyker has. */
 const PSY_RATING = /\bpsy(?:chic)?\s+rating\b/iu;
+
+/** The schema's psyker trait (and aptitude) by name. */
+const PSYKER = /^\s*psyker\s*$/iu;
 
 /**
  * A psy rating a field's text grants: stated with its value ("Psy Rating 2",
