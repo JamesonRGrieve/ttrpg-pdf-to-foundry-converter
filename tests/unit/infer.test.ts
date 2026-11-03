@@ -34,6 +34,7 @@ import {
     focusPowerTest,
     powerActivation,
     powerAttackProfile,
+    powerProseDamage,
     targetType,
     headingKindTag,
     isSustained,
@@ -1629,6 +1630,55 @@ describe("entry typing", () => {
             "psychicPower",
         );
         expect(calm.system).not.toHaveProperty("isAttack");
+    });
+
+    it("reads the damage a power's text states, as a profile box's", () => {
+        expect(
+            powerProseDamage(
+                "The lash deals 1d10+2 Energy Damage, +2 per point of Psy Rating, with a Pen of 3.",
+            ),
+        ).toEqual({ formula: "1d10+2xPR", type: "energy", bonus: 2, penetration: 3 });
+        expect(powerProseDamage("Each mote suffers 1d10 + Psy Rating Explosive Damage with Pen 0.")).toEqual({
+            formula: "1d10+PR",
+            type: "explosive",
+            bonus: 0,
+            penetration: 0,
+        });
+        expect(
+            powerProseDamage("The wick deals 2d10 Rending Damage, plus 1 per point of your Willpower Bonus."),
+        ).toEqual({ formula: "2d10+WPB", type: "rending", bonus: 0, penetration: 0 });
+        expect(
+            powerProseDamage("Its attackers suffer Energy Damage equal to the psyker’s Psy Rating."),
+        ).toEqual({
+            formula: "PR",
+            type: "energy",
+            bonus: 0,
+            penetration: 0,
+        });
+        // A penetration in a later sentence is not this damage's.
+        expect(powerProseDamage("It deals 1d10 Impact Damage. The ward has a Pen of 2.")).toEqual({
+            formula: "1d10",
+            type: "impact",
+            bonus: 0,
+            penetration: 0,
+        });
+        expect(powerProseDamage("The target heals 1d5 wounds.")).toBeNull();
+        const glow = entryItem(
+            entry(
+                "GLOW BOLT",
+                [["Focus Power", "Willpower"]],
+                ["Psychic Powers", "Lampcraft"],
+                "The bolt deals 1d10 + Psy Rating Energy Damage with a Pen of 4.",
+            ),
+            "psychicPower",
+        );
+        expect(glow.system["damage"]).toEqual({
+            formula: "1d10+PR",
+            type: "energy",
+            bonus: 0,
+            penetration: 4,
+        });
+        expect(glow.system["isAttack"]).toBe(true);
     });
 
     it("gives powers the discipline an earlier heading under the catalogue names as such", () => {

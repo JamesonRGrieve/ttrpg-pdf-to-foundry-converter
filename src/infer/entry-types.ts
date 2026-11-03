@@ -619,6 +619,79 @@ export function powerAttackProfile(text: string): JsonObject | null {
     return { formula, type, bonus, penetration: /^\d+$/u.test(pen) ? Number(pen) : 0 };
 }
 
+/** The ratings a power's damage may scale with, as the system's formulas name them. */
+const RATING_TERMS: Readonly<Record<string, string>> = {
+    "psy rating": "PR",
+    "willpower bonus": "WPB",
+};
+const RATING_NAMES = String.raw`psy\s+rating|willpower\s+bonus`;
+const RATING = String.raw`(?<rating>${RATING_NAMES})`;
+const DAMAGE_WORD = String.raw`(?<type>energy|impact|rending|explosive)\s+damage`;
+/** "1d10+2 [+ Psy Rating] Energy Damage". */
+const PROSE_DAMAGE = new RegExp(
+    String.raw`(?<dice>\d*d\d+)(?:\s*\+\s*(?<flat>\d+)(?![\d\s]*(?:x|per)))?(?:\s*\+\s*(?:the\s+psyker['’]s\s+|your\s+)?(?<added>${RATING_NAMES}))?\s+${DAMAGE_WORD}`,
+    "iu",
+);
+/** "Energy Damage equal to the psyker's Psy Rating". */
+const RATING_DAMAGE = new RegExp(
+    String.raw`${DAMAGE_WORD}\s+equal\s+to\s+(?:the\s+psyker['’]s\s+|your\s+)?${RATING}`,
+    "iu",
+);
+/** "+2 per point of Psy Rating", "plus 2 additional points of Damage per point of your Willpower Bonus". */
+const PER_RATING = new RegExp(
+    String.raw`^[^.]*?(?:\+|\bplus\s+)\s*(?<per>\d+)\s+(?:additional\s+)?(?:points?\s+of\s+)?(?:damage\s+)?per\s+(?:point\s+of\s+)?(?:(?:your|effective|the\s+psyker['’]s)\s+)*${RATING}`,
+    "iu",
+);
+/** "with a Pen of 4", "with Pen 0", "a Penetration of 2". */
+const PROSE_PEN = /^[^.]*?\bpen(?:etration)?\s+(?:of\s+)?(?<pen>\d+)\b/iu;
+
+/**
+ * A power's damage stated in its text rather than a profile box ("deals
+ * 1d10+2 Energy Damage, +2 per point of Psy Rating, with a Pen of 0"): the
+ * dice and rating terms are the formula ("1d10+2xPR"), a whole-number term
+ * the bonus, the damage word the type, and a whole-number penetration in the
+ * same sentence the penetration — read as `powerAttackProfile` reads a box.
+ * Null when the text states no typed damage.
+ */
+export function powerProseDamage(text: string): JsonObject | null {
+    const dice = PROSE_DAMAGE.exec(text);
+    const rated = dice === null ? RATING_DAMAGE.exec(text) : null;
+    const m = dice ?? rated;
+    const type = m?.groups?.["type"]?.toLowerCase();
+    if (m === null || type === undefined) {
+        return null;
+    }
+    const rest = text.slice(m.index + m[0].length);
+    const term = (name: string | undefined): string | undefined =>
+        name === undefined ? undefined : RATING_TERMS[name.toLowerCase().replace(/\s+/gu, " ")];
+    const terms: string[] = [];
+    if (dice !== null) {
+        terms.push((dice.groups?.["dice"] ?? "").toLowerCase());
+        const added = term(dice.groups?.["added"]);
+        const per = PER_RATING.exec(rest);
+        const scaled = term(per?.groups?.["rating"]);
+        if (added !== undefined) {
+            terms.push(added);
+        } else if (per !== null && scaled !== undefined) {
+            const n = Number(per.groups?.["per"]);
+            terms.push(n === 1 ? scaled : `${n}x${scaled}`);
+        }
+    } else {
+        const rating = term(rated?.groups?.["rating"]);
+        if (rating === undefined) {
+            return null;
+        }
+        terms.push(rating);
+    }
+    const pen = PROSE_PEN.exec(rest)?.groups?.["pen"];
+    return {
+        formula: terms.join("+"),
+        type,
+        bonus: Number(dice?.groups?.["flat"] ?? 0),
+        penetration: pen === undefined ? 0 : Number(pen),
+    };
+}
+
 /** A characteristic key from a printed name or abbreviation, or null. */
 function characteristicKey(name: string): string | null {
     return CHARACTERISTICS[name.toLowerCase().replace(/\s+/gu, " ").trim()] ?? null;
@@ -960,6 +1033,12 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             }
             // A power's attack profile ("RNG … DMG 1D10+2+PR (E) PEN 2") is its damage.
             const attack = powerAttackProfile([entry.body, ...entry.fields.map(([, v]) => v)].join(" "));
+            // With no profile, the damage its text states (a power whose
+            // text names damage need not be an attack: it may arm a weapon).
+            const stated = attack === null ? powerProseDamage(text("effect") ?? entry.body) : null;
+            if (stated !== null) {
+                system["damage"] = stated;
+            }
             if (attack !== null) {
                 system["damage"] = attack;
                 system["isAttack"] = true;
