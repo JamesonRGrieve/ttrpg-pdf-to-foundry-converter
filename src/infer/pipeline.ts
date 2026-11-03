@@ -1467,6 +1467,89 @@ export function gearRuns(
     return out;
 }
 
+/** Fewest entries that establish a catalogue by the headings each repeats. */
+const MIN_CATALOGUE_ENTRIES = 3;
+
+/** Lower-case words of a heading, its case and spacing as the text layer left them aside. */
+const headingWords = (text: string): string[] =>
+    text
+        .toLowerCase()
+        .split(/[^\p{L}]+/u)
+        .filter(Boolean);
+
+/**
+ * A section whose name closes on a plural noun ("Profane Objects") and whose
+ * every direct entry — three or more, set alike, with no fields and no kind
+ * of their own — heads the same heading naming that noun in the singular
+ * ("Using the Object") catalogues things of that kind, one to an entry: the
+ * book refers to each as "the object". A thing a book catalogues in prose
+ * with no stats is gear. Returns `kinds` with those entries added.
+ */
+export function catalogueGear(
+    entries: readonly Entry[],
+    kinds: ReadonlyMap<Entry, ItemType>,
+): Map<Entry, ItemType> {
+    const out = new Map(kinds);
+    const pathOf = (entry: Entry): string[] => [...entry.sections, entry.heading.text];
+    const within = (inner: readonly string[], outer: readonly string[]): boolean =>
+        inner.length > outer.length && outer.every((s, i) => inner[i] === s);
+    /** Each entry's own headings: those that follow it nested inside it. */
+    const ownHeadings = (i: number): Set<string> => {
+        const path = pathOf(entries[i] as Entry);
+        const own = new Set<string>();
+        for (let j = i + 1; j < entries.length; j += 1) {
+            const next = entries[j] as Entry;
+            if (!within(pathOf(next), path)) {
+                break;
+            }
+            own.add(headingWords(next.heading.text).join(" "));
+        }
+        return own;
+    };
+    const sections = new Map<string, number[]>();
+    entries.forEach((entry, i) => {
+        const key = entry.sections.join("\u0000");
+        sections.set(key, [...(sections.get(key) ?? []), i]);
+    });
+    for (const members of sections.values()) {
+        const [first] = members;
+        const head = first === undefined ? undefined : entries[first];
+        const noun = head === undefined ? undefined : headingWords(head.sections.at(-1) ?? "").at(-1);
+        if (head === undefined || noun === undefined || !/^\p{L}{3,}s$/u.test(noun) || noun.endsWith("ss")) {
+            continue;
+        }
+        const singular = noun.slice(0, -1);
+        // Set at one size (a title within may be set in italics), and none
+        // naming the kind itself ("Chapter Advances" under "Advances"): such
+        // a heading is about the kind, not one of it.
+        const plain = members.every((i) => {
+            const entry = entries[i] as Entry;
+            const words = headingWords(entry.heading.text);
+            return (
+                !kinds.has(entry) &&
+                entry.fields.length === 0 &&
+                entry.heading.size === head.heading.size &&
+                !words.includes(noun) &&
+                !words.includes(singular)
+            );
+        });
+        if (!plain || members.length < MIN_CATALOGUE_ENTRIES) {
+            continue;
+        }
+        const owns = members.map(ownHeadings);
+        const shared = [...(owns[0] ?? [])].filter(
+            (text) => text.split(" ").includes(singular) && owns.every((own) => own.has(text)),
+        );
+        if (shared.length === 0) {
+            continue;
+        }
+        for (const i of members) {
+            out.set(entries[i] as Entry, "gear");
+        }
+    }
+    return out;
+}
+
 function extractEntries(
     entries: readonly Entry[],
     out: EntityCollector,
@@ -1487,7 +1570,7 @@ function extractEntries(
         }
     });
     const unclaimed = entries.filter((entry) => !vehicles.has(entry) && !ships.has(entry));
-    const kinds = gearRuns(unclaimed, siblingKinds(unclaimed, entryType));
+    const kinds = catalogueGear(unclaimed, gearRuns(unclaimed, siblingKinds(unclaimed, entryType)));
     const typed = entries.flatMap((entry) => {
         const type = kinds.get(entry);
         return type === undefined ? [] : [{ entry, type }];

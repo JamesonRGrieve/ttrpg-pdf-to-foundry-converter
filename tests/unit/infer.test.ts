@@ -105,6 +105,7 @@ import {
     modalHeadingSizes,
     carriedSections,
     continuedTables,
+    catalogueGear,
     dropCreatureGear,
     gearRuns,
     headedProse,
@@ -1542,6 +1543,50 @@ describe("entry typing", () => {
         const otherwise = [tonic, caption, salts];
         const few = new Map<Entry, ItemType>(otherwise.map((e) => [e, "gear"]));
         expect([...gearRuns(otherwise, few).keys()]).toEqual([tonic]);
+    });
+
+    it("reads a section's entries that each head a heading naming its kind as gear", () => {
+        const at = (text: string, sections: string[], size = 10.5): Entry => ({
+            heading: { text, size, style: `s|${size}|normal`, pageIndex: 0 },
+            sections,
+            fields: [],
+            body: "Text.",
+        });
+        const catalogue = (section: string, names: string[], own: string[]): Entry[] =>
+            names.flatMap((name) => [
+                at(name, ["Armoury", section]),
+                ...own.map((o) => at(o, ["Armoury", section, name], 8.5)),
+            ]);
+        const objects = catalogue(
+            "WICK OBJECTS",
+            ["Lamp Box", "Glow Cup", "Wick Stone"],
+            ["SEEKING IT", "using the OBJECT"],
+        );
+        const added = catalogueGear(objects, new Map());
+        expect(objects.filter((e) => added.get(e) === "gear").map((e) => e.heading.text)).toEqual([
+            "Lamp Box",
+            "Glow Cup",
+            "Wick Stone",
+        ]);
+        // Fewer than three, a heading naming no kind, or one missing it: no catalogue.
+        expect(catalogueGear(objects.slice(0, 6), new Map()).size).toBe(0);
+        expect(
+            catalogueGear(catalogue("WICK OBJECTS", ["A", "B", "C"], ["SEEKING IT"]), new Map()).size,
+        ).toBe(0);
+        const gap = catalogue("WICK OBJECTS", ["Lamp Box", "Glow Cup"], ["USING THE OBJECT"]);
+        expect(catalogueGear([...gap, at("Wick Stone", ["Armoury", "WICK OBJECTS"])], new Map()).size).toBe(
+            0,
+        );
+        // Entries naming the kind itself are about it ("Lamp Advances" under "Advances").
+        const advances = catalogue(
+            "ADVANCES",
+            ["Lamp Advances", "Glow Advances", "Wick Advances"],
+            ["ADVANCE COST"],
+        );
+        expect(catalogueGear(advances, new Map()).size).toBe(0);
+        // An entry with a kind of its own, or fields, is no plain catalogue entry.
+        const typed = new Map<Entry, ItemType>([[objects[0] as Entry, "talent"]]);
+        expect(catalogueGear(objects, typed).get(objects[3] as Entry)).toBeUndefined();
     });
 
     it("drops gear read from a heading that introduces a creature's statblock", () => {
