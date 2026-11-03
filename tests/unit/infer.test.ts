@@ -109,6 +109,7 @@ import {
     siblingKinds,
     singularKey,
     type TableRecord,
+    distinguishRepeats,
     withSubProfiles,
 } from "../../src/infer/pipeline.ts";
 import { mergeContinuationRows } from "../../src/infer/row-merge.ts";
@@ -183,6 +184,34 @@ describe("splitNumberFromText", () => {
         expect(splitNumberFromText("Head, Body", ["locations", "armourPoints"])).toBeNull();
         expect(splitNumberFromText("4 6", ["clip", "penetration"])).toBeNull();
         expect(splitNumberFromText("Head 4", ["locations"])).toBeNull();
+    });
+});
+
+describe("distinguishRepeats", () => {
+    const record = (name: string, itemType: TableRecord["itemType"], cells: RowCells): TableRecord => ({
+        name,
+        itemType,
+        cells,
+        mapped: mapRow(itemType, cells),
+    });
+
+    it("names a record a table repeats with other values by the first cell that differs", () => {
+        const out = distinguishRepeats([
+            record("Wick Lamp", "shipComponent", { name: "Wick Lamp", hullTypes: "Small", space: "1" }),
+            record("Wick Lamp", "shipComponent", { name: "Wick Lamp", hullTypes: "Large", space: "2" }),
+            record("Oil Lamp", "shipComponent", { name: "Oil Lamp", hullTypes: "Small", space: "1" }),
+            record("Oil Lamp", "shipComponent", { name: "Oil Lamp", hullTypes: "Small", space: "1" }),
+            record("Lamp Gun", "weapon", { name: "Lamp Gun", range: "10m" }),
+            record("Lamp Gun", "weapon", { name: "Lamp Gun", range: "20m" }),
+        ]);
+        expect(out.map((r) => r.name)).toEqual([
+            "Wick Lamp",
+            "Wick Lamp (Large)",
+            "Oil Lamp",
+            "Oil Lamp",
+            "Lamp Gun",
+            "Lamp Gun",
+        ]);
     });
 });
 

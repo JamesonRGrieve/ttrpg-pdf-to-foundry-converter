@@ -686,7 +686,7 @@ function extractTables(
         }
         // A row keyed by a roll is a result the table points to, not where the item is catalogued.
         const rolled = roles.some((r) => r?.includes("roll") === true);
-        for (const { name, itemType, mapped } of withSubProfiles(records)) {
+        for (const { name, itemType, mapped } of withSubProfiles(distinguishRepeats(records))) {
             out.add(
                 "Item",
                 itemSegment(itemType),
@@ -741,6 +741,37 @@ export interface TableRecord {
     itemType: ItemType;
     cells: RowCells;
     mapped: RowMapping;
+}
+
+/**
+ * A record a table repeats under the same name with other values (a
+ * component's figures for each hull size, a row per size) is another record
+ * of that thing: each repeat is named by the first cell that differs from the
+ * name's first row ("Wick Lamp (Large)"), so it is not merged into the first.
+ * A weapon's repeated rows are its profiles (`withSubProfiles`) and keep their
+ * name; an identical repeat stays a duplicate.
+ */
+export function distinguishRepeats(records: readonly TableRecord[]): TableRecord[] {
+    const first = new Map<string, TableRecord>();
+    return records.map((record) => {
+        const key = nameKey(record.name);
+        const base = first.get(key);
+        if (base === undefined) {
+            first.set(key, record);
+            return record;
+        }
+        if (record.itemType === "weapon") {
+            return record;
+        }
+        const differing = (Object.keys(record.cells) as (keyof RowCells)[]).find(
+            (role) =>
+                role !== "name" &&
+                (record.cells[role] ?? "").trim() !== "" &&
+                record.cells[role]?.trim() !== base.cells[role]?.trim(),
+        );
+        const value = differing === undefined ? undefined : record.cells[differing]?.trim();
+        return value === undefined ? record : { ...record, name: `${record.name} (${value})` };
+    });
 }
 
 /** A sub-row's name: its weapon's name, then the profile's label in brackets. */
