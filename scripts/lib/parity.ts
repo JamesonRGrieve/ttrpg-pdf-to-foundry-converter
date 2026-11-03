@@ -652,9 +652,12 @@ const emptyType = (): TypeReport => ({
  *   "Kind: Subject" form of a caption printed "Subject Kind");
  * - `suffix`: the reference name ends with the whole output name (an editor's
  *   prefix such as a faction); the output name must be one candidate only;
- * - `fuzzy`: name keys within a small edit distance (a misread name).
+ * - `fuzzy`: name keys within a small edit distance (a misread name);
+ * - `prefix`: the output name ends with the whole reference name in whole
+ *   words (a printed prefix the editor dropped: a chapter titled "Order
+ *   Lamplighter" kept as "Lamplighter"); one candidate each way.
  */
-export type MatchTier = "exact" | "qualifier" | "words" | "suffix" | "fuzzy";
+export type MatchTier = "exact" | "qualifier" | "words" | "suffix" | "prefix" | "fuzzy";
 
 /** Levenshtein distance, stopping early once it exceeds `max`. */
 export function editDistance(a: string, b: string, max: number): number {
@@ -769,6 +772,43 @@ export function matchDocuments(
         }
         if (best !== undefined && !tie) {
             take(key, best, "fuzzy");
+        }
+    }
+    // The reverse of `suffix`, last: the output name ends with the reference's
+    // whole name in whole words — a printed prefix the editor dropped. One
+    // candidate each way.
+    const words = (name: string): string[] =>
+        name
+            .normalize("NFD")
+            .replace(/\p{M}+/gu, "")
+            .toLowerCase()
+            .split(/[^\p{L}\p{N}]+/u)
+            .filter((w) => w !== "");
+    const endsWithWords = (long: string[], short: string[]): boolean =>
+        short.length > 0 &&
+        long.length > short.length &&
+        short.every((w, i) => long[long.length - short.length + i] === w);
+    const prefixed = new Map<string, string[]>();
+    for (const key of pending()) {
+        const want = words(String(ref.get(key)?.["name"] ?? ""));
+        if (want.join("").length < 4) {
+            continue;
+        }
+        prefixed.set(
+            key,
+            free(typeOf(key)).filter((k) => endsWithWords(words(String(out.get(k)?.["name"] ?? "")), want)),
+        );
+    }
+    const claims = new Map<string, number>();
+    for (const hits of prefixed.values()) {
+        for (const k of hits) {
+            claims.set(k, (claims.get(k) ?? 0) + 1);
+        }
+    }
+    for (const [key, hits] of prefixed) {
+        const only = hits[0];
+        if (hits.length === 1 && only !== undefined && claims.get(only) === 1) {
+            take(key, only, "prefix");
         }
     }
     return result;

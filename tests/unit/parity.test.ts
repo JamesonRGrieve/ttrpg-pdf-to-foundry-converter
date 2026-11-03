@@ -242,6 +242,32 @@ describe("scoreBook", () => {
         expect(p.types["npc"]?.fields["name"]).toEqual({ checks: 2, score: 1 });
     });
 
+    it("matches an output name ending with the reference's whole name, last and one candidate each way", () => {
+        const p = scoreBook(
+            [
+                { name: "Lamplighter", type: "originPath", system: {} },
+                { name: "Wick Keeper", type: "originPath", system: {} },
+                { name: "Glow", type: "npc", system: {} },
+                { name: "Light Wick Coat", type: "armour", system: {} },
+                { name: "Wick Coat", type: "armour", system: {} },
+            ],
+            [
+                { name: "Order Lamplighter", type: "originPath", system: {} },
+                { name: "Order Wick Keeper", type: "originPath", system: {} },
+                // Two outputs end with one name: neither is taken.
+                { name: "Red Glow", type: "npc", system: {} },
+                { name: "Blue Glow", type: "npc", system: {} },
+                // A misread name is matched first.
+                { name: "Light Wick Cot", type: "armour", system: {} },
+            ],
+            "dh2",
+        );
+        expect(p.types["originPath"]?.tiers).toEqual({ prefix: 2 });
+        expect(p.types["npc"]?.matched).toBe(0);
+        expect(p.types["armour"]?.tiers).toEqual({ fuzzy: 1 });
+        expect(p.types["armour"]?.missing).toEqual(["Wick Coat"]);
+    });
+
     it("matches the same words in another order", () => {
         const p = scoreBook(
             [{ name: "Effects: Glow – Arm", type: "RollTable", system: {} }],
