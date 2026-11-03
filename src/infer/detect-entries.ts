@@ -564,9 +564,14 @@ export function setApartValueX(line: TextLine): number | null {
     return value.x - (label.x + label.width) > SET_APART_GAP_FACTOR * value.size ? value.x : null;
 }
 
-/** A field value ending mid-list — on a separator or conjunction — continues on the next line. */
+/**
+ * A field value ending mid-list — on a separator or conjunction — or
+ * mid-phrase, on an article or preposition ("the Navigator makes an"),
+ * continues on the next line.
+ */
 export function valueUnfinished(value: string): boolean {
-    return /(?:[,;&–-]|\b(?:and|or))\s*$/iu.test(value);
+    const lastWord = /(?<!\p{L})\p{L}+\s*$/u.exec(value)?.[0].trim() ?? "";
+    return /(?:[,;&–-]|\b(?:and|or))\s*$/iu.test(value) || FUNCTION_WORDS.has(lastWord);
 }
 
 /** A value ending on a full stop (or other sentence end) is complete, whatever the line's length. */

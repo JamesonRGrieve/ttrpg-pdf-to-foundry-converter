@@ -3252,6 +3252,13 @@ describe("entry fields", () => {
         expect(valueUnfinished("Fervour")).toBe(false);
     });
 
+    it("treats a value breaking off on an article or preposition as wrapped", () => {
+        expect(valueUnfinished("As a Full Action, the lamp makes an")).toBe(true);
+        expect(valueUnfinished("He glows for a number of")).toBe(true);
+        // A name's capital letter is no article.
+        expect(valueUnfinished("Lamp Class A")).toBe(false);
+    });
+
     it("treats a value ending a sentence as complete", () => {
         expect(endsSentence("Agility 40, Acrobatics.")).toBe(true);
         expect(endsSentence("the lamp.”")).toBe(true);
