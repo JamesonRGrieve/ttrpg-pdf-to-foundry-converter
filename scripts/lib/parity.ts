@@ -364,9 +364,10 @@ function normScalar(v: Json): string {
 }
 
 /**
- * A structured member without its `uuid` link keys: a link names a document
- * of the reference's own packs, which a conversion of one PDF never knows; the
- * member's printed fields (name, specialisation, rank) are what agree or not.
+ * A structured member without its links: a `uuid` key, or any key holding a
+ * link (an origin prerequisite's `key`), names a document of the reference's
+ * own packs, which a conversion of one PDF never knows; the member's printed
+ * fields (name, specialisation, rank, kind) are what agree or not.
  */
 export function withoutLinks(v: Json): Json {
     if (Array.isArray(v)) {
@@ -375,7 +376,7 @@ export function withoutLinks(v: Json): Json {
     if (isObject(v)) {
         return Object.fromEntries(
             Object.entries(v)
-                .filter(([k]) => k !== "uuid")
+                .filter(([k, x]) => k !== "uuid" && !(typeof x === "string" && COMPENDIUM_LINK.test(x)))
                 .map(([k, x]) => [k, withoutLinks(x ?? null)]),
         );
     }

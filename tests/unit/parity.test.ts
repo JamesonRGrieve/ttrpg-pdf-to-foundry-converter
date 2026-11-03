@@ -83,6 +83,27 @@ describe("leafScore", () => {
         ).toBe(1);
         expect(leafScore([{ name: "Glow Lore", uuid: "Compendium.x" }], [{ name: "Wick Lore" }])).toBe(0);
     });
+
+    it("compares a member naming another document by a link under any key without the link", () => {
+        expect(
+            leafScore(
+                [
+                    { type: "characteristic", key: "willpower", value: 40 },
+                    { type: "notOrigin", key: "Compendium.x.y.Item.abc" },
+                ],
+                [
+                    { type: "characteristic", key: "willpower", value: 40 },
+                    { type: "notOrigin", key: "Compendium.mod.z.Item.def" },
+                ],
+            ),
+        ).toBe(1);
+        expect(
+            leafScore(
+                [{ type: "origin", key: "Compendium.x.y.Item.abc" }],
+                [{ type: "notOrigin", key: "Compendium.x" }],
+            ),
+        ).toBe(0);
+    });
 });
 
 describe("leaves", () => {
