@@ -2969,6 +2969,36 @@ describe("entry detection", () => {
         ]);
     });
 
+    it("joins a section heading wrapped across columns under a table to its second line", () => {
+        const right = (r: IRTextRun): IRTextRun => ({ ...r, x: 330, column: 1 });
+        const header: IRTextRun = { ...run("Glow Effect", 265, "b", 10), weight: "bold" };
+        const row = run(body, 250, "b", 10);
+        const ir = irOf(
+            [0],
+            [
+                run("OLD RULES", 700, "h", 18),
+                run(body, 680, "b", 10),
+                run("GLOW AND SPECIAL", 300, "h", 18),
+                run("Table 1-2: Effects of Glow", 280, "h", 11),
+                header,
+                row,
+                right(run("DAMAGE", 700, "h", 18)),
+                right(run(body, 680, "b", 10)),
+                right(run("SEARED", 660, "h", 12)),
+                right(run(body, 640, "b", 10)),
+            ],
+        );
+        const entries = detectEntries(ir, new Set([header, row]));
+        expect(entries.map((e) => e.heading.text)).not.toContain("DAMAGE");
+        const joined = entries.find((e) => e.heading.text === "GLOW AND SPECIAL DAMAGE");
+        expect(joined?.body).toBe(body);
+        // Text between the two lines (here the table read as text) is no wrap.
+        expect(detectEntries(ir, new Set()).map((e) => e.heading.text)).toContain("DAMAGE");
+        expect(entries.find((e) => e.heading.text === "SEARED")?.sections).toEqual([
+            "GLOW AND SPECIAL DAMAGE",
+        ]);
+    });
+
     it("reads a line sharing a baseline with a table's runs without them", () => {
         // A table header's second line ("Time") on the heading's baseline, and a
         // table cell on a field's.

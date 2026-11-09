@@ -876,6 +876,10 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
     const entries: Entry[] = [];
     const stack: Heading[] = [];
     let current: Entry | null = null;
+    /** The open entry's (last) heading line. */
+    let headingLine: TextLine | null = null;
+    /** The last line read that is no table caption. */
+    let lastText: TextLine | null = null;
     let lastFieldWrapped = false;
     /** The line a field value last ended on, while nothing else has followed it. */
     let lastFieldLine: TextLine | null = null;
@@ -981,7 +985,11 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         }
         const heading = headingOf(line, body, marginal(line), headingFaces);
         const prevLine = previous;
+        const prevText = lastText;
         previous = line;
+        if (!marginal(line)) {
+            lastText = line;
+        }
         if (heading !== null && current !== null && prevLine !== null) {
             const open: Entry = current;
             // A heading line straight under a heading line of the same style,
@@ -997,8 +1005,21 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
                 prevLine.column === line.column &&
                 prevLine.y - line.y <=
                     (bracketOpen ? OPEN_HEADING_WRAP_FACTOR : HEADING_WRAP_FACTOR) * heading.size;
-            if (wrappedHeading) {
+            // A heading line opening the next column on the page, set like a
+            // heading line that closed the column before with nothing after it
+            // but a table (its runs no text), a caption or the page's margin
+            // (a folio), is that heading wrapped across the columns under its
+            // table.
+            const wrappedAcross =
+                open.fields.length === 0 &&
+                open.heading.style === heading.style &&
+                prevText !== null &&
+                headingLine === prevText &&
+                prevText.pageIndex === line.pageIndex &&
+                prevText.column + 1 === line.column;
+            if (wrappedHeading || wrappedAcross) {
                 open.heading.text = `${open.heading.text} ${heading.text}`;
+                headingLine = line;
                 continue;
             }
         }
@@ -1008,6 +1029,7 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
                 stack.pop();
             }
             current = { heading, sections: stack.map((h) => h.text), fields: [], body: "" };
+            headingLine = line;
             stack.push(heading);
             lastFieldWrapped = false;
             lastFieldLine = null;
