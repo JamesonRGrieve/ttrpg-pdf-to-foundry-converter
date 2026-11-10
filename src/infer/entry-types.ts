@@ -1075,6 +1075,17 @@ export const BULLETED_RULE = /•\s*(?<name>[^:•\n]{2,60}?):\s*(?<rules>[^•]
 const ARMOUR_SUB_SYSTEMS = /\barmou?rs?\s+sub-?\s*systems?\b/iu;
 
 /**
+ * The nearest enclosing section naming a list of armour modifications ("Power
+ * Armour Customization", "… Armour Sub-systems"), whose words may name the
+ * armour type its modifications fit.
+ */
+export function armourModificationSection(sections: readonly string[]): string | undefined {
+    return [...sections]
+        .reverse()
+        .find((s) => typeNamedBy(s) === "armourModification" || ARMOUR_SUB_SYSTEMS.test(s));
+}
+
+/**
  * Bulleted `• Name: rules` items in a heading's prose under (or naming) a
  * section of an armour's sub-systems are armour modifications of their own:
  * each is read out after the heading, its rules (to the paragraph's end) its

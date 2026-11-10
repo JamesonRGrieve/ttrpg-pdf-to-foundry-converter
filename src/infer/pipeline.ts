@@ -26,6 +26,7 @@ import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import {
     applyFocusSkillCharacteristics,
+    armourModificationSection,
     CHARACTERISTICS,
     entryItem,
     entryType,
@@ -1619,7 +1620,10 @@ function extractEntries(
             out.usedWith.set(nameKey(item.name), usedWith);
         }
         // An armour modification's `Used With` names the armour types it fits.
-        const fits = usedWith === undefined ? [] : usedWithArmourTypes(usedWith);
+        // Else the section listing it may name the type ("Power Armour Customization").
+        const listing = usedWith === undefined ? armourModificationSection(entry.sections) : undefined;
+        const listed = listing === undefined ? null : parseArmourType(listing);
+        const fits = usedWith !== undefined ? usedWithArmourTypes(usedWith) : listed === null ? [] : [listed];
         if (type === "armourModification" && fits.length > 0 && item.system["restrictions"] === undefined) {
             item.system["restrictions"] = { armourTypes: fits };
         }

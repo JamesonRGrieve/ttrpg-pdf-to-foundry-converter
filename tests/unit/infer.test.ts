@@ -29,6 +29,7 @@ import {
 import { groupByKeyAnchors, joinContinuations, tableBody } from "../../src/infer/detect-titled-tables.ts";
 import {
     activationType,
+    armourModificationSection,
     entryItem,
     entryType,
     focusPowerTest,
@@ -1559,6 +1560,20 @@ describe("entry typing", () => {
         expect(visor?.body).toBe("The wearer sees in the dark.");
         expect(joints?.body).toBe("Movement makes no sound.");
         expect(visor === undefined ? null : entryType(visor)).toBe("armourModification");
+    });
+
+    it("finds the section listing armour modifications, whose words may name the armour they fit", () => {
+        expect(
+            armourModificationSection([
+                "Armoury",
+                "LANTERN ARMOUR CUSTOMIZATION",
+                "Roll Customization Result",
+            ]),
+        ).toBe("LANTERN ARMOUR CUSTOMIZATION");
+        expect(armourModificationSection(["Armoury", "Power Armour Sub-systems"])).toBe(
+            "Power Armour Sub-systems",
+        );
+        expect(armourModificationSection(["Armoury", "Lanterns"])).toBeUndefined();
     });
 
     it("types pacts under a dark pacts section, their boons folded in from the sub-heading", () => {
