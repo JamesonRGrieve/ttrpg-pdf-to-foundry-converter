@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import { type Entry, PARAGRAPH_BREAK } from "./detect-entries.ts";
-import { CHARACTERISTICS } from "./entry-types.ts";
+import { BULLETED_RULE, CHARACTERISTICS } from "./entry-types.ts";
 import { caseLost, FUNCTION_WORDS, readsAsProse, rejoinSplitWords, wordsOf } from "./names.ts";
 import type { OriginStepDef } from "./targets.ts";
 
@@ -1112,9 +1112,6 @@ export function readOriginAbilities(
 export function sameOrigin(a: string, b: string): boolean {
     return letters(a) === letters(b);
 }
-
-/** A bulleted named option: "• Name: rules", up to the next bullet. */
-const BULLETED_RULE = /•\s*(?<name>[^:•\n]{2,60}?):\s*(?<rules>[^•]+)/gu;
 
 /** How far up an entry's sections the step naming it may be (its own section, or its parent's). */
 const STEP_SECTION_DEPTH = 2;

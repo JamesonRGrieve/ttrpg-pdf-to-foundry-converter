@@ -33,6 +33,7 @@ import {
     joinSkillCharacteristics,
     namesGearCategory,
     splitModificationLists,
+    splitSubSystemBullets,
     splitTalentLists,
     typeNamedBy,
     withDisciplines,
@@ -2742,7 +2743,9 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
     const entries = extractEntries(
         withDisciplines(
-            splitModificationLists(splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected)))),
+            splitSubSystemBullets(
+                splitModificationLists(splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected)))),
+            ),
         ),
         out,
         descriptions,

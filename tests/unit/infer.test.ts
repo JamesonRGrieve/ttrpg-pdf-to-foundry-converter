@@ -45,6 +45,7 @@ import {
     printedDiscipline,
     skillSpecialisations,
     splitModificationLists,
+    splitSubSystemBullets,
     splitTalentLists,
     structuredPrerequisites,
     typeNamedBy,
@@ -1530,6 +1531,34 @@ describe("entry typing", () => {
                 ["Lanterns"],
             ),
         ).toBe(1);
+    });
+
+    it("reads bulleted named parts under an armour sub-systems section into modifications", () => {
+        const split = splitSubSystemBullets([
+            entry(
+                "Lantern Armour Sub-systems",
+                [],
+                ["Armoury"],
+                "The following can be part of a suit: • Glow Visor: The wearer sees in the dark. • Quiet Joints: Movement makes no sound.\n\n175",
+            ),
+            entry(
+                "LANTERN PLATE",
+                [],
+                ["Armoury", "Lantern Armour Sub-systems"],
+                "• Lantern plate is heavy. It weighs 20 kg.",
+            ),
+        ]);
+        expect(split.map((e) => e.heading.text)).toEqual([
+            "Lantern Armour Sub-systems",
+            "Glow Visor",
+            "Quiet Joints",
+            "LANTERN PLATE",
+        ]);
+        const [head, visor, joints] = split;
+        expect(head?.body).toBe("The following can be part of a suit:\n\n175");
+        expect(visor?.body).toBe("The wearer sees in the dark.");
+        expect(joints?.body).toBe("Movement makes no sound.");
+        expect(visor === undefined ? null : entryType(visor)).toBe("armourModification");
     });
 
     it("types pacts under a dark pacts section, their boons folded in from the sub-heading", () => {

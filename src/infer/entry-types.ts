@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Entity, JsonObject, JsonValue } from "../types/entity.ts";
-import type { Entry } from "./detect-entries.ts";
+import { type Entry, PARAGRAPH_BREAK } from "./detect-entries.ts";
 import { identifierFromName } from "./identifiers.ts";
 import { caseLost, cleanName } from "./names.ts";
 import {
@@ -1052,15 +1052,59 @@ export function splitModificationLists(entries: readonly Entry[]): Entry[] {
         const listed = entry.fields.map(([label, value], k): Entry => {
             const ordinal = new RegExp(`\\s${k + 1}\\s`, "gu");
             const numbered = (value.match(ordinal) ?? []).length === 1;
-            return {
-                heading: { ...entry.heading, text: label.trim() },
-                sections: [...entry.sections, entry.heading.text],
-                fields: [],
-                body: numbered ? value.replace(ordinal, " ") : value,
-                listedAs: type,
-            };
+            return listedEntry(entry, label, numbered ? value.replace(ordinal, " ") : value, type);
         });
         return [{ ...entry, fields: [], listHead: true }, ...listed];
+    });
+}
+
+/** One named thing read out of a list under `parent`, as an entry of `type`. */
+function listedEntry(parent: Entry, name: string, body: string, type: ItemType): Entry {
+    return {
+        heading: { ...parent.heading, text: name.trim() },
+        sections: [...parent.sections, parent.heading.text],
+        fields: [],
+        body,
+        listedAs: type,
+    };
+}
+
+/** A bulleted named option: "• Name: rules", up to the next bullet. */
+export const BULLETED_RULE = /•\s*(?<name>[^:•\n]{2,60}?):\s*(?<rules>[^•]+)/gu;
+/** A section or heading naming an armour's sub-systems, the parts a suit may carry. */
+const ARMOUR_SUB_SYSTEMS = /\barmou?rs?\s+sub-?\s*systems?\b/iu;
+
+/**
+ * Bulleted `• Name: rules` items in a heading's prose under (or naming) a
+ * section of an armour's sub-systems are armour modifications of their own:
+ * each is read out after the heading, its rules (to the paragraph's end) its
+ * text, and leaves the heading's prose. Bullets whose labels name nothing
+ * (prose before a colon) stay.
+ */
+export function splitSubSystemBullets(entries: readonly Entry[]): Entry[] {
+    return entries.flatMap((entry) => {
+        if (![entry.heading.text, ...entry.sections].some((t) => ARMOUR_SUB_SYSTEMS.test(t))) {
+            return [entry];
+        }
+        const items = [...entry.body.matchAll(BULLETED_RULE)].flatMap((m) => {
+            const name = m.groups?.["name"]?.trim() ?? "";
+            const rules =
+                (m.groups?.["rules"] ?? "").split(PARAGRAPH_BREAK)[0]?.replace(/\s+/gu, " ").trim() ?? "";
+            return NAMING_LABEL.test(name) && /\p{Ll}/u.test(name) && rules.length > 0
+                ? [{ name, rules, whole: `${m[0].split(PARAGRAPH_BREAK)[0] ?? ""}` }]
+                : [];
+        });
+        if (items.length === 0) {
+            return [entry];
+        }
+        const body = items
+            .reduce((text, i) => text.replace(i.whole, ""), entry.body)
+            .replace(/[ \t]+(?=\n)/gu, "")
+            .trim();
+        return [
+            { ...entry, body },
+            ...items.map((i) => listedEntry(entry, i.name, i.rules, "armourModification")),
+        ];
     });
 }
 
