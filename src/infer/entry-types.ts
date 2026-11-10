@@ -65,7 +65,7 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bforce fields?\b/iu, "forceField"],
     [/\bammunition\b|\bammo\b/iu, "ammunition"],
     [/\bweapons? (?:modifications?|upgrades?|customi[sz]ations?)\b/iu, "weaponModification"],
-    [/\barmou?rs? (?:modifications?|upgrades?)\b/iu, "armourModification"],
+    [/\barmou?rs? (?:modifications?|upgrades?|customi[sz]ations?)\b/iu, "armourModification"],
     // "Weapon Qualities", "Weapon Special Qualities" (a text layer may drop the space).
     [/\bweapons?\s*(?:special\s*)?qualit(?:y|ies)\b/iu, "weaponQuality"],
     [/\borders\b/iu, "order"],
@@ -336,6 +336,9 @@ const ACTION_TYPE = /^\s*[\p{L}-]+\s+action\s*$/iu;
 export function entryType(entry: Entry): ItemType | null {
     if (entry.listedAs !== undefined) {
         return entry.listedAs;
+    }
+    if (entry.listHead === true) {
+        return null;
     }
     const fields = fieldMap(entry);
     // A creature's statblock lists its skills beside its talents or traits;
@@ -1002,6 +1005,62 @@ export function splitTalentLists(entries: readonly Entry[]): Entry[] {
             listedAs: "talent",
         }));
         return [{ ...entry, fields: [] }, ...listed];
+    });
+}
+
+/** A modification's own field labels (the schema's): a modification entry, not a list of them. */
+const MODIFICATION_FIELD_LABELS =
+    /^(?:used with|effects?|upgrade(?: type)?|type|cost|availability|weight|wt|craftsmanship|modifiers?|requirements?|special|restrictions?)$/iu;
+/** Fewest named `Name: rules` lines that make a heading a list of modifications. */
+const MIN_LISTED_MODIFICATIONS = 3;
+
+/** The modification kind a heading, or else its nearest section naming a kind, names. */
+function modificationKind(entry: Entry): ItemType | null {
+    for (const text of [entry.heading.text, ...[...entry.sections].reverse()]) {
+        const type = typeNamedBy(text);
+        if (type !== null) {
+            return MODIFICATION_TYPES.has(type) ? type : null;
+        }
+    }
+    return null;
+}
+
+/**
+ * A heading in (or naming) a section of weapon or armour modifications over
+ * nothing but run-in `Name: rules` lines — a table of numbered results, each
+ * row a named modification — lists them: each line is a modification of its
+ * own, its rules its text, read out after the heading, which heads the list
+ * and is none of them. A row's number the text layer set inside its text
+ * ("… When 1 dealing …") is dropped.
+ */
+export function splitModificationLists(entries: readonly Entry[]): Entry[] {
+    return entries.flatMap((entry) => {
+        const labels = entry.fields.map(([label]) => label.trim());
+        const type = modificationKind(entry);
+        const lists =
+            type !== null &&
+            labels.length >= MIN_LISTED_MODIFICATIONS &&
+            labels.every(
+                (label) =>
+                    NAMING_LABEL.test(label) &&
+                    /\p{Ll}/u.test(label) &&
+                    !MODIFICATION_FIELD_LABELS.test(label),
+            );
+        if (!lists) {
+            return [entry];
+        }
+        const listed = entry.fields.map(([label, value], k): Entry => {
+            const ordinal = new RegExp(`\\s${k + 1}\\s`, "gu");
+            const numbered = (value.match(ordinal) ?? []).length === 1;
+            return {
+                heading: { ...entry.heading, text: label.trim() },
+                sections: [...entry.sections, entry.heading.text],
+                fields: [],
+                body: numbered ? value.replace(ordinal, " ") : value,
+                listedAs: type,
+            };
+        });
+        return [{ ...entry, fields: [], listHead: true }, ...listed];
     });
 }
 

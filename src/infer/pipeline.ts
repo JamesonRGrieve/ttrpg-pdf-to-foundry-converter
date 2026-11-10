@@ -32,6 +32,7 @@ import {
     joinPactGroups,
     joinSkillCharacteristics,
     namesGearCategory,
+    splitModificationLists,
     splitTalentLists,
     typeNamedBy,
     withDisciplines,
@@ -2740,7 +2741,9 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
     const entries = extractEntries(
-        withDisciplines(splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected)))),
+        withDisciplines(
+            splitModificationLists(splitTalentLists(joinPactGroups(joinSkillCharacteristics(detected)))),
+        ),
         out,
         descriptions,
     );

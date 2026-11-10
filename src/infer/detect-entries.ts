@@ -97,6 +97,8 @@ export interface Entry {
      * `Name: rules` lines): an entry read out of such a list is one of them.
      */
     listedAs?: ItemType;
+    /** A heading over a list read out into entries of their own: it heads them and is none of them. */
+    listHead?: boolean;
     /**
      * The discipline a heading printed earlier in the power catalogue names
      * as such ("The Lampcraft Discipline"), when one is in force here.

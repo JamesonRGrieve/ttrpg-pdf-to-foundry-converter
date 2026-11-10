@@ -44,6 +44,7 @@ import {
     powerXpCost,
     printedDiscipline,
     skillSpecialisations,
+    splitModificationLists,
     splitTalentLists,
     structuredPrerequisites,
     typeNamedBy,
@@ -1460,6 +1461,74 @@ describe("entry typing", () => {
                     ["Quiet Step", "b"],
                 ]),
             ]).length,
+        ).toBe(1);
+    });
+
+    it("reads a table of named results under an armour customisation section into one modification per row", () => {
+        const sections = ["Armoury", "LANTERN ARMOUR CUSTOMIZATION"];
+        const split = splitModificationLists([
+            entry(
+                "Roll Customization Result",
+                [
+                    ["Glowing Seams", "The suit sheds a dim light. When 1 dark falls it brightens."],
+                    ["Quiet Joints", "Movement in the suit makes no sound."],
+                    ["Warm Lining", "The wearer ignores cold for 4 hours."],
+                ],
+                sections,
+                "A row's tail.",
+            ),
+        ]);
+        expect(split.map((e) => e.heading.text)).toEqual([
+            "Roll Customization Result",
+            "Glowing Seams",
+            "Quiet Joints",
+            "Warm Lining",
+        ]);
+        const [head, first, , third] = split;
+        if (head === undefined || first === undefined || third === undefined) {
+            throw new Error("four entries expected");
+        }
+        expect(entryType(head)).toBeNull();
+        expect(head.fields).toEqual([]);
+        expect(entryType(first)).toBe("armourModification");
+        expect(first.sections).toEqual([...sections, "Roll Customization Result"]);
+        // The row's number set inside its text is dropped; another number stays.
+        expect(first.body).toBe("The suit sheds a dim light. When dark falls it brightens.");
+        expect(third.body).toBe("The wearer ignores cold for 4 hours.");
+    });
+
+    it("keeps a modification heading whose lines are its own fields, or too few, or outside a modification section", () => {
+        const unsplit = (fields: [string, string][], sections: string[]): number =>
+            splitModificationLists([entry("Results", fields, sections)]).length;
+        const section = ["ARMOUR UPGRADES"];
+        expect(
+            unsplit(
+                [
+                    ["Used With", "Any armour"],
+                    ["Effect", "Glows."],
+                    ["Availability", "Rare"],
+                ],
+                section,
+            ),
+        ).toBe(1);
+        expect(
+            unsplit(
+                [
+                    ["Glowing Seams", "a"],
+                    ["Quiet Joints", "b"],
+                ],
+                section,
+            ),
+        ).toBe(1);
+        expect(
+            unsplit(
+                [
+                    ["Glowing Seams", "a"],
+                    ["Quiet Joints", "b"],
+                    ["Warm Lining", "c"],
+                ],
+                ["Lanterns"],
+            ),
         ).toBe(1);
     });
 
