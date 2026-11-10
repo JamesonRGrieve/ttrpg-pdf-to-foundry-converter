@@ -133,6 +133,44 @@ describe("statblock rows", () => {
         expect(block?.blocks.map((b) => b.label)).toEqual(["Wounds", "Talents"]);
     });
 
+    it("reads no statblock from a worked example led in to by running text", () => {
+        const under = (caption: string): number =>
+            detectStatRows(
+                irOf([
+                    run("He rolls again, so his numbers now", 60, 712),
+                    run(caption, 60, 700),
+                    run(LABELS, 60, 680),
+                    run("41 45 46 40 39 42 45 44 38", 60, 668),
+                    run("NEXT HEADING", 60, 640, { size: 12 }),
+                ]),
+            ).length;
+        expect(under("look like this:")).toBe(0);
+        expect(under("Example Profile:")).toBe(0);
+        expect(under("Lamp Warden")).toBe(1);
+        // A caption set in small capitals arrives in lower case: still a name.
+        expect(under("lamp warden profile")).toBe(1);
+    });
+
+    it("reads the panel past a mark recovered from the page image, larger than body text", () => {
+        const panel = (mark: Partial<IRTextRun>): string[] =>
+            detectStatRows(
+                irOf([
+                    run("Lamp Warden", 60, 700, { size: 11 }),
+                    run(LABELS, 60, 680, { size: 11.75 }),
+                    run("30 25 35 - 30 20 35 30 25", 60, 660, { size: 14.75 }),
+                    run("YY", 200, 650, { size: 10.5, ...mark }),
+                    run("Wounds:", 60, 640, bold),
+                    run("12", 100, 640),
+                    ...Array.from({ length: 6 }, (_, i) =>
+                        run("Prose after the statblock.", 60, 600 - 12 * i),
+                    ),
+                ]),
+            )[0]?.blocks.map((b) => b.label ?? "") ?? [];
+        expect(panel({ font: "ocr-recovered" })).toContain("Wounds");
+        // Set in the text layer at that size, the line is a heading: the panel ends at it.
+        expect(panel({})).not.toContain("Wounds");
+    });
+
     it("reads a doubled dash as no characteristic", () => {
         expect(rowValues("40 - 35 35 48 18 40 30 --", 9)).toEqual([40, 0, 35, 35, 48, 18, 40, 30, 0]);
         expect(rowValues("40 --- 35", 3)).toBeNull();

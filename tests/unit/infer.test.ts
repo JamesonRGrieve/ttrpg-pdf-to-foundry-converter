@@ -79,6 +79,7 @@ import {
 import { inferPageNumbering, printedPage } from "../../src/infer/page-numbers.ts";
 import {
     ROLLED_ROW,
+    captionSection,
     citeFirstPage,
     embedNpcItems,
     fitModifications,
@@ -767,6 +768,52 @@ describe("npc statblocks", () => {
         expect(at("7")).toEqual([7, 7, 7, 7, 7, 7]);
         expect(at("None Total TB: 3")).toEqual([0, 0, 0, 0, 0, 0]);
         expect(at("Front 20, Side 18, Rear 12")).toBeNull();
+    });
+
+    it("reads a horde's armour value for a horde, and leaves it out of a creature's own", () => {
+        const body = (line: string, horde: boolean): unknown =>
+            Object(armourOf(line, horde)?.["locations"]).body;
+        expect(body("Wick Robes (All 4, Horde 5)", false)).toBe(4);
+        expect(body("Wick Robes (All 4, Horde 5)", true)).toBe(5);
+        // The only value the line gives covers the creature either way.
+        expect(body("Wick Robes (Horde 5)", false)).toBe(5);
+    });
+
+    it("reads a printed Magnitude as a horde's, in place of wounds", () => {
+        const npc = parseNpc({
+            pageIndex: 0,
+            name: "LAMP MOB",
+            caption: null,
+            bannerNumber: null,
+            labels: [],
+            values: [],
+            associatedText: ["Movement: 3/6/9/18; Magnitude: 34", "Armour: Wick Robes (Horde 5)"],
+            blocks: [],
+        });
+        expect(npc.system["horde"]).toEqual({ enabled: true, magnitude: { max: 34, current: 34 } });
+        expect(npc.system["tier"]).toBe("horde");
+        expect(npc.system["wounds"]).toBeUndefined();
+        expect(npc.system["movement"]).toEqual({ half: 3, full: 6, charge: 9, run: 18 });
+        expect(Object(Object(npc.system["armour"])["locations"]).head).toBe(5);
+    });
+
+    it("finds the heading a statblock's caption follows", () => {
+        const entry = (text: string, pageIndex: number, sections: string[]) => ({
+            heading: { text, size: 10, style: "h", pageIndex },
+            sections,
+            fields: [],
+            body: "",
+        });
+        const entries = [
+            entry("GLIM BEAST", 4, ["Beasts"]),
+            // Captions set near their headings' size are read beside them, not under them.
+            entry("Glim Beast (Elite)", 4, ["Beasts"]),
+            entry("WICK HORROR", 4, ["Beasts"]),
+            entry("Glim Beast (Elite)", 5, ["Beasts"]),
+        ];
+        expect(captionSection(entries, "Glim Beast", 4)?.heading.text).toBe("GLIM BEAST");
+        expect(captionSection(entries, "Glim Beast", 5)?.heading.text).toBe("WICK HORROR");
+        expect(captionSection(entries, "Lamp Warden", 5)).toBeNull();
     });
 
     it("lists a statblock's talents, traits, weapons and gear as bare items", () => {

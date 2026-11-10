@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { OCR_FONT_NAME } from "../ocr/scan-lines.ts";
 import type { IR, IRTextRun } from "../types/ir.ts";
 import { bodyStyle } from "../util/body-style.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
@@ -19,6 +20,12 @@ import type { DetectedNumericGrid } from "./types.ts";
  * characteristic), which some lines' rows print as a tenth.
  */
 const CHARACTERISTIC_LABELS: ReadonlySet<string> = new Set([...SCHEMA_CHAR_ORDER, "inf"]);
+/**
+ * A line leading in to what follows, not a name: it closes on a colon. (A
+ * caption set in small capitals may arrive in lower case, so its case tells
+ * nothing.)
+ */
+const RUNNING_TEXT = /:$/u;
 /** Fewest characteristic labels a row carries. */
 const MIN_ROW_LABELS = 7;
 /** How many label sizes below the labels the values line may sit, and the caption above. */
@@ -280,6 +287,12 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     const sizeOf = (l: TextLine): number => Math.max(...l.runs.map((r) => r.size));
     const sameColumn = (a: TextLine, b: TextLine): boolean =>
         a.pageIndex === b.pageIndex && a.column === b.column;
+    // On a page with a text layer, a line read only from the page image is
+    // lettering the layer lacks (a mark in the art beside the panel); its
+    // size is an estimate and it heads nothing.
+    const recoveredMark = (l: TextLine): boolean =>
+        pages.get(l.pageIndex)?.hasTextLayer === true &&
+        l.runs.every((r) => r.font === OCR_FONT_NAME || r.text.trim().length === 0);
 
     const found: { labels: number; values: number; caption: number; row: string[]; numbers: number[] }[] = [];
     lines.forEach((line, i) => {
@@ -317,8 +330,10 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
                 : labels.filter((l) => l.text.trim().length > 0).map((l) => l.text.trim().toLowerCase());
         const numbers =
             (labels === null ? null : cellValues(labels, below.runs)) ?? rowValues(below.text, row.length);
-        // A caption names the creature; a sentence above a worked example does not.
-        if (numbers !== null && !endsSentence(above.text)) {
+        // A caption names the creature; a sentence above a worked example
+        // does not, nor does the tail of one leading in to it ("… now look
+        // like this:").
+        if (numbers !== null && !endsSentence(above.text) && !RUNNING_TEXT.test(above.text.trim())) {
             found.push({ labels: i, values: valuesAt, caption: i - 1, row, numbers });
         }
     });
@@ -355,7 +370,7 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
                 line === undefined ||
                 previous === undefined ||
                 captions.has(j) ||
-                sizeOf(line) > bodySize + HEADING_STEP
+                (sizeOf(line) > bodySize + HEADING_STEP && !recoveredMark(line))
             ) {
                 break;
             }

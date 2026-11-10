@@ -448,6 +448,47 @@ export function sourceRecord(line: Line, book: string, page: string): JsonObject
     return variant(line, { provenance: "raw", book, page });
 }
 
+/**
+ * The Item rules-content fields the schema authors per line: each is a
+ * variant container keyed by line, which the system's resolver collapses to
+ * the active line.
+ */
+const VARIANT_FIELDS = [
+    "effect",
+    "notes",
+    "category",
+    "consumable",
+    "uses",
+    "duration",
+    "requiredTraining",
+    "exampleDifficulties",
+    "exampleAdditionalUses",
+    "reroll",
+] as const;
+
+/** Whether a value is already keyed by line (or by book within a line). */
+function isLineKeyed(value: JsonValue): boolean {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return false;
+    }
+    const keys = Object.keys(value);
+    return keys.length > 0 && keys.every((k) => k === "__books" || (LINES as readonly string[]).includes(k));
+}
+
+/**
+ * Wrap an Item's per-line rules fields that are still flat in `line`'s
+ * variant container. Readers set several of them flat and later passes read
+ * them so; this is the last step before the document is emitted.
+ */
+export function variantizeRulesFields(system: JsonObject, line: Line): void {
+    for (const field of VARIANT_FIELDS) {
+        const value = system[field];
+        if (value !== undefined && value !== null && !isLineKeyed(value)) {
+            system[field] = variant(line, value);
+        }
+    }
+}
+
 /** Transient owned-item state; shared, never variantized or provenanced. */
 function stateBlock(): JsonObject {
     return { equipped: false, stowed: false, container: "" };

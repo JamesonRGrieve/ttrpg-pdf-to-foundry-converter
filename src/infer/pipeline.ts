@@ -63,6 +63,7 @@ import {
     parseWeaponType,
     splitTrailingClass,
 } from "./notation.ts";
+import { skillKey } from "./npc-skills.ts";
 import {
     listedBase,
     type NpcItem,
@@ -105,6 +106,7 @@ import {
     packName,
     sourceBookLabel,
     toHtml,
+    variantizeRulesFields,
     type ItemType,
     type Line,
 } from "./schema.ts";
@@ -1183,7 +1185,7 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
             .join(""),
     });
     vehicle["items"] = carried;
-    out.add("Actor", CRAFT_SEGMENT[kind], vehicle, entry.heading.pageIndex, "entry:vehicle");
+    out.add("Actor", CRAFT_SEGMENT[kind], vehicle, entry.heading.pageIndex, VEHICLE_BLOCK);
     return true;
 }
 
@@ -2097,6 +2099,29 @@ function nearbyWords(entries: readonly Entry[], pageIndex: number): string[] {
     return wordsOf(near.map((e) => `${e.heading.text} ${e.body}`).join(" "));
 }
 
+/** Block id of a craft read from its profile entry. */
+const VEHICLE_BLOCK = "entry:vehicle";
+
+/** A craft's creature-style profile: the statblock's characteristics, which a craft has no Influence among. */
+export function craftCharacteristics(characteristics: JsonValue | undefined): JsonObject {
+    return isJsonObject(characteristics)
+        ? Object.fromEntries(Object.entries(characteristics).filter(([key]) => key !== "inf"))
+        : {};
+}
+
+/**
+ * The section a statblock's caption closes: the heading read directly before
+ * the caption's own entry on the statblock's page (a creature's heading, its
+ * prose, then its captioned statblock).
+ */
+export function captionSection(entries: readonly Entry[], caption: string, pageIndex: number): Entry | null {
+    const key = nameKey(caption);
+    const own = entries.findLastIndex(
+        (e) => e.heading.pageIndex === pageIndex && nameKey(splitTier(e.heading.text).name) === key,
+    );
+    return own <= 0 ? null : (entries[own - 1] ?? null);
+}
+
 function extractActors(
     ir: IR,
     numeric: readonly DetectedNumericGrid[],
@@ -2112,6 +2137,8 @@ function extractActors(
         npcs.slice(0, numeric.length).map((n) => n.name),
         GRID_BANNER_WORD_SHARE,
     );
+    /** The first statblock read under each name: its characteristics, and whether its section names it. */
+    const signatures = new Map<string, { signature: string; underOwn: boolean }>();
     for (const [i, grid] of grids.entries()) {
         const parsed = npcs[i];
         if (parsed === undefined) {
@@ -2128,7 +2155,6 @@ function extractActors(
             exact === null && grid.caption !== null
                 ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
                 : null;
-        const intro = exact ?? naming;
         // A naming heading may carry the tier the statblock itself does not print.
         // One listing several creatures ("X and Y") introduces this one but
         // names it no more fully than its caption.
@@ -2136,7 +2162,42 @@ function extractActors(
             naming === null || listsCaption(naming.heading.text, caption)
                 ? null
                 : splitTier(naming.heading.text);
-        const name = fromHeading?.name ?? caption;
+        const captioned = fromHeading?.name ?? caption;
+        // Where a section heading names each creature and its statblock's
+        // caption repeats it, a caption printed again over another
+        // creature's characteristics, under another section, is a misprint:
+        // that statblock is the creature of the section it sits in.
+        const signature = JSON.stringify(npc.system["characteristics"]);
+        const under = captionSection(entries, captioned, grid.pageIndex);
+        const underOwn = under !== null && nameKey(splitTier(under.heading.text).name) === nameKey(captioned);
+        const first = signatures.get(nameKey(captioned));
+        const section = first?.underOwn === true && first.signature !== signature && !underOwn ? under : null;
+        const name = section === null ? captioned : cleanName(splitTier(section.heading.text).name);
+        const intro = section ?? exact ?? naming;
+        if (!signatures.has(nameKey(name))) {
+            signatures.set(nameKey(name), { signature, underOwn: section !== null || underOwn });
+        }
+        // A statblock whose panel is a vehicle's profile is that craft's own
+        // (an animate craft rolls its attacks off it): its characteristics
+        // and the talents and traits it lists ride on the craft, and no NPC
+        // is read beside it.
+        if (isVehicleProfile(panelPairs(grid.associatedText.join("\n")))) {
+            const craft = out.entities.find(
+                (e) => e.blockId === VEHICLE_BLOCK && nameKey(String(e.fields["name"])) === nameKey(name),
+            );
+            const craftSystem = craft?.fields["system"];
+            if (craft !== undefined && isJsonObject(craftSystem)) {
+                craftSystem["characteristics"] = craftCharacteristics(npc.system["characteristics"]);
+                const carried = craft.fields["items"];
+                craft.fields["items"] = [
+                    ...(Array.isArray(carried) ? carried : []),
+                    ...npc.items
+                        .filter((item) => item.type === "talent" || item.type === "trait")
+                        .map(bareItem),
+                ];
+                continue;
+            }
+        }
         const tiered =
             fromHeading !== null && fromHeading.tier !== null && npc.system["tier"] === undefined
                 ? { ...npc.system, tier: fromHeading.tier }
@@ -2371,6 +2432,85 @@ export function embedNpcItems(entities: readonly Entity[]): void {
             typeof actor.fields["system"]["weapons"] !== "string"
         ) {
             actor.fields["system"]["weapons"] = { mode: "embedded", simple: [] };
+        }
+    }
+}
+
+/**
+ * A trained skill a statblock lists without its characteristic takes the one
+ * the document itself gives the skill: its own entry for the skill, else the
+ * characteristic the document's statblocks most often print beside it. A
+ * specialisation left without one takes its skill's. A statblock with a
+ * skill the document tags nowhere carries no trained skills of its own.
+ */
+export function fillSkillCharacteristics(entities: readonly Entity[]): void {
+    const rows = (actor: Entity): [string, JsonObject][] => {
+        const system = actor.fields["system"];
+        const trained = isJsonObject(system) ? system["trainedSkills"] : undefined;
+        if (actor.documentType !== "Actor" || !isJsonObject(trained)) {
+            return [];
+        }
+        return Object.entries(trained).flatMap(([key, row]) => {
+            if (!isJsonObject(row)) {
+                return [];
+            }
+            const entries = Array.isArray(row["entries"]) ? row["entries"].filter(isJsonObject) : [];
+            return [
+                [key, row] as [string, JsonObject],
+                ...entries.map((e) => [key, e] as [string, JsonObject]),
+            ];
+        });
+    };
+    const all = entities.flatMap(rows);
+    // The statblocks' own tags, most printed first.
+    const printed = new Map<string, Map<string, number>>();
+    for (const [key, row] of all) {
+        const characteristic = row["characteristic"];
+        if (typeof characteristic === "string" && characteristic.length > 0) {
+            const counts = printed.get(key) ?? new Map<string, number>();
+            printed.set(key, counts.set(characteristic, (counts.get(characteristic) ?? 0) + 1));
+        }
+    }
+    const characteristicOf = new Map<string, string>();
+    for (const [key, counts] of printed) {
+        const [most] = [...counts].sort((a, b) => b[1] - a[1] || byteCompare(a[0], b[0]));
+        if (most !== undefined) {
+            characteristicOf.set(key, most[0]);
+        }
+    }
+    for (const e of entities) {
+        const system = e.fields["system"];
+        const characteristic = isJsonObject(system) ? system["characteristic"] : undefined;
+        if (e.fields["type"] === "skill" && typeof characteristic === "string" && characteristic.length > 0) {
+            characteristicOf.set(skillKey(String(e.fields["name"])), characteristic);
+        }
+    }
+    for (const [key, row] of all) {
+        if (row["characteristic"] === "" && characteristicOf.has(key)) {
+            row["characteristic"] = characteristicOf.get(key) ?? "";
+        }
+    }
+    // A specialisation the document tags nowhere rolls as its skill's own row does.
+    for (const actor of entities) {
+        for (const [, row] of rows(actor)) {
+            const base = row["characteristic"];
+            const entries = Array.isArray(row["entries"]) ? row["entries"].filter(isJsonObject) : [];
+            for (const entry of entries) {
+                if (entry["characteristic"] === "" && typeof base === "string") {
+                    entry["characteristic"] = base;
+                }
+            }
+        }
+    }
+    // The schema authors every skill's characteristic explicitly. A statblock
+    // listing a skill the document tags nowhere keeps only its printed line,
+    // which the system keys on load against its own skill list.
+    for (const actor of entities) {
+        const system = actor.fields["system"];
+        if (isJsonObject(system) && rows(actor).some(([, row]) => row["characteristic"] === "")) {
+            actor.fields["system"] = Object.fromEntries(
+                Object.entries(system).filter(([field]) => field !== "trainedSkills"),
+            );
         }
     }
 }
@@ -2763,6 +2903,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     const entities = consolidate(out.entities, descriptions, headedProse(detected), line);
     applyHeadedRules(entities, headedRules(detected), line);
     embedNpcItems(entities);
+    fillSkillCharacteristics(entities);
     applyDefaultIcons(entities);
     applyIdentifiers(entities);
     applyCuePresets(entities);
@@ -2773,6 +2914,13 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     applyFocusSkillCharacteristics(entities);
     applyOriginPrerequisites(entities, target.originSteps);
     applyOrderTests(entities);
+    // Last: every pass above reads these fields flat.
+    for (const entity of entities) {
+        const system = entity.fields["system"];
+        if (entity.documentType === "Item" && isJsonObject(system)) {
+            variantizeRulesFields(system, line);
+        }
+    }
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );

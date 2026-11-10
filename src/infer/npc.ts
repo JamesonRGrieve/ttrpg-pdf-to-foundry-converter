@@ -3,6 +3,7 @@ import type { JsonObject } from "../types/entity.ts";
 import { diagramArmour, HIT_LOCATIONS, type HitLocation, type LocationArmour } from "./armour-diagram.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
 import { splitTier } from "./names.ts";
+import { listedSkills, skillKey, trainedSkillsOf } from "./npc-skills.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import { panelWeapons } from "./panel-weapons.ts";
 import { mapRow } from "./rows.ts";
@@ -32,6 +33,7 @@ const LABELS: readonly [RegExp, StatField][] = [
     [/\bpsychic\s+powers?\s*:/iu, "psychicPowers"],
     [/\bpsy(?:chic)?\s+rating\s*:/iu, "psyRating"],
     [/\bfate\s+points?\s*:/iu, "fate"],
+    [/\bmagnitude\s*:/iu, "magnitude"],
 ];
 
 type StatField =
@@ -47,7 +49,8 @@ type StatField =
     | "cybernetics"
     | "psychicPowers"
     | "psyRating"
-    | "fate";
+    | "fate"
+    | "magnitude";
 
 /** An Item a statblock lists, before it is resolved against the document's own Items. */
 export interface NpcItem {
@@ -176,6 +179,9 @@ const LOCATION_WORDS: readonly [RegExp, readonly HitLocation[]][] = [
 const ARMOUR_TOKEN =
     /(?<points>\d+)|\b(?<except>except|but)\b|\b(?<where>all(?:\s+locations)?|head|body|chest|(?:left\s+|right\s+)?(?:arms?|legs?))\b/giu;
 
+/** A location word of the creature's own armour. */
+const OWN_LOCATION = /\b(?:all|head|body|chest|arms?|legs?)\b/iu;
+
 const locationsOf = (phrase: string): readonly HitLocation[] =>
     LOCATION_WORDS.find(([re]) => re.test(phrase.trim().replace(/\s+/gu, " ")))?.[1] ?? [];
 
@@ -186,11 +192,17 @@ const locationsOf = (phrase: string): readonly HitLocation[] =>
  * the order for the line. A blanket value is applied before the locations
  * printed apart from it, "except Head" leaves a location bare, a lone number
  * covers every location, and "None" none. Whatever follows the line on the
- * panel ("Total TB: 4") is no part of it. Null when the line gives no points
- * at a hit location (a vehicle's facings).
+ * panel ("Total TB: 4") is no part of it. A value printed for the creature
+ * fought as a horde ("All 4, Horde 5") covers every location of a `horde`,
+ * and of a creature the line gives no other value; otherwise it is left out.
+ * Null when the line gives no points at a hit location (a vehicle's facings).
  */
-export function armourOf(text: string): JsonObject | null {
-    const line = text.replace(/\btotal\s+tb\b.*$/isu, "").trim();
+export function armourOf(text: string, horde = false): JsonObject | null {
+    const printed = text.replace(/\btotal\s+tb\b.*$/isu, "").trim();
+    const line =
+        horde || !OWN_LOCATION.test(printed)
+            ? printed.replace(/\bhorde\b/giu, "All")
+            : printed.replace(/,?\s*\bhorde\s+\d+|,?\s*\d+\s+horde\b/giu, "");
     const points: Record<HitLocation, number> = {
         head: 0,
         body: 0,
@@ -296,6 +308,14 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     if (wounds !== null) {
         system["wounds"] = { max: wounds, value: wounds, critical: 0 };
     }
+    // A printed Magnitude is a horde's: it is tracked in place of wounds.
+    const magnitude = int("magnitude");
+    if (magnitude !== null) {
+        system["horde"] = { enabled: true, magnitude: { max: magnitude, current: magnitude } };
+        if (tier === null) {
+            system["tier"] = "horde";
+        }
+    }
     const threat = int("threat") ?? labelled(THREAT_LABELLED);
     if (threat !== null) {
         system["threatLevel"] = threat;
@@ -321,10 +341,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     } else if (fields.movement !== undefined) {
         unparsed.push(`movement: ${fields.movement}`);
     }
-    // The printed skills line is kept verbatim (the system keys it into its
-    // trained skills); the armour line is read into the schema's locations.
+    // The armour line is read into the schema's locations; the skills line
+    // into its trained skills, the printed line kept beside them as printed.
     if (fields.armour !== undefined) {
-        const armour = armourOf(fields.armour);
+        const armour = armourOf(fields.armour, magnitude !== null);
         if (armour === null) {
             unparsed.push(`armour: ${fields.armour}`);
         } else {
@@ -337,6 +357,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     }
     if (fields.skills !== undefined) {
         system["skills"] = tidyList(fields.skills);
+        const trained = trainedSkillsOf(listedSkills(tidyList(fields.skills)));
+        if (Object.keys(trained).length > 0) {
+            system["trainedSkills"] = trained;
+        }
     }
 
     const listed = (["talents", "traits", "weapons", "gear"] as const).flatMap((key) =>
@@ -509,16 +533,6 @@ const CALLER_SKILL =
 const CALLER_CORRUPTION = /\bgains?\s+(?<amount>\d+(?:d\d+)?)\s+corruption\b/iu;
 /** The schema's skill ranks, first to last. */
 const SKILL_RANKS = ["known", "trained", "experienced", "veteran"] as const;
-
-/** A skill's name as the schema keys skills: lower camel case ("Forbidden Lore" → `forbiddenLore`). */
-const skillKey = (name: string): string =>
-    name
-        .trim()
-        .split(/[\s-]+/u)
-        .map((w, i) =>
-            i === 0 ? w.toLowerCase() : `${w.charAt(0).toUpperCase()}${w.slice(1).toLowerCase()}`,
-        )
-        .join("");
 
 /**
  * The terms a Reinforcement Character is called in on, from its introduction:
