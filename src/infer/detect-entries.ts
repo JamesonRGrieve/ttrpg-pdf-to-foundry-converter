@@ -9,6 +9,7 @@ import { wordBreakBetween, wordSpace } from "../util/text.ts";
 import { isTableCaption } from "./detect-titled-tables.ts";
 import { FUNCTION_WORDS, NUMBERED_LABEL, readsAsProse, scrambledCase } from "./names.ts";
 import type { ItemType } from "./schema.ts";
+import { isLabelRow } from "./stat-labels.ts";
 
 /**
  * Catalogue entries (talents, traits, powers, conditions, …) found by
@@ -262,9 +263,10 @@ export function headingOf(
     if (runs.length === 0 || line.text.length < 2 || line.text.length > MAX_HEADING_LENGTH) {
         return null;
     }
-    // Margin bands hold running heads, feet and folios — never a heading; and a
-    // table caption heads its table, not a section of the text.
-    if (inMargin || isTableCaption(line.text)) {
+    // Margin bands hold running heads, feet and folios — never a heading; a
+    // table caption heads its table, not a section of the text; and a row
+    // of characteristic labels, however boldly set, heads only its values.
+    if (inMargin || isTableCaption(line.text) || isLabelRow(line.text)) {
         return null;
     }
     const [first] = runs;

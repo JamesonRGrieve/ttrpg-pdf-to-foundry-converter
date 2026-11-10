@@ -5,6 +5,7 @@ import { bodyStyle } from "../util/body-style.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { buildLines, endsSentence, type TextLine } from "./detect-entries.ts";
 import { panelBlocks, SCHEMA_CHAR_ORDER } from "./detect-grids.ts";
+import { isLabelRow, tokensOf } from "./stat-labels.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 
 /**
@@ -15,19 +16,11 @@ import type { DetectedNumericGrid } from "./types.ts";
  */
 
 /**
- * The schema's characteristic abbreviations, as printed above a statblock row:
- * the nine of every line, and `inf` (the schema's influence/infamy
- * characteristic), which some lines' rows print as a tenth.
- */
-const CHARACTERISTIC_LABELS: ReadonlySet<string> = new Set([...SCHEMA_CHAR_ORDER, "inf"]);
-/**
  * A line leading in to what follows, not a name: it closes on a colon. (A
  * caption set in small capitals may arrive in lower case, so its case tells
  * nothing.)
  */
 const RUNNING_TEXT = /:$/u;
-/** Fewest characteristic labels a row carries. */
-const MIN_ROW_LABELS = 7;
 /** How many label sizes below the labels the values line may sit, and the caption above. */
 const ROW_REACH_FACTOR = 3;
 /** A line set this far above body size is a heading, which ends a statblock's fields. */
@@ -39,22 +32,7 @@ const CAPTION_WORD_SHARE = 0.5;
 /** Fewest statblocks for a shared caption word to be recognized. */
 const MIN_CAPTIONS = 3;
 
-const tokensOf = (text: string): string[] =>
-    text
-        .toLowerCase()
-        .split(/\s+/u)
-        .filter((t) => t.length > 0);
-
-/** Whether a line is a statblock's row of characteristic labels. */
-export function isLabelRow(text: string): boolean {
-    const tokens = tokensOf(text);
-    return (
-        tokens.length >= MIN_ROW_LABELS &&
-        tokens.every((t) => CHARACTERISTIC_LABELS.has(t)) &&
-        tokens.includes("ws") &&
-        tokens.includes("bs")
-    );
-}
+export { isLabelRow };
 
 /** A line set at most this share of the labels' size is a superscript note over the values. */
 const SUPERSCRIPT_SHARE = 0.7;

@@ -2814,6 +2814,11 @@ describe("headings", () => {
         expect(headingOf(mixed, body, false)).toBeNull();
     });
 
+    it("reads no heading from a statblock's row of characteristic labels", () => {
+        expect(headingOf(heading([["Lamp Warden", 100, 80]]), body, false)?.text).toBe("Lamp Warden");
+        expect(headingOf(heading([["WS BS S T Ag Int Per WP Fel", 100, 180]]), body, false)).toBeNull();
+    });
+
     it("keeps a display title that wraps on a connecting word, not running text that does", () => {
         const title = heading(
             [
