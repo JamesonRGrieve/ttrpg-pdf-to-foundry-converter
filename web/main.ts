@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { DEFAULT_TARGET, TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
+import { DEFAULT_TARGET, OFFERED_TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
 import { estimateMemoryMb, looksOutOfMemory, planResources } from "./resources.ts";
 
@@ -87,7 +87,7 @@ function linePicker(file: File, index: number): HTMLSelectElement {
     select.id = `line-${index}`;
     select.setAttribute("aria-label", `Target schema for ${file.name}`);
     const groups = new Map<string, HTMLOptGroupElement>();
-    for (const id of TARGET_IDS) {
+    for (const id of OFFERED_TARGET_IDS) {
         const system = targetFor(id)?.system ?? "";
         let group = groups.get(system);
         if (group === undefined) {

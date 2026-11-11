@@ -218,6 +218,12 @@ export const TARGET_IDS: readonly string[] = [
     ...DND5E_RULES.map((rules) => DND5E_TARGETS[rules].id),
 ];
 
+/**
+ * The target ids the published front ends offer (the upload page and the
+ * Foundry package): the wh40k-rpg lines. The rest stay available to the CLI.
+ */
+export const OFFERED_TARGET_IDS: readonly string[] = [...LINES];
+
 /** The target schema an id names, or null for an unknown id. */
 export function targetFor(id: string): Target | null {
     const line = LINES.find((l) => l === id);

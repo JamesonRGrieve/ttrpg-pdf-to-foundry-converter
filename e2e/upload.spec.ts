@@ -52,8 +52,8 @@ function watchFailures(page: Page): string[] {
     return failed;
 }
 
-/** Targets the picker offers: the wh40k-rpg game lines, then the dnd5e rulesets. */
-const TARGET_COUNT = 9;
+/** Targets the picker offers: the wh40k-rpg game lines. */
+const TARGET_COUNT = 7;
 
 /**
  * Upload the PDFs, choose each one's target (`targets`, by position; default
@@ -136,12 +136,6 @@ test("homologates an entity printed in two lines, each PDF in its chosen line", 
         "cross-line",
         ["dh2", "rt"],
     );
-});
-
-test("converts character options for the dnd5e system in the chosen ruleset", async ({ page, baseURL }) => {
-    await convertsLikeCli(page, baseURL, ["fixtures/rendered/class-compendium.pdf"], "class-compendium", [
-        "dnd5e-2024",
-    ]);
 });
 
 test("refuses an encrypted PDF", async ({ page }) => {
