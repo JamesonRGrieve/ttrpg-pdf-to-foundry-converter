@@ -2164,18 +2164,23 @@ export function headedNames(
     names.forEach((name, i) => {
         const { rest, last } = split(name);
         const page = pages[i] ?? 0;
-        // A heading may set the name in the plural.
+        // A heading may set the name in the plural, or give only the name
+        // the caption closes on in brackets ("Mire Hound (The Stalker)"
+        // under "The Stalker").
         const key = singularWordsKey(rest);
+        const alias = singularWordsKey(/\(([^()]*)\)\s*$/u.exec(rest)?.[1] ?? "");
         // A closing bracketed note (a tier) is no word.
         if (
             rest.length > 0 &&
             /^\p{L}+$/u.test(last) &&
-            entries.some(
-                (e) =>
+            entries.some((e) => {
+                const heading = singularWordsKey(splitTier(e.heading.text).name);
+                return (
                     e.heading.pageIndex <= page &&
                     e.heading.pageIndex >= page - STATBLOCK_PROSE_REACH &&
-                    singularWordsKey(splitTier(e.heading.text).name) === key,
-            )
+                    (heading === key || (alias.length > 0 && heading === alias))
+                );
+            })
         ) {
             headed.set(last, (headed.get(last) ?? new Set()).add(key));
         }

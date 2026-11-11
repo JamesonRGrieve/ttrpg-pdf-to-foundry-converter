@@ -4035,6 +4035,19 @@ describe("statblock prose", () => {
             "Wick (Minion)",
             "Reed King Guard",
         ]);
+        // A heading may give only the name a caption closes on in brackets.
+        const aliased = [heading("THE STALKER", 71), heading("THE WARDEN", 72), heading("THE KING", 73)];
+        expect(
+            headedNames(
+                [
+                    "Mire Hound (The Stalker) Sheet",
+                    "Lamp Keeper (The Warden) Sheet",
+                    "Reed Lord (The King) Sheet",
+                ],
+                [71, 72, 73],
+                aliased,
+            ),
+        ).toEqual(["Mire Hound (The Stalker)", "Lamp Keeper (The Warden)", "Reed Lord (The King)"]);
         // Two captions do not make a label.
         expect(headedNames(names.slice(0, 2), [71, 72], entries)).toEqual(names.slice(0, 2));
     });
