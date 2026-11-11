@@ -21,6 +21,8 @@ import type { DetectedNumericGrid } from "./types.ts";
  * nothing.)
  */
 const RUNNING_TEXT = /:$/u;
+/** A page number standing alone on its line. */
+const FOLIO = /^\d{1,4}$/u;
 /** How many label sizes below the labels the values line may sit, and the caption above. */
 const ROW_REACH_FACTOR = 3;
 /** A line set this far above body size is a heading, which ends a statblock's fields. */
@@ -337,6 +339,22 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     });
     const names = captionNames(naming.map((i) => lines[i]?.text ?? ""));
     const captions = new Set(found.map((f) => f.caption));
+    // A folio the margin bands did not take in: a bare number set below, or
+    // above, every other line of its page.
+    const extremes = new Map<number, { low: number; high: number }>();
+    for (const l of lines) {
+        const e = extremes.get(l.pageIndex);
+        extremes.set(l.pageIndex, {
+            low: Math.min(e?.low ?? l.y, l.y),
+            high: Math.max(e?.high ?? l.y, l.y),
+        });
+    }
+    const folios = new Set(
+        lines.filter((l) => {
+            const e = extremes.get(l.pageIndex);
+            return FOLIO.test(l.text.trim()) && e !== undefined && (l.y === e.low || l.y === e.high);
+        }),
+    );
     return found.map((f, k) => {
         const start = lines[f.values];
         const panel: TextLine[] = [];
@@ -351,6 +369,10 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
                 (sizeOf(line) > bodySize + HEADING_STEP && !recoveredMark(line))
             ) {
                 break;
+            }
+            // A page's folio between a panel's lines is no part of it.
+            if (folios.has(line)) {
+                continue;
             }
             if (!sameColumn(line, previous)) {
                 regions += 1;

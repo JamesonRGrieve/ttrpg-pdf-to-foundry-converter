@@ -151,6 +151,31 @@ describe("statblock rows", () => {
         expect(under("lamp warden profile")).toBe(1);
     });
 
+    it("leaves a page's folio out of a panel that runs on to the next page", () => {
+        const one = irOf([
+            run("Lamp Warden", 60, 120, { size: 11 }),
+            run(LABELS, 60, 100, { size: 11.75 }),
+            run("30 25 35 - 30 20 35 30 25", 60, 80, { size: 14.75 }),
+            run("Skills:", 60, 60, bold),
+            run("Hush (Ag), Silent", 100, 60),
+            run("377", 300, 6),
+            run("Wading (S) +10.", 60, 760, { pageIndex: 1 }),
+            run("Talents:", 60, 748, { ...bold, pageIndex: 1 }),
+            run("Keen Eye.", 110, 748, { pageIndex: 1 }),
+            run("378", 300, 6, { pageIndex: 1 }),
+        ]);
+        const [page] = one.pages;
+        if (page === undefined) {
+            throw new Error("one page expected");
+        }
+        const ir = { ...one, pages: [page, { ...page, pageIndex: 1 }] };
+        const [block] = detectStatRows(ir);
+        expect(block?.blocks.map((b) => [b.label, b.text])).toEqual([
+            ["Skills", "Hush (Ag), Silent Wading (S) +10."],
+            ["Talents", "Keen Eye."],
+        ]);
+    });
+
     it("reads the panel past a mark recovered from the page image, larger than body text", () => {
         const panel = (mark: Partial<IRTextRun>): string[] =>
             detectStatRows(
