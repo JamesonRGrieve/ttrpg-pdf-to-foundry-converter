@@ -177,6 +177,24 @@ describe("statblock rows", () => {
         ]);
     });
 
+    it("keeps a caption opening its column as high as the running head", () => {
+        const one = irOf([
+            run("Lamp Warden", 60, 790, { size: 11 }),
+            run(LABELS, 60, 770, { size: 11.75 }),
+            run("30 25 35 - 30 20 35 30 25", 60, 750, { size: 14.75 }),
+            run("Wounds:", 60, 730, bold),
+            run("12", 100, 730),
+            run("Glow and Wick", 300, 792, { pageIndex: 1 }),
+            run("Prose under the running head.", 60, 700, { pageIndex: 1 }),
+        ]);
+        const [page] = one.pages;
+        if (page === undefined) {
+            throw new Error("one page expected");
+        }
+        const ir = { ...one, pages: [page, { ...page, pageIndex: 1 }] };
+        expect(detectStatRows(ir).map((g) => g.name)).toEqual(["Lamp Warden"]);
+    });
+
     it("reads the panel past a mark recovered from the page image, larger than body text", () => {
         const panel = (mark: Partial<IRTextRun>): string[] =>
             detectStatRows(

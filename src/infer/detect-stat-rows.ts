@@ -279,9 +279,19 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     // Thumb-index tabs in a side margin share baselines with statblock lines;
     // they are dropped run by run, running heads and feet line by line.
     const inText = textBlockRuns(ir.runs, (page) => pages.get(page)?.width ?? 0);
-    const lines = buildLines({ ...ir, runs: inText }).filter(
-        (l) => !inMarginBand(l.y, pages.get(l.pageIndex)?.height ?? 0, bands),
-    );
+    // A caption opening a column may stand as high as the running head: the
+    // line directly over a row of labels is no page furniture.
+    const built = buildLines({ ...ir, runs: inText });
+    const lines = built.filter((l, i) => {
+        const next = built[i + 1];
+        const captions =
+            next !== undefined &&
+            next.pageIndex === l.pageIndex &&
+            next.column === l.column &&
+            isLabelRow(next.text) &&
+            !inMarginBand(next.y, pages.get(next.pageIndex)?.height ?? 0, bands);
+        return captions || !inMarginBand(l.y, pages.get(l.pageIndex)?.height ?? 0, bands);
+    });
     const bodySize = bodyStyle(ir).size;
     const sizeOf = (l: TextLine): number => Math.max(...l.runs.map((r) => r.size));
     const sameColumn = (a: TextLine, b: TextLine): boolean =>
