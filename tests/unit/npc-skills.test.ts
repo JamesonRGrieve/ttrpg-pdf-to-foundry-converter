@@ -195,6 +195,40 @@ describe("statblock skills", () => {
         expect(Object(untagged.fields["system"])).toEqual({ skills: "Lantern Lore (Reeds), Hush" });
     });
 
+    it("takes a specialisation's characteristic from the document's entry for that specialisation", () => {
+        const entity = (documentType: "Item" | "Actor", fields: Record<string, JsonValue>): Entity => ({
+            blockId: "b",
+            documentType,
+            group: "dh2",
+            pack: "p",
+            ordinal: 0,
+            fields,
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const skill = (name: string, characteristic: string): Entity =>
+            entity("Item", { name, type: "skill", system: { characteristic } });
+        const skills = "Steer (Barge), Steer (Skiff), Wading (Fen)";
+        const actor = entity("Actor", {
+            name: "Lamp Warden",
+            type: "npc",
+            system: { skills, trainedSkills: trainedSkillsOf(listedSkills(skills)) },
+        });
+        fillSkillCharacteristics([
+            skill("Steer (Barge)", "agility"),
+            skill("Steer (Skiff)", "intelligence"),
+            skill("Wading (Fen)", "strength"),
+            skill("Wading (Marsh)", "strength"),
+            actor,
+        ]);
+        const trained = Object(Object(actor.fields["system"])["trainedSkills"]);
+        expect(trained.steer.entries.map((e: { characteristic: string }) => e.characteristic)).toEqual([
+            "agility",
+            "intelligence",
+        ]);
+        expect(trained.wading.characteristic).toBe("strength");
+    });
+
     it("gives an untagged skill the characteristic the document's statblocks most often print for it", () => {
         const actor = (name: string, skills: string): Entity => ({
             blockId: "b",

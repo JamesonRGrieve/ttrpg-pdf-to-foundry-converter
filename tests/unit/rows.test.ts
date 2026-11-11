@@ -73,6 +73,19 @@ describe("weapon-table load rows", () => {
         expect(talent.system["prerequisites"]).toMatchObject({ characteristics: { perception: 30 } });
     });
 
+    it("reads a skill row's characteristic column as the schema's key", () => {
+        expect(mapRow("skill", { name: "Wading", characteristic: "Strength" }).system["characteristic"]).toBe(
+            "strength",
+        );
+        expect(mapRow("skill", { name: "Hush", characteristic: "Ag" }).system["characteristic"]).toBe(
+            "agility",
+        );
+        // A cell naming no characteristic ("Various") gives none.
+        expect(
+            mapRow("skill", { name: "Lantern Lore", characteristic: "Various" }).system,
+        ).not.toHaveProperty("characteristic");
+    });
+
     it("writes a talent or trait row's benefit as the HTML field it is, and a dash as none", () => {
         expect(mapRow("talent", { name: "Wick Sense", benefit: "Sense wicks." }).system["benefit"]).toBe(
             "<p>Sense wicks.</p>",

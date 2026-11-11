@@ -2436,6 +2436,12 @@ export function embedNpcItems(entities: readonly Entity[]): void {
     }
 }
 
+/** A skill's printed name as its schema key and the key of the specialisation in its closing brackets ("" for none). */
+function skillOf(name: string): { key: string; specialisation: string } {
+    const inner = /\(([^()]*)\)\s*$/u.exec(name)?.[1] ?? "";
+    return { key: skillKey(name.replace(/\([^()]*\)/gu, " ")), specialisation: nameKey(inner) };
+}
+
 /**
  * A trained skill a statblock lists without its characteristic takes the one
  * the document itself gives the skill: its own entry for the skill, else the
@@ -2478,23 +2484,51 @@ export function fillSkillCharacteristics(entities: readonly Entity[]): void {
             characteristicOf.set(key, most[0]);
         }
     }
+    // The document's own skill entries: one per skill, or one per
+    // specialisation, which may each roll on a characteristic of their own.
+    // A skill's entries that agree give the bare skill's.
+    const ofSpecialisation = new Map<string, string>();
+    const ofSkill = new Map<string, Set<string>>();
     for (const e of entities) {
         const system = e.fields["system"];
         const characteristic = isJsonObject(system) ? system["characteristic"] : undefined;
-        if (e.fields["type"] === "skill" && typeof characteristic === "string" && characteristic.length > 0) {
-            characteristicOf.set(skillKey(String(e.fields["name"])), characteristic);
+        if (e.fields["type"] !== "skill" || typeof characteristic !== "string" || characteristic === "") {
+            continue;
+        }
+        const { key, specialisation } = skillOf(String(e.fields["name"]));
+        ofSpecialisation.set(`${key}\u0000${specialisation}`, characteristic);
+        ofSkill.set(key, (ofSkill.get(key) ?? new Set<string>()).add(characteristic));
+    }
+    for (const [key, given] of ofSkill) {
+        const [only] = given;
+        if (given.size === 1 && only !== undefined) {
+            characteristicOf.set(key, only);
         }
     }
     for (const [key, row] of all) {
-        if (row["characteristic"] === "" && characteristicOf.has(key)) {
-            row["characteristic"] = characteristicOf.get(key) ?? "";
+        if (row["characteristic"] !== "") {
+            continue;
         }
+        // An entry names its specialisation; a row carries it in its name.
+        const specialisation =
+            typeof row["specialization"] === "string"
+                ? nameKey(row["specialization"])
+                : skillOf(String(row["name"])).specialisation;
+        row["characteristic"] =
+            ofSpecialisation.get(`${key}\u0000${specialisation}`) ?? characteristicOf.get(key) ?? "";
     }
-    // A specialisation the document tags nowhere rolls as its skill's own row does.
+    // A specialisation the document tags nowhere rolls as its skill's own row
+    // does; a skill held only through its specialisations takes its first's.
     for (const actor of entities) {
         for (const [, row] of rows(actor)) {
-            const base = row["characteristic"];
             const entries = Array.isArray(row["entries"]) ? row["entries"].filter(isJsonObject) : [];
+            const first = entries
+                .map((e) => e["characteristic"])
+                .find((c) => typeof c === "string" && c !== "");
+            if (row["characteristic"] === "" && first !== undefined) {
+                row["characteristic"] = first;
+            }
+            const base = row["characteristic"];
             for (const entry of entries) {
                 if (entry["characteristic"] === "" && typeof base === "string") {
                     entry["characteristic"] = base;

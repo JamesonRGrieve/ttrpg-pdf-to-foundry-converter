@@ -2,7 +2,13 @@
 import type { JsonObject, JsonValue } from "../types/entity.ts";
 import { usedWithArmourTypes } from "./ammunition.ts";
 import type { Role } from "./columns.ts";
-import { focusPowerTest, isSustained, powerActivation, structuredPrerequisites } from "./entry-types.ts";
+import {
+    CHARACTERISTICS,
+    focusPowerTest,
+    isSustained,
+    powerActivation,
+    structuredPrerequisites,
+} from "./entry-types.ts";
 import {
     isEmptyCell,
     parseArmourPoints,
@@ -263,6 +269,16 @@ function effectItem(cells: RowCells, field: "effect" | "uses", physical: boolean
     return out;
 }
 
+/** A skill's row: its uses, and the characteristic a column of the table names for it. */
+function skill(cells: RowCells): RowMapping {
+    const out = effectItem(cells, "uses", false);
+    const characteristic = CHARACTERISTICS[(cells.characteristic ?? "").trim().toLowerCase()];
+    if (characteristic !== undefined) {
+        out.system["characteristic"] = characteristic;
+    }
+    return out;
+}
+
 /** `Agility, Offence` / `Agility` + second column → aptitude names. */
 function parseAptitudes(raw: string): string[] {
     return raw
@@ -462,7 +478,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "psychicPower":
             return psychicPower(cells);
         case "skill":
-            return effectItem(cells, "uses", false);
+            return skill(cells);
         case "ammunition":
             return isLoadRow(cells) ? load(cells) : effectItem(cells, "effect", true);
         case "gear":
