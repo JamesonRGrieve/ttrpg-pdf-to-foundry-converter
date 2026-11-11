@@ -91,6 +91,7 @@ import {
     isUnmarkedSectionRow,
     keyedByBands,
     epithetEntry,
+    headedNames,
     namingEntry,
     listsCaption,
     weaponProfileText,
@@ -4007,6 +4008,35 @@ describe("statblock prose", () => {
         );
         // A heading without an epithet titles the prose.
         expect(epithetEntry(entries, "Reed King", "Reed King", 73)).toBeNull();
+    });
+
+    it("drops a closing word several captions add to their own nearby heading", () => {
+        const entries = [
+            heading("MIRE HOUND", 71),
+            heading("LAMP KEEPERS", 72),
+            heading("REED KING", 73),
+            heading("WICK", 74),
+        ];
+        const names = [
+            "Mire Hound Sheet",
+            "Lamp Keeper Sheet",
+            "Reed King Sheet",
+            "Glow Warden Sheet",
+            "Wick (Minion)",
+            "Reed King Guard",
+        ];
+        expect(headedNames(names, [71, 72, 73, 74, 74, 73], entries)).toEqual([
+            "Mire Hound",
+            "Lamp Keeper",
+            "Reed King",
+            // The label is dropped wherever it closes a caption; a bracketed
+            // note and a word under one heading alone are no label.
+            "Glow Warden",
+            "Wick (Minion)",
+            "Reed King Guard",
+        ]);
+        // Two captions do not make a label.
+        expect(headedNames(names.slice(0, 2), [71, 72], entries)).toEqual(names.slice(0, 2));
     });
 
     it("reads a craft's boxed weapon profile entry as panel lines, each weapon's qualities after it", () => {

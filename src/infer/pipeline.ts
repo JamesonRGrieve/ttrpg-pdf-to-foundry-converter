@@ -2142,6 +2142,50 @@ export function epithetEntry(
     return namingEntry([titled], caption, captionLine, pageIndex);
 }
 
+/** Fewest captions that are a nearby heading and one same closing word for that word to be a label. */
+const MIN_HEADED_LABELS = 3;
+
+/**
+ * Names with a closing label dropped: a word that closes several captions,
+ * each otherwise the heading of a prose entry within reach ("Mire Hound
+ * Profile" under "Mire Hound"), labels the statblock and is no part of a
+ * name — on those captions and on any other it closes.
+ */
+export function headedNames(
+    names: readonly string[],
+    pages: readonly number[],
+    entries: readonly Entry[],
+): string[] {
+    const split = (name: string): { rest: string; last: string } => {
+        const words = name.trim().split(/\s+/u);
+        return { rest: words.slice(0, -1).join(" "), last: words.at(-1)?.toLowerCase() ?? "" };
+    };
+    const headed = new Map<string, Set<string>>();
+    names.forEach((name, i) => {
+        const { rest, last } = split(name);
+        const page = pages[i] ?? 0;
+        // A heading may set the name in the plural.
+        const key = singularWordsKey(rest);
+        // A closing bracketed note (a tier) is no word.
+        if (
+            rest.length > 0 &&
+            /^\p{L}+$/u.test(last) &&
+            entries.some(
+                (e) =>
+                    e.heading.pageIndex <= page &&
+                    e.heading.pageIndex >= page - STATBLOCK_PROSE_REACH &&
+                    singularWordsKey(splitTier(e.heading.text).name) === key,
+            )
+        ) {
+            headed.set(last, (headed.get(last) ?? new Set()).add(key));
+        }
+    });
+    return names.map((name) => {
+        const { rest, last } = split(name);
+        return rest.length > 0 && (headed.get(last)?.size ?? 0) >= MIN_HEADED_LABELS ? rest : name;
+    });
+}
+
 function extractActors(
     ir: IR,
     numeric: readonly DetectedNumericGrid[],
@@ -2157,6 +2201,13 @@ function extractActors(
         npcs.slice(0, numeric.length).map((n) => n.name),
         GRID_BANNER_WORD_SHARE,
     );
+    // A label only some captions carry shows as one where the rest of the
+    // caption is the creature's own heading.
+    const labelled = headedNames(
+        npcs.map((n, i) => bannerNames[i] ?? n.name),
+        grids.map((g) => g.pageIndex),
+        entries,
+    );
     /** The first statblock read under each name: its characteristics, and whether its section names it. */
     const signatures = new Map<string, { signature: string; underOwn: boolean }>();
     for (const [i, grid] of grids.entries()) {
@@ -2164,7 +2215,7 @@ function extractActors(
         if (parsed === undefined) {
             continue;
         }
-        const npc = { ...parsed, name: bannerNames[i] ?? parsed.name };
+        const npc = { ...parsed, name: labelled[i] ?? parsed.name };
         for (const u of npc.unparsed) {
             out.warnings.push(`p${out.page(grid.pageIndex)} ${npc.name}: unparsed ${u}`);
         }
