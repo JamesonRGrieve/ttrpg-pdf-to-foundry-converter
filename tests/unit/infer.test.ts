@@ -500,6 +500,23 @@ describe("row merging", () => {
         expect(mergeContinuationRows(rows, shape).map((r) => r.y)).toEqual([100, 90, 70, 50]);
     });
 
+    it("keeps a full record whose value is printed in lower case apart from the row above", () => {
+        const rows = [
+            textLine(100, ["Hush", "Agility", "Reed", "93"]),
+            textLine(90, ["Wading", "Strength", "Fen", "95"]),
+            textLine(80, ["Glow Lore", "Intelligence", "unbound", "95"]),
+            textLine(70, ["Lantern", "Fellowship", "Reed", "96"]),
+            textLine(60, ["Wick Use", "Intelligence", "unbound", "97"]),
+        ];
+        expect(mergeContinuationRows(rows, shape).map((r) => shape.cells(r)[0])).toEqual([
+            "Hush",
+            "Wading",
+            "Glow Lore",
+            "Lantern",
+            "Wick Use",
+        ]);
+    });
+
     it("keeps a key-only line set at the row pitch, wider than line leading, apart", () => {
         // Rows 14 pt apart in 8 pt type: a wrapped name would follow at ~10 pt.
         const rows = [
@@ -1306,6 +1323,9 @@ describe("entry typing", () => {
         ]);
         expect(entryItem(printed, "psychicPower").variantized["effect"]).toBe("<p>A spark leaps.</p>");
         expect(entryType(entry("CLIMB (AGILITY)", [["Aptitudes", "Agility"]]))).toBe("skill");
+        // A line printing no aptitudes: the characteristic in the heading, under a section of skills.
+        expect(entryType(entry("CLIMB (AGILITY)", [], ["Lamps", "Skill Descriptions"]))).toBe("skill");
+        expect(entryType(entry("CLIMB (AGILITY)", [], ["Lamps", "Moving About"]))).not.toBe("skill");
     });
 
     it("types an ability bought with experience, its use and effect printed, as a talent", () => {

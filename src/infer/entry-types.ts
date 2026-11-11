@@ -408,9 +408,11 @@ export function entryType(entry: Entry): ItemType | null {
     ) {
         return "talent";
     }
+    // A skill is headed by its name and characteristic: with its aptitudes
+    // where the line prints them, else under a section of skills.
     if (
         splitCharacteristic(entry.heading.text).characteristic !== null &&
-        has(fields, "aptitude", "aptitudes")
+        (has(fields, "aptitude", "aptitudes") || fieldedSectionKind(entry.sections) === "skill")
     ) {
         return "skill";
     }

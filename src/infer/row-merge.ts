@@ -27,6 +27,8 @@ const TWO_CLUSTER_RATIO = 1.25;
 /** Percentiles standing for the narrow and wide clusters (robust to outliers). */
 const NARROW_PERCENTILE = 0.1;
 const WIDE_PERCENTILE = 0.9;
+/** Lines of a column printing the same whole cell for it to be one of the column's values. */
+const MIN_VALUE_REPEATS = 2;
 /** A line filling at most 1/N of a typical row's cells is a fragment of a wrapped row. */
 const FRAGMENT_DIVISOR = 3;
 
@@ -83,6 +85,7 @@ function continuesStructurally(
     line: readonly string[],
     above: readonly string[],
     typicalFill: number,
+    isValue: (text: string, col: number) => boolean,
 ): boolean {
     const others = line.map((text, col) => ({ text: text.trim(), col })).filter((c) => c.col > 0 && c.text);
     if (others.length === 0) {
@@ -96,8 +99,11 @@ function continuesStructurally(
     if (!/^\p{N}/u.test(key) && others.every(({ col }) => breaksOff(above[col] ?? ""))) {
         return true;
     }
-    // A lower-case word, not a value such as "x1/2".
-    const carriesOn = others.some(({ text, col }) => /^\p{Ll}{2,}/u.test(text) && unfinishedAbove(col));
+    // A lower-case word, not a value such as "x1/2" — nor one of the column's
+    // own values, printed in lower case on several rows ("unaligned").
+    const carriesOn = others.some(
+        ({ text, col }) => /^\p{Ll}{2,}/u.test(text) && unfinishedAbove(col) && !isValue(text, col),
+    );
     return carriesOn && others.every(({ text, col }) => unfinishedAbove(col) || /^\p{Ll}/u.test(text));
 }
 
@@ -180,6 +186,17 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
     const typicalFill = mode(recordFills.length > 0 ? recordFills : fills);
     const fullest = Math.max(...rows.map((r) => filled(shape.cells(r))));
     const rowPitch = percentile(sorted, 0.5);
+    // A cell's whole text printed in its column on several lines is one of
+    // that column's values, not the rest of a phrase.
+    const printed = new Map<string, number>();
+    for (const row of rows) {
+        shape.cells(row).forEach((text, col) => {
+            const key = `${col}\u0000${text.trim()}`;
+            printed.set(key, (printed.get(key) ?? 0) + 1);
+        });
+    }
+    const isValue = (text: string, col: number): boolean =>
+        (printed.get(`${col}\u0000${text.trim()}`) ?? 0) >= MIN_VALUE_REPEATS;
     const out: T[] = [];
     // Key-only lines that open the record below them.
     const leads = new Set<T>();
@@ -245,7 +262,7 @@ export function mergeContinuationRows<T extends LineRow>(rows: readonly T[], sha
             (bySpacing ||
                 (!setApart &&
                     (completesKey ||
-                        continuesStructurally(line, above, typicalFill) ||
+                        continuesStructurally(line, above, typicalFill, isValue) ||
                         awaitsRest(above, fullest))));
         if (continues) {
             prev.runs.push(...row.runs);
