@@ -276,6 +276,66 @@ export function textBlockRuns(runs: readonly IRTextRun[], pageWidth: (page: numb
     return kept.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
 
+/** A gap after a row of labels at least this many label sizes wide parts the panel from text set beside it. */
+const BESIDE_GAP_FACTOR = 1.5;
+/** Points within which lines beside a panel start at one place. */
+const BESIDE_EDGE_TOLERANCE = 2;
+/** Fewest lines starting at one place beside a row of labels and its values for a block to stand there. */
+const MIN_BESIDE_LINES = 2;
+
+/**
+ * Runs with the text set beside a statblock's panel in a column of its own.
+ * Where lines of other text start at one place a wide gap right of a row of
+ * labels, level with it and its values, the page sets a block beside the
+ * panel that the page's columns do not part (its lines may even share a
+ * baseline with the panel's). Every run right of that gap, down and up the page as far as
+ * the nearest line crossing it, is given a column of its own, between the
+ * panel's and the next.
+ */
+export function besidePanels(runs: readonly IRTextRun[], lines: readonly TextLine[]): IRTextRun[] {
+    const moved = new Set<IRTextRun>();
+    for (const line of lines) {
+        const printed = line.runs.filter((r) => r.text.trim().length > 0);
+        const size = Math.max(...printed.map((r) => r.size));
+        // The row of labels: the line's longest opening that is one.
+        const at = printed.findLastIndex((_, i) =>
+            isLabelRow(
+                printed
+                    .slice(0, i + 1)
+                    .map((p) => p.text.trim())
+                    .join(" "),
+            ),
+        );
+        const edge = printed[at];
+        if (edge === undefined) {
+            continue;
+        }
+        const column = runs.filter(
+            (r) => r.pageIndex === line.pageIndex && r.column === line.column && r.text.trim().length > 0,
+        );
+        // Text beside the panel: lines starting at one place, a wide gap
+        // right of the labels, level with them and with the values beneath.
+        const clear = edge.x + edge.width + BESIDE_GAP_FACTOR * size;
+        const beside = column.filter(
+            (r) => r.x >= clear && r.y <= line.y + size && r.y >= line.y - ROW_REACH_FACTOR * size,
+        );
+        const left = Math.min(...beside.map((r) => r.x));
+        if (beside.filter((r) => r.x - left <= BESIDE_EDGE_TOLERANCE).length < MIN_BESIDE_LINES) {
+            continue;
+        }
+        const cut = (edge.x + edge.width + left) / 2;
+        const crossing = column.filter((r) => r.x < cut && r.x + r.width > cut).map((r) => r.y);
+        const top = Math.min(...crossing.filter((y) => y > line.y), Number.POSITIVE_INFINITY);
+        const bottom = Math.max(...crossing.filter((y) => y < line.y), Number.NEGATIVE_INFINITY);
+        for (const r of column) {
+            if (r.x >= cut && r.y < top && r.y > bottom) {
+                moved.add(r);
+            }
+        }
+    }
+    return runs.map((r) => (moved.has(r) ? { ...r, column: r.column + 0.5 } : r));
+}
+
 export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     const bands = marginBandsOf(ir);
     const pages = new Map(ir.pages.map((p) => [p.pageIndex, p] as const));
@@ -284,7 +344,7 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     const inText = textBlockRuns(ir.runs, (page) => pages.get(page)?.width ?? 0);
     // A caption opening a column may stand as high as the running head: the
     // line directly over a row of labels is no page furniture.
-    const built = buildLines({ ...ir, runs: inText });
+    const built = buildLines({ ...ir, runs: besidePanels(inText, buildLines({ ...ir, runs: inText })) });
     const lines = built.filter((l, i) => {
         const next = built[i + 1];
         const captions =

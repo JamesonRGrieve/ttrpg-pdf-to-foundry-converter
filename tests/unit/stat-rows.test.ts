@@ -195,6 +195,32 @@ describe("statblock rows", () => {
         expect(block?.blocks.map((b) => b.label)).toEqual(["Wounds"]);
     });
 
+    it("parts a block of text set beside the panel in the panel's own column", () => {
+        // The block's lines start at 347, a wide gap right of the labels; one shares the labels' baseline.
+        const beside = (y: number): IRTextRun =>
+            run("Hounds of the mire hunt in the low glow at dusk", 347, y);
+        const ir = irOf([
+            run("Glow Seeds", 347, 722, { size: 11.3, ...bold }),
+            run("Mire Hound", 91, 711, { size: 11 }),
+            beside(704),
+            run(LABELS, 91, 691, { size: 12 }),
+            beside(691),
+            beside(680),
+            run("40 - 65 50 30 15 45 35 --", 91, 666, { size: 14 }),
+            beside(668),
+            beside(656),
+            run("Wounds:", 91, 648, bold),
+            run("12", 131, 648),
+            beside(644),
+            // A line crossing the gap ends the block.
+            run("Prose set across the whole measure of the page, under panel and block alike.", 91, 600),
+        ]);
+        const [block] = detectStatRows(ir);
+        expect(block?.name).toBe("Mire Hound");
+        expect(block?.values).toEqual([40, 0, 65, 50, 30, 15, 45, 35, 0]);
+        expect(block?.blocks.map((b) => b.label)).toEqual(["Wounds"]);
+    });
+
     it("keeps a caption opening its column as high as the running head", () => {
         const one = irOf([
             run("Lamp Warden", 60, 790, { size: 11 }),
