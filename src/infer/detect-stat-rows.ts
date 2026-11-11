@@ -5,7 +5,7 @@ import { bodyStyle } from "../util/body-style.ts";
 import { inMarginBand, inSideMargin, marginBandsOf } from "../util/page-bands.ts";
 import { buildLines, endsSentence, type TextLine } from "./detect-entries.ts";
 import { panelBlocks, SCHEMA_CHAR_ORDER } from "./detect-grids.ts";
-import { isLabelRow, tokensOf } from "./stat-labels.ts";
+import { isLabelRow, rowLabels, tokensOf } from "./stat-labels.ts";
 import type { DetectedNumericGrid } from "./types.ts";
 
 /**
@@ -21,6 +21,8 @@ import type { DetectedNumericGrid } from "./types.ts";
  * nothing.)
  */
 const RUNNING_TEXT = /:$/u;
+/** Most lines of notes set between a row's labels and its values. */
+const MAX_NOTE_LINES = 2;
 /** A page number standing alone on its line. */
 const FOLIO = /^\d{1,4}$/u;
 /** How many label sizes below the labels the values line may sit, and the caption above. */
@@ -45,13 +47,29 @@ const NOTES_ONLY = /^\s*(?:\(\d+\)\s*)+$/u;
 /** A dash (or a pair set as one, "--") printed where a creature has no such characteristic. */
 const ABSENT = /^[-–—]{1,2}$/u;
 
+/** A value of up to three figures read with a letter for a figure it resembles: "IO", "4I". */
+const LOOKALIKE_VALUE = /^[\dIlOo]{1,3}$/u;
+
+/**
+ * A row of values read from the page image may give a figure as the letter
+ * it resembles. Where most of the row's tokens are numbers, a token made
+ * only of figures and such letters is the number they spell.
+ */
+export function asDigits(tokens: readonly string[]): string[] {
+    const numbers = tokens.filter((t) => /^\d+$/u.test(t)).length;
+    if (numbers * 2 < tokens.length) {
+        return [...tokens];
+    }
+    return tokens.map((t) => (LOOKALIKE_VALUE.test(t) ? t.replace(/[Il]/gu, "1").replace(/[Oo]/gu, "0") : t));
+}
+
 /**
  * The row's values, one per label, or null when the line does not hold
  * exactly that many. A dash (no such characteristic) is the schema's 0; a
  * signed value is a modifier row, not a statblock.
  */
 export function rowValues(text: string, count: number): number[] | null {
-    const tokens = text.split(/\s+/u).filter((t) => t.length > 0);
+    const tokens = asDigits(text.split(/\s+/u).filter((t) => t.length > 0));
     if (tokens.length !== count || !tokens.every((t) => /^\d+/u.test(t) || ABSENT.test(t))) {
         return null;
     }
@@ -94,10 +112,11 @@ export function cellValues(labels: readonly Placed[], values: readonly Placed[])
         });
         cells[nearest] = `${cells[nearest] ?? ""}${pieces.join("")}`;
     }
-    if (cells.some((c) => !CELL_VALUE.test(c))) {
+    const read = asDigits(cells);
+    if (read.some((c) => !CELL_VALUE.test(c))) {
         return null;
     }
-    return cells.map((c) => (/^\d/u.test(c) ? Number(c) : 0));
+    return read.map((c) => (/^\d/u.test(c) ? Number(c) : 0));
 }
 
 /** The labels in the schema's order, the influence label last. */
@@ -280,14 +299,16 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
             return;
         }
         const reach = ROW_REACH_FACTOR * sizeOf(line);
-        // A line of notes over some values (printed unnatural characteristics,
-        // bracketed or set as small superscripts) may sit between the labels
-        // and the values.
-        const next = lines[i + 1];
-        const notes =
-            next !== undefined &&
-            (NOTES_ONLY.test(next.text) || sizeOf(next) < SUPERSCRIPT_SHARE * sizeOf(line));
-        const valuesAt = notes ? i + 2 : i + 1;
+        // Lines of notes over some values (printed unnatural characteristics,
+        // bracketed or set as small superscripts — a page read from its
+        // image may give the two a line each) may sit between the labels and
+        // the values.
+        const isNote = (l: TextLine | undefined): boolean =>
+            l !== undefined && (NOTES_ONLY.test(l.text) || sizeOf(l) < SUPERSCRIPT_SHARE * sizeOf(line));
+        let valuesAt = i + 1;
+        while (valuesAt - i <= MAX_NOTE_LINES && isNote(lines[valuesAt])) {
+            valuesAt += 1;
+        }
         const below = lines[valuesAt];
         const above = lines[i - 1];
         if (
@@ -304,10 +325,13 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
             line.runs.filter((r) => r.text.trim().length > 0).length === tokensOf(line.text).length;
         // A label the text layer dropped is put back where the row leaves room for it.
         const labels = oneRunEach ? withTrailingLabel(withMissingLabel(line.runs), below.runs) : null;
-        const row =
+        const printed =
             labels === null
                 ? tokensOf(line.text)
                 : labels.filter((l) => l.text.trim().length > 0).map((l) => l.text.trim().toLowerCase());
+        // A label read short is the schema's for its place in the row.
+        const placed = rowLabels(line.text);
+        const row = placed !== null && placed.length === printed.length ? placed : printed;
         const numbers =
             (labels === null ? null : cellValues(labels, below.runs)) ?? rowValues(below.text, row.length);
         // A caption names the creature; a sentence above a worked example

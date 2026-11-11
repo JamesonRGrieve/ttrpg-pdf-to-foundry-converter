@@ -17,13 +17,35 @@ export const tokensOf = (text: string): string[] =>
         .split(/\s+/u)
         .filter((t) => t.length > 0);
 
-/** Whether a line is a statblock's row of characteristic labels. */
-export function isLabelRow(text: string): boolean {
+/** The labels in the schema's order, the influence label last. */
+const LABEL_ORDER: readonly string[] = [...SCHEMA_CHAR_ORDER, "inf"];
+/** Fewest labels of a full row that must stand in their own place for the row's misread ones to be put right. */
+const MIN_PLACED_LABELS = 7;
+
+/**
+ * The labels of a statblock's row of characteristic labels, or null when the
+ * line is none. A full row read from the page image may give a label short
+ * ("Fe", "W"): where it opens on the first two and at least seven stand in
+ * the schema's order, each is the schema's label for its place.
+ */
+export function rowLabels(text: string): string[] | null {
     const tokens = tokensOf(text);
-    return (
+    if (
         tokens.length >= MIN_ROW_LABELS &&
         tokens.every((t) => CHARACTERISTIC_LABELS.has(t)) &&
         tokens.includes("ws") &&
         tokens.includes("bs")
-    );
+    ) {
+        return tokens;
+    }
+    const full = tokens.length === SCHEMA_CHAR_ORDER.length || tokens.length === LABEL_ORDER.length;
+    const placed = tokens.filter((t, i) => t === LABEL_ORDER[i]).length;
+    return full && tokens[0] === LABEL_ORDER[0] && tokens[1] === LABEL_ORDER[1] && placed >= MIN_PLACED_LABELS
+        ? LABEL_ORDER.slice(0, tokens.length)
+        : null;
+}
+
+/** Whether a line is a statblock's row of characteristic labels. */
+export function isLabelRow(text: string): boolean {
+    return rowLabels(text) !== null;
 }

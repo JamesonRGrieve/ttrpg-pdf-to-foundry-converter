@@ -10,6 +10,7 @@ import {
     withMissingLabel,
     withTrailingLabel,
 } from "../../src/infer/detect-stat-rows.ts";
+import { rowLabels } from "../../src/infer/stat-labels.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
 
 function run(text: string, x: number, y: number, opts: Partial<IRTextRun> = {}): IRTextRun {
@@ -201,6 +202,29 @@ describe("statblock rows", () => {
         expect(rowValues("40 --- 35", 3)).toBeNull();
     });
 
+    it("reads a figure given as the letter it resembles, in a row that is mostly numbers", () => {
+        expect(rowValues("40 40 30 IO 20 4I 05 l5 O8", 9)).toEqual([40, 40, 30, 10, 20, 41, 5, 15, 8]);
+        // A line of words is no row of values.
+        expect(rowValues("IO Il lO 40", 4)).toBeNull();
+    });
+
+    it("puts right a full row's labels read short, each in its place", () => {
+        expect(rowLabels("ws BS S T Ag Int Per WP Fe")).toEqual(LABELS.toLowerCase().split(" "));
+        expect(rowLabels("wS BS S T Ag Int Pe W Fel")).toEqual(LABELS.toLowerCase().split(" "));
+        // Too few in place, a row cut short, or one not opening on the first two: none.
+        expect(rowLabels("ws BS S I A Int Pe W Fe")).toBeNull();
+        expect(rowLabels("ws BS S T Ag Int Per Fe")).toBeNull();
+        expect(rowLabels("BS ws S T Ag Int Per WP Fe")).toBeNull();
+        const block = detectStatRows(
+            irOf([
+                run("Lamp Warden", 60, 700, { size: 11 }),
+                run("ws BS S T Ag Int Per WP Fe", 60, 680, { size: 11.75 }),
+                run("30 25 35 40 30 20 35 30 25", 60, 660, { size: 14.75 }),
+            ]),
+        )[0];
+        expect(block?.labels.at(-1)).toBe("fel");
+    });
+
     it("puts back the one label a text layer dropped where the row leaves room for it", () => {
         const at = (text: string, x: number) => ({ x, width: 10, text });
         // "Fel" missing between "WP" and "Inf": a double gap.
@@ -259,6 +283,23 @@ describe("statblock rows", () => {
             run("40 20 45 45 30 10 35 30 5", 60, 660, { size: 14.75 }),
         ]);
         expect(detectStatRows(ir)[0]?.values).toEqual([40, 20, 45, 45, 30, 10, 35, 30, 5]);
+    });
+
+    it("reads the values past two lines of notes, as a page read from its image may give them", () => {
+        const notes = (count: number): IRTextRun[] =>
+            [run("T", 150, 673, { size: 7 }), run("(8)", 110, 667), run("(2)", 110, 664)].slice(0, count);
+        const block = (count: number) =>
+            detectStatRows(
+                irOf([
+                    run("Glim Beast", 60, 700, { size: 11 }),
+                    run(LABELS, 60, 680, { size: 11.75 }),
+                    ...notes(count),
+                    run("40 20 45 45 30 10 35 30 5", 60, 655, { size: 14.75 }),
+                ]),
+            )[0]?.values;
+        expect(block(2)).toEqual([40, 20, 45, 45, 30, 10, 35, 30, 5]);
+        // Three lines between a row's labels and a line of numbers: not its values.
+        expect(block(3)).toBeUndefined();
     });
 
     it("reads the values past a note set as a small superscript over them", () => {
