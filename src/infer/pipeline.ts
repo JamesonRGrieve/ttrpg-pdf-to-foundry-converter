@@ -498,6 +498,11 @@ function extractTables(
         ...titled,
         ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex)),
     ]);
+    for (const t of tables) {
+        log.debug(
+            `table p${out.page(t.pageIndex)} ${JSON.stringify(t.tableTitle ?? "")}: ${t.rows.length} rows under [${t.headers.join(" | ")}]`,
+        );
+    }
     let unclassified = 0;
     const carried = carriedSections(tables);
     // The document's running text, lower-cased, read once when a row needs it.
@@ -3025,6 +3030,20 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     // A statblock's panel is no running prose: its lines join no entry.
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
+    log.debug(
+        `read: ${ir.pages.length} pages, ${ir.runs.length} text runs, ${ir.pages.filter((p) => !p.hasTextLayer).length} pages without a text layer`,
+    );
+    log.debug(`structure: ${detected.length} headed entries, ${numeric.length} statblock grids`);
+    for (const g of numeric) {
+        log.debug(
+            `statblock grid p${out.page(g.pageIndex)} ${JSON.stringify(g.name)}: ${g.values.join(" ")}`,
+        );
+    }
+    for (const e of detected) {
+        log.debug(
+            `entry p${out.page(e.heading.pageIndex)} ${JSON.stringify(e.heading.text)} (${e.heading.size}pt): ${e.fields.length} fields [${e.fields.map(([label]) => label).join(" | ")}], ${e.body.length} characters of prose`,
+        );
+    }
     const entries = extractEntries(
         withDisciplines(
             splitSubSystemBullets(
@@ -3064,6 +3083,23 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     log.info(
         `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
     );
+    const byType = new Map<string, number>();
+    for (const entity of entities) {
+        const type = String(entity.fields["type"] ?? entity.documentType);
+        byType.set(type, (byType.get(type) ?? 0) + 1);
+        log.debug(
+            `entity p${out.page(entity.provenance.pageIndex)} ${type} ${JSON.stringify(entity.fields["name"] ?? "")} → ${entity.pack} (${entity.blockId})`,
+        );
+    }
+    log.debug(
+        `entities by type: ${[...byType]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([type, n]) => `${type} ${n}`)
+            .join(", ")}`,
+    );
+    for (const warning of out.warnings) {
+        log.debug(`unparsed: ${warning}`);
+    }
 
     return {
         graph: { entities, warnings: out.warnings },

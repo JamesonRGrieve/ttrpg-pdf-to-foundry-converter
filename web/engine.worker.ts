@@ -38,7 +38,9 @@ function post(message: WorkerMessage, transfer: Transferable[] = []): void {
 }
 
 async function run(request: RunRequest): Promise<void> {
-    const log = createLogger("info", "", (_level, line) => post({ type: "log", line }));
+    const log = createLogger(request.debug ? "debug" : "info", "", (_level, line) =>
+        post({ type: "log", line }),
+    );
     const documents: ModuleDocument[] = [];
     for (const { pdf, target: id } of request.documents) {
         const target = targetFor(id);

@@ -23,6 +23,8 @@ export interface RunRequest {
     ocrWorkers: number;
     /** Pages rendered ahead of recognition at once. */
     maxInFlight: number;
+    /** Write the engine's debug lines to the log as well (every table, entry, statblock, entity and warning). */
+    debug: boolean;
 }
 
 export interface PackSummary {

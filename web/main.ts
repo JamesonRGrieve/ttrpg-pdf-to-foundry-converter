@@ -29,6 +29,7 @@ const packs = element("packs", HTMLTableElement);
 const download = element("download", HTMLAnchorElement);
 const cores = element("cores", HTMLSelectElement);
 const memory = element("memory", HTMLSelectElement);
+const debug = element("debug", HTMLInputElement);
 
 /** Logical cores the browser reports (1 where it reports none). */
 const availableCores = Math.max(1, navigator.hardwareConcurrency || 1);
@@ -251,6 +252,7 @@ async function start(): Promise<void> {
                     siteBase: new URL("./", document.baseURI).href,
                     ocrWorkers: plan.ocrWorkers,
                     maxInFlight: plan.maxInFlight,
+                    debug: debug.checked,
                 };
                 const transfer = documents.map((d) => d.pdf);
                 engine.postMessage(request, transfer);

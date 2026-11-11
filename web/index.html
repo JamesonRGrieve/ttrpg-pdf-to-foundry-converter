@@ -95,6 +95,11 @@
                     and tabs, then try again. A lower memory budget or fewer CPU cores also uses less memory.
                 </p>
                 <progress id="progress" max="1" value="0" aria-label="Conversion progress"></progress>
+                <label class="debug-option" for="debug">
+                    <input id="debug" type="checkbox" />
+                    Debug logging: list every table, entry, statblock, document and warning in the engine log
+                    (much longer; for reporting a problem)
+                </label>
                 <details>
                     <summary>Engine log</summary>
                     <pre id="log" aria-label="Engine log"></pre>

@@ -112,6 +112,11 @@ button,
     background: var(--panel);
 }
 
+.debug-option {
+    display: block;
+    margin: 0.75rem 0 0.25rem;
+}
+
 .resources {
     display: grid;
     grid-template-columns: auto 1fr;

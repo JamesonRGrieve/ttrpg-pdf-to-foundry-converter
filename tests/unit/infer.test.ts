@@ -3644,6 +3644,21 @@ describe("entry detection", () => {
                 .map((e) => String(e.fields["name"]));
         expect(origins(table(["Divination", "Effect"], () => []))).toHaveLength(5);
         expect(origins(table(["Divination", "Effect", "Page"], (y) => [cell("44", 460, y)]))).toEqual([]);
+        // At debug level the log lists what was read: each table, and each document with its pack.
+        const lines = (level: "debug" | "info"): string[] => {
+            const out: string[] = [];
+            infer(
+                table(["Divination", "Effect"], () => []),
+                createLogger(level, "", (_level, line) => out.push(line)),
+                TARGETS.dh2,
+            );
+            return out;
+        };
+        const debug = lines("debug");
+        expect(debug.filter((l) => l.startsWith("debug: table ")).length).toBeGreaterThan(0);
+        expect(debug.filter((l) => l.startsWith("debug: entity ")).length).toBe(5);
+        expect(debug.some((l) => l.startsWith("debug: entities by type: "))).toBe(true);
+        expect(lines("info").some((l) => l.startsWith("debug: "))).toBe(false);
     });
 
     it("reads an ammunition table's Used With column as the weapons it loads", () => {

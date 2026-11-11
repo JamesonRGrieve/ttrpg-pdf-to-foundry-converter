@@ -119,8 +119,36 @@ async function readDocument(
             reader: opts.scanReader,
         },
     );
-    const ir = normalize(arbitrate(raw, ocr));
+    const log = opts.log;
+    const scans = raw.pages.filter((p) => !p.hasTextLayer).length;
+    log.debug(
+        `extract (${raw.extractor}): ${raw.pages.length} pages (${scans} without a text layer), ${raw.textRuns.length} text runs, ${raw.images.length} images`,
+    );
+    for (const page of ocr) {
+        log.debug(
+            `OCR p${page.pageIndex + 1}: ${page.words.length} words, ${page.cells.length} grid cells read singly`,
+        );
+    }
+    const arbitrated = arbitrate(raw, ocr);
+    const changed = arbitrated.textRuns.filter((r, i) => r.text !== raw.textRuns[i]?.text).length;
+    log.debug(
+        `arbitrate: ${arbitrated.textRuns.length} text runs after cross-reference with OCR (${raw.textRuns.length} in the text layer; ${changed} differ in place)`,
+    );
+    const ir = normalize(arbitrated);
+    const columns = new Map<number, number>();
+    for (const page of ir.pages) {
+        columns.set(page.columns, (columns.get(page.columns) ?? 0) + 1);
+    }
+    log.debug(
+        `normalize: ${ir.runs.length} runs, ${ir.fonts.length} fonts, ${ir.sizeBuckets.length} type sizes; pages by column count: ${[
+            ...columns,
+        ]
+            .sort((a, b) => a[0] - b[0])
+            .map(([n, pages]) => `${n} columns × ${pages}`)
+            .join(", ")}`,
+    );
     const assets = recoverImages(raw, opts.log);
+    log.debug(`images: ${assets.assets.length} recovered`);
     await opts.irCache?.write(key, { ir, assets });
     return { ir, assets, cacheHit: false };
 }
@@ -136,6 +164,12 @@ export async function runEngine(pdfBytes: Uint8Array, opts: EngineOptions): Prom
             : infer(read.ir, opts.log, opts.target);
     const assetExt = new Map(read.assets.assets.map((a) => [a.assetId, a.ext] as const));
     const emitted = emit(inferred.graph, assetExt, { assetRefPrefix: opts.assetRefPrefix });
+    for (const pack of [...emitted.packs.values()].sort((a, b) => byteCompare(a.pack, b.pack))) {
+        opts.log.debug(`pack ${pack.pack}: ${pack.documents.length} documents`);
+    }
+    for (const warning of emitted.warnings) {
+        opts.log.debug(`warning: ${warning}`);
+    }
     return {
         encrypted: false,
         packs: [...emitted.packs.values()].sort((a, b) => byteCompare(a.pack, b.pack)),
