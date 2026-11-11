@@ -136,14 +136,37 @@ function findTableTitles(ir: IR): TitleHit[] {
         if (m === null) {
             continue;
         }
+        const printed = m[1]?.trim() ?? "";
         hits.push({
             pageIndex: run.pageIndex,
             y: run.y,
-            title: restoreWordSpaces(m[1]?.trim() ?? ""),
+            title: restoreWordSpaces(printed.length > 0 ? printed : referencedTitle(ir, text, run.pageIndex)),
             run,
         });
     }
     return hits;
+}
+
+/** A table's number, as its caption and references to it print it. */
+const TABLE_NUMBER = /^Table\s+(?<number>\d+[-–]\d+)/iu;
+
+/**
+ * The title a caption printing only its number ("Table 2-9:", its title
+ * set as art) is given where the text refers to the table by number and
+ * title — on the caption's page first, else anywhere in the document.
+ */
+function referencedTitle(ir: IR, caption: string, pageIndex: number): string {
+    const number = TABLE_NUMBER.exec(caption)?.groups?.["number"]?.replace("–", "-");
+    if (number === undefined) {
+        return "";
+    }
+    const titles = ir.runs.flatMap((r) => {
+        const m = TABLE_TITLE_RE.exec(r.text.trim());
+        const title = m?.[1]?.trim().replace(/[\s,.;:]+$/u, "") ?? "";
+        const same = TABLE_NUMBER.exec(r.text.trim())?.groups?.["number"]?.replace("–", "-") === number;
+        return same && title.length > 0 ? [{ title, here: r.pageIndex === pageIndex }] : [];
+    });
+    return (titles.find((t) => t.here) ?? titles[0])?.title ?? "";
 }
 
 /** Share of keys that must follow a finished sentence for a table's keys to head their rows. */

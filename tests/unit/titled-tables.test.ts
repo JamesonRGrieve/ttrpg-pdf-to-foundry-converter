@@ -87,6 +87,35 @@ describe("cells in one run", () => {
 });
 
 describe("titled tables", () => {
+    it("names a caption printing only its number from the text's reference to that table", () => {
+        const rows = (y: number): IRTextRun[] =>
+            [
+                ["01-30", "A reed dipped in fat."],
+                ["31-60", "A small, steady flame."],
+                ["61-90", "Burns without a sound."],
+                ["91-00", "Shuttered, for the road."],
+            ].flatMap(([roll, result], i) => [
+                run(roll ?? "", 60, y - 20 * i),
+                run(result ?? "", 200, y - 20 * i),
+            ]);
+        const table = (reference: IRTextRun[]): IR =>
+            irOf([
+                ...reference,
+                run("TABLE 2-9:", 60, 700, { ...bold, font: "display" }),
+                run("Roll", 60, 680, bold),
+                run("Result", 200, 680, bold),
+                ...rows(660),
+            ]);
+        const referenced = table([
+            run("Table 2-9: Lamps Astray,", 300, 760, bold),
+            run("roll again.", 430, 760),
+        ]);
+        expect(detectTitledTables(referenced).map((t) => t.tableTitle)).toEqual(["Lamps Astray"]);
+        // Another table's reference names nothing.
+        const other = table([run("Table 2-8: Lamps Lit,", 300, 760, bold), run("roll again.", 430, 760)]);
+        expect(detectTitledTables(other).map((t) => t.tableTitle)).toEqual([""]);
+    });
+
     it("reads rows set across the page under a header set in one text column", () => {
         const across = { column: 2 };
         const row = (y: number, key: string, name: string, text: string): IRTextRun[] => [

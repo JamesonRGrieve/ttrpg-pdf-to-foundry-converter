@@ -1952,7 +1952,9 @@ const ROLL_TABLE_SEGMENT = "rolltables";
 
 /** Emit a captioned table whose rows are die results as a RollTable. */
 function addRollTable(table: DetectedTable, out: EntityCollector): void {
-    if (table.tableTitle === null) {
+    // A table whose caption gives it no name is no document: a RollTable is named.
+    const name = cleanName(table.tableTitle ?? "");
+    if (name.length === 0) {
         return;
     }
     const rows = table.rows
@@ -1966,7 +1968,7 @@ function addRollTable(table: DetectedTable, out: EntityCollector): void {
         "RollTable",
         ROLL_TABLE_SEGMENT,
         buildRollTable({
-            name: cleanName(table.tableTitle),
+            name,
             line: out.line,
             book: out.sourceBook,
             page: out.page(table.pageIndex),
