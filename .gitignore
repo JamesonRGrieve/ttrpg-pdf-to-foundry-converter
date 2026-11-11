@@ -22,6 +22,7 @@ web/public/vendor/
 # commercial corpus and name the books they audit, so they stay local and are never
 # published (the shippable engine, fixtures and gates do not depend on them).
 output/
+PROGRESS.md
 scripts/*.json
 scripts/audit-*
 scripts/validate-dh2-*

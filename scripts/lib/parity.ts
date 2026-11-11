@@ -7,7 +7,7 @@ import { f1, markdownToText, scoreBag, tokens } from "./bag-score.ts";
  * the user owns). Pure functions over plain JSON; the runner
  * (`scripts/parity.ts`) supplies the documents.
  *
- * Definitions (also recorded in PROGRESS.md):
+ * Definitions:
  * - Documents are matched by type + name key (case, punctuation and accents
  *   ignored; a printed plural, "The" or "Typical" form also matches).
  * - A reference document's leaves are every primitive or array under
