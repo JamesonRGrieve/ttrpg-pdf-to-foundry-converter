@@ -11,6 +11,7 @@ import {
     originStepNamedBy,
     pairsSteps,
     readCitedOrigins,
+    readHeadedOrigins,
     readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
@@ -829,6 +830,40 @@ describe("origins granted by inline fields", () => {
             ],
         );
         expect(readInlineOrigins([single, priced, elsewhere], bc)).toEqual([]);
+    });
+});
+
+describe("origins each under a heading of their own", () => {
+    const display = (text: string, pageIndex: number, sections: string[], body = ""): Entry => ({
+        ...entry(text, pageIndex, sections, body),
+        heading: { text, size: 30, style: "d", pageIndex },
+    });
+    const part = ["Choose the Background"];
+
+    it("reads a heading whose rules repeat its name under a section closing on a step", () => {
+        const entries: Entry[] = [
+            display("Lamp Wardens", 7, part, "Keepers of the long wicks."),
+            // A heading set apart between them does not end the origin's rules.
+            entry("TRIMMING AT DUSK", 8, ["Wick Lore", "Dusk"]),
+            entry("LAMP WARDENS PASTS", 9, [...part, "Lamp Wardens"]),
+            entry("LAMP WARDENS SOLO ABILITY", 10, [...part, "Lamp Wardens"]),
+            display("Reed Cutters", 12, part, "Who work the marsh."),
+            // One heading repeating the name is not enough.
+            entry("REED CUTTERS PASTS", 13, [...part, "Reed Cutters"]),
+        ];
+        expect(
+            readHeadedOrigins(entries, STEPS).map((o) => [o.name, o.step.key, o.pageIndex, o.description]),
+        ).toEqual([["Lamp Wardens", "background", 7, "Keepers of the long wicks."]]);
+    });
+
+    it("reads none where the step's name does not close the section", () => {
+        const wargear = ["Background Wargear"];
+        const entries: Entry[] = [
+            display("Followers", 20, wargear),
+            entry("FOLLOWERS IN THE FIELD", 21, [...wargear, "Followers"]),
+            entry("FOLLOWERS WITHOUT SHEETS", 22, [...wargear, "Followers"]),
+        ];
+        expect(readHeadedOrigins(entries, STEPS)).toEqual([]);
     });
 });
 

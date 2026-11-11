@@ -85,6 +85,7 @@ import {
     namesOriginStep,
     pairsSteps,
     readEffectOrigins,
+    readHeadedOrigins,
     withCitedOrigins,
     readOriginTable,
     sameOrigin,
@@ -1819,13 +1820,23 @@ function extractOriginPaths(
     const effects = readEffectOrigins(entries, out.target.originSteps).filter(
         (o) => !read.has(o.step.key) && !readInline.has(o.step.key),
     );
-    const origins = withCitedOrigins(
+    const cited = withCitedOrigins(
         [...structured, ...inline, ...effects],
         entries,
         out.target.originSteps,
         (p) => out.page(p),
         tabled,
     );
+    // An origin may have a heading of its own, its rules under headings that
+    // repeat its name; one read no other way joins the rest.
+    const origins = [
+        ...cited,
+        ...readHeadedOrigins(entries, out.target.originSteps).filter(
+            (o) =>
+                !tabled.has(o.step.key) &&
+                !cited.some((c) => c.step.key === o.step.key && sameOrigin(c.name, o.name)),
+        ),
+    ];
     // An origin's own rules are talents of their own, which the origin grants;
     // rules printed apart from it join it when the document reads it.
     const apart = readOriginAbilities(entries, out.target.originSteps);

@@ -1301,6 +1301,61 @@ export function withCitedOrigins(
     return [...kept, ...cited];
 }
 
+/** Fewest headings beneath an origin's own that repeat its name for it to be read by them. */
+const MIN_NAMED_RULES = 2;
+
+/**
+ * Origins each printed under a heading of their own, with at least two
+ * headings beneath it that repeat its name and say more ("<Name> Pasts",
+ * "<Name> Solo Mode Ability"), where the heading's own section closes on a
+ * creation step's name ("… the <Step>"). The heading's prose
+ * describes the origin.
+ */
+export function readHeadedOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const out: OriginPathReading[] = [];
+    const seen = new Set<string>();
+    entries.forEach((origin, i) => {
+        const section = origin.sections.at(-1);
+        // The step closes the section's heading: a heading that names it and
+        // goes on ("<Step> Wargear") is about something else.
+        const step = section === undefined ? undefined : stepNamedIn(section, steps, true, true);
+        const own = origin.heading.text.trim();
+        if (step === undefined || letters(own).length === 0 || seen.has(`${step.key}:${letters(own)}`)) {
+            return;
+        }
+        const named = new Set<string>();
+        // Its rules run on until the next heading set as it is, beside it.
+        for (const e of entries.slice(i + 1)) {
+            if (
+                e.heading.style === origin.heading.style &&
+                e.sections.length === origin.sections.length &&
+                e.sections.every((s, k) => s === origin.sections[k])
+            ) {
+                break;
+            }
+            if (e.sections.includes(origin.heading.text) && wordPrefix(own, e.heading.text) !== null) {
+                named.add(letters(e.heading.text));
+            }
+        }
+        if (named.size < MIN_NAMED_RULES) {
+            return;
+        }
+        seen.add(`${step.key}:${letters(own)}`);
+        out.push({
+            name: caseLost(own) || !/\p{Ll}/u.test(own) ? capitalizeWords(own.toLowerCase()) : own,
+            step,
+            pageIndex: origin.heading.pageIndex,
+            description: origin.body,
+            grants: {},
+            modifiers: {},
+        });
+    });
+    return out;
+}
+
 /**
  * The headings directly beneath `entries[index]`, read on until its section
  * closes; headings nested deeper are passed over (two columns can set a
