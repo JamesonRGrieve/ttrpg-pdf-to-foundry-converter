@@ -177,6 +177,24 @@ describe("statblock rows", () => {
         ]);
     });
 
+    it("reads a row of values that came as two lines, in their order across the page", () => {
+        const labels = LABELS.split(" ").map((l, i) => run(l, 60 + 30 * i, 680, { size: 12 }));
+        const value = (text: string, i: number, y: number): IRTextRun =>
+            run(text, 60 + 30 * i, y, { size: 12 });
+        const ir = irOf([
+            run("Lamp Warden", 60, 700, { size: 11 }),
+            ...labels,
+            // The first three values sit a little under the rest.
+            ...["41", "18", "I2", "23", "33", "08"].map((t, i) => value(t, i + 3, 662)),
+            ...["13", "14", "45"].map((t, i) => value(t, i, 652)),
+            run("Wounds:", 60, 630, bold),
+            run("12", 100, 630),
+        ]);
+        const [block] = detectStatRows(ir);
+        expect(block?.values).toEqual([13, 14, 45, 41, 18, 12, 23, 33, 8]);
+        expect(block?.blocks.map((b) => b.label)).toEqual(["Wounds"]);
+    });
+
     it("keeps a caption opening its column as high as the running head", () => {
         const one = irOf([
             run("Lamp Warden", 60, 790, { size: 11 }),

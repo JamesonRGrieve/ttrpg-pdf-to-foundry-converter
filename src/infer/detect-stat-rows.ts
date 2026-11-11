@@ -44,6 +44,9 @@ const SUPERSCRIPT_SHARE = 0.7;
 /** A line holding only bracketed numbers: notes set over a statblock's values. */
 const NOTES_ONLY = /^\s*(?:\(\d+\)\s*)+$/u;
 
+/** A line holding only values: figures, the letters a figure may be read as, and dashes. */
+const VALUES_ONLY = /^\s*(?:(?:[\dIlOo]{1,3}|[-–—]{1,2})\s*)+$/u;
+
 /** A dash (or a pair set as one, "--") printed where a creature has no such characteristic. */
 const ABSENT = /^[-–—]{1,2}$/u;
 
@@ -342,8 +345,33 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
         // A label read short is the schema's for its place in the row.
         const placed = rowLabels(line.text);
         const row = placed !== null && placed.length === printed.length ? placed : printed;
-        const numbers =
-            (labels === null ? null : cellValues(labels, below.runs)) ?? rowValues(below.text, row.length);
+        const valuesOf = (runs: readonly IRTextRun[], text: string): number[] | null =>
+            (labels === null ? null : cellValues(labels, runs)) ?? rowValues(text, row.length);
+        let numbers = valuesOf(below.runs, below.text);
+        // A row read from the page image may come as two lines, some values
+        // set a little off the others' baseline: the two together, in their
+        // order across the page, are the row.
+        const second = lines[valuesAt + 1];
+        if (
+            numbers === null &&
+            second !== undefined &&
+            sameColumn(line, second) &&
+            line.y - second.y <= reach &&
+            VALUES_ONLY.test(below.text) &&
+            VALUES_ONLY.test(second.text)
+        ) {
+            const runs = [...below.runs, ...second.runs].sort((a, b) => a.x - b.x);
+            numbers = valuesOf(
+                runs,
+                runs
+                    .map((r) => r.text.trim())
+                    .filter((t) => t.length > 0)
+                    .join(" "),
+            );
+            if (numbers !== null) {
+                valuesAt += 1;
+            }
+        }
         // A caption names the creature; a sentence above a worked example
         // does not, nor does the tail of one leading in to it ("… now look
         // like this:").
