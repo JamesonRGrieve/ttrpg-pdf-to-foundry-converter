@@ -31,7 +31,7 @@ const MIN_PARTS = 2;
 /** Most words a weapon's name runs to; more is a sentence leading up to the bracket. */
 const MAX_NAME_WORDS = 4;
 
-/** Capitalise each word of a name the text set in lower case ("big shoota" → "Big Shoota"). */
+/** Capitalise each word of a name the text set in lower case ("wick lamp" → "Wick Lamp"). */
 function asName(text: string): string {
     return text.replace(/(^|\s)(\p{Ll})/gu, (_, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
 }

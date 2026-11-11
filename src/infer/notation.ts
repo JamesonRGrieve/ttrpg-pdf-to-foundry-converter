@@ -648,7 +648,7 @@ export function captionWeaponClass(caption: string): WeaponClass | null {
 
 /**
  * Classes that never close a weapon's own name, so a name cell closing on one
- * holds a class column the table set without its header ("Bonesword Melee").
+ * holds a class column the table set without its header ("Wick Blade Melee").
  * A pistol is often named for its class ("Bolt Pistol"), so it is not one.
  */
 const NAME_CLOSING_CLASSES: readonly WeaponClass[] = ["melee", "basic", "heavy", "thrown"];

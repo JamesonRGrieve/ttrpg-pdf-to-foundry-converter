@@ -599,7 +599,7 @@ function extractTables(
             const rawName = row.cells.find((c) => c.colIndex === nameCol)?.text ?? "";
             const cleaned = cleanName(rawName);
             // A weapon table set without a class column's header leaves each
-            // class in the name cell ("Bonesword Melee").
+            // class in the name cell ("Wick Blade Melee").
             const hasClassColumn = roles.some((r) => r?.includes("class") === true);
             const classInName = type === "weapon" && !hasClassColumn ? splitTrailingClass(cleaned) : null;
             const name = sectionQualified.get(row) ?? classInName?.name ?? cleaned;
@@ -896,7 +896,7 @@ export function modalHeadingSizes(typed: readonly { entry: Entry; type: string }
 export function kindEntry(entry: Entry, parentType: string | undefined, type: string): Entry | null {
     const parent = entry.sections.at(-1);
     const word = entry.heading.text.trim();
-    // A hyphenated compound ("CYBER-MANTLE") is a name of its own, not a qualifier.
+    // A hyphenated compound ("LAMP-MANTLE") is a name of its own, not a qualifier.
     if (parent === undefined || parentType !== type || !/^\p{L}+$/u.test(word)) {
         return null;
     }
@@ -2071,8 +2071,8 @@ function titlesTopic(heading: string, caption: readonly string[]): boolean {
 
 /**
  * The prose entry whose heading a statblock's caption shortens: the nearest
- * heading within reach holding every word of the caption and more ("Repair
- * Servitor" under "Industrial or Heavy Repair Servitor"). Its heading is the
+ * heading within reach holding every word of the caption and more ("Lamp
+ * Keeper" under "Greater or Lesser Lamp Keeper"). Its heading is the
  * fuller printed name.
  */
 export function namingEntry(
@@ -2905,7 +2905,7 @@ const MIN_PROSE_WORDS = 8;
 /**
  * Each heading's prose by the heading's name: an item a table lists with no
  * text of its own is described where a heading of its name prints it
- * ("AUSPEX/SCANNER" under the gear chapter). The first heading of a name
+ * ("LAMP/LANTERN" under the gear chapter). The first heading of a name
  * keeps it.
  */
 export function headedProse(entries: readonly Entry[]): Map<string, string> {

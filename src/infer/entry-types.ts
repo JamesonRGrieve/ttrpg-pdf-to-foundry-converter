@@ -417,7 +417,7 @@ export function entryType(entry: Entry): ItemType | null {
         return "skill";
     }
     // A name starts like a name (unless its small capitals lost their case,
-    // keeping some capitals, and a field block follows: "truesilver FILIGREE"),
+    // keeping some capitals, and a field block follows: "lampwick FILIGREE"),
     // and a heading that names the very kind it sits under ("Traits",
     // "Acquiring Traits") heads part of that section rather than being one of
     // its entries.

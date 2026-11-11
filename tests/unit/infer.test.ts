@@ -2978,17 +2978,17 @@ describe("headings", () => {
             const line = heading([[text, 100, 70]], 7.75);
             return { ...line, runs: line.runs.map((r) => ({ ...r, weight: "bold" as const })) };
         };
-        expect(headingOf(bold("COUNTERSNIPE"), body, false, faces)?.text).toBe("COUNTERSNIPE");
+        expect(headingOf(bold("LAMPSTRIKE"), body, false, faces)?.text).toBe("LAMPSTRIKE");
         expect(headingOf(bold("CREW: DRIVER"), body, false, faces)).toBeNull();
     });
 
     it("reads a long display line with no capitals as a heading in a heading face", () => {
         const faces = new Set(["display|normal"]);
-        const lost = heading([["tempest-class strike lantern", 100, 140]]);
-        expect(headingOf(lost, body, false, faces)?.text).toBe("tempest-class strike lantern");
+        const lost = heading([["ember-class strike lantern", 100, 140]]);
+        expect(headingOf(lost, body, false, faces)?.text).toBe("ember-class strike lantern");
         // Elsewhere it reads as prose; at body size it is running text.
         expect(headingOf(lost, body, false)).toBeNull();
-        const bodySize = heading([["tempest-class strike lantern", 100, 140]], 10);
+        const bodySize = heading([["ember-class strike lantern", 100, 140]], 10);
         expect(headingOf(bodySize, body, false, faces)).toBeNull();
     });
 });

@@ -33,14 +33,14 @@ function capitalize(word: string): string {
 
 /**
  * Capitals scrambled inside words, as a text layer that lost small caps' case
- * leaves them ("hereTek", "STriking"): never so in running prose.
+ * leaves them ("lanTern", "STriking"): never so in running prose.
  */
 export function scrambledCase(text: string): boolean {
     return /\p{Ll}\p{Lu}|\p{Lu}{2}\p{Ll}/u.test(text);
 }
 
 /**
- * Casing a text layer scrambled (small caps whose case was lost: "oath-caPtain",
+ * Casing a text layer scrambled (small caps whose case was lost: "lamp-keePer",
  * "GanG leaDer"): capitals inside words after lower-case letters, more than a
  * real name has ("McAllister" has one, and starts with a capital).
  */
@@ -49,7 +49,7 @@ export function caseLost(name: string): boolean {
     if (!/\p{Lu}/u.test(name)) {
         return true;
     }
-    // …nor sets two capitals before lower case ("STriking", "SpiriTSeer").
+    // …nor sets two capitals before lower case ("STriking", "LanTErn").
     if (/\p{Lu}{2}\p{Ll}/u.test(name)) {
         return true;
     }
@@ -57,7 +57,7 @@ export function caseLost(name: string): boolean {
     if (/\p{Ll}/u.test(name) && !/(?<!\p{L})\p{Lu}\p{Ll}/u.test(name)) {
         return true;
     }
-    // …nor starts in lower case yet capitalises a later word ("aelurus heavy Trike").
+    // …nor starts in lower case yet capitalises a later word ("wick heavy Lantern").
     if (/^\P{L}*\p{Ll}/u.test(name) && /\p{Lu}/u.test(name)) {
         return true;
     }
@@ -68,7 +68,7 @@ export function caseLost(name: string): boolean {
         return true;
     }
     const jumps = name.match(/\p{Ll}\p{Lu}/gu)?.length ?? 0;
-    // …nor jumps to a capital mid-word beside a word wholly in capitals ("HasHian TRELS")…
+    // …nor jumps to a capital mid-word beside a word wholly in capitals ("LanTern WICKS")…
     const capitalsWord = /(?<!\p{L})\p{Lu}{2,}(?!\p{L})/u.test(name);
     if (jumps >= 2 || (jumps >= 1 && (/^\P{L}*\p{Ll}/u.test(name) || capitalsWord))) {
         return true;
@@ -90,7 +90,7 @@ export function wordsOf(text: string): string[] {
 }
 
 /**
- * Rejoin a word the text layer split in two ("Hashi an" → "Hashian"): two
+ * Rejoin a word the text layer split in two ("Lante rn" → "Lantern"): two
  * adjacent words join when the prose around them (`words`, in order) spells
  * them as one word more often than as the two.
  */

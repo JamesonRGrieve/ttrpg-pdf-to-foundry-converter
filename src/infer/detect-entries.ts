@@ -305,7 +305,7 @@ export function headingOf(
     // word is running text; a display heading in capitals may wrap there.
     // A display-size line with no capitals at all, in a face that sets headings
     // elsewhere, is small capitals whose case the text layer lost
-    // ("tempest-class strike frigate"), not running prose.
+    // ("ember-class strike lantern"), not running prose.
     const caseLostDisplay =
         !/\p{Lu}/u.test(line.text) && headingFaces.has(face) && size > body.size + LEVEL_STEP;
     const lastWord = line.text.trim().split(/\s+/u).at(-1)?.toLowerCase() ?? "";

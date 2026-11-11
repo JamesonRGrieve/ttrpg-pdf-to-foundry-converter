@@ -142,7 +142,7 @@ describe("wordSpace", () => {
     it("scales with the larger neighbour, so a large initial's letters stay one word", () => {
         // A word space beside a larger numeral is still a space.
         expect(wordBreakBetween("rank", "2:", 3, wordSpace(11.25, 16))).toBe(true);
-        expect(wordBreakBetween("herald of", "khorne", 2.2, wordSpace(11, 11))).toBe(true);
+        expect(wordBreakBetween("keeper of", "lamps", 2.2, wordSpace(11, 11))).toBe(true);
         // A small-capitals initial and its letters, letter-spaced.
         expect(wordBreakBetween("g", "r e a t", 1.43, wordSpace(13, 9.1))).toBe(false);
         expect(wordBreakBetween("(e", "lite", 0.13, wordSpace(13, 9.1))).toBe(false);
