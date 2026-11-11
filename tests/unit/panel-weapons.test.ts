@@ -102,4 +102,21 @@ describe("blockFields", () => {
             ]),
         ).toEqual({ gear: "Glow rod, wick", armour: "3 All" });
     });
+
+    it("ends a field at another field's label the panel did not set apart", () => {
+        expect(
+            blockFields([
+                {
+                    label: "Skills",
+                    text: "Hush (Ag) +20, Wading (S) Talents: Keen Eye, Steady Hand",
+                    pageIndex: 0,
+                },
+                { label: "Traits", text: "Dim Sight", pageIndex: 0 },
+            ]),
+        ).toEqual({
+            skills: "Hush (Ag) +20, Wading (S)",
+            talents: "Keen Eye, Steady Hand",
+            traits: "Dim Sight",
+        });
+    });
 });

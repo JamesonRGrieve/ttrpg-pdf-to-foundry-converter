@@ -732,6 +732,10 @@ describe("npc statblocks", () => {
             movement: "3/6/9/18",
             skills: "Awareness",
         });
+        // A label printed twice running: the field is what follows the second.
+        expect(splitFields("Talents: Talents: Keen Eye, Steady Hand")).toEqual({
+            talents: "Keen Eye, Steady Hand",
+        });
     });
 
     it("parses characteristics, tier, panel movement and threat", () => {

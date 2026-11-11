@@ -132,7 +132,9 @@ export function splitFields(text: string): Partial<Record<StatField, string>> {
     const fields: Partial<Record<StatField, string>> = {};
     hits.forEach((hit, i) => {
         const next = hits[i + 1]?.at ?? text.length;
-        if (fields[hit.field] === undefined) {
+        // The first printing of a label holds its field — unless nothing
+        // follows it (a label printed twice running: "Talents: Talents: …").
+        if (fields[hit.field] === undefined || fields[hit.field] === "") {
             fields[hit.field] = text
                 .slice(hit.end, next)
                 .trim()
@@ -433,8 +435,17 @@ export function blockFields(blocks: DetectedNumericGrid["blocks"]): Partial<Reco
         const field = LABELS.find(([re]) =>
             new RegExp(`^${re.source}$`, re.flags).test(`${bareLabel(label).trim()}:`),
         )?.[1];
-        if (field !== undefined && out[field] === undefined && text.trim() !== "") {
-            out[field] = text.trim().replace(/[.;,]+$/u, "");
+        if (field === undefined || text.trim() === "") {
+            continue;
+        }
+        // A field's label the panel did not set apart ("… +20 Talents: …")
+        // still ends the block's own field and opens that one.
+        const within = splitFields(`${bareLabel(label).trim()}: ${text}`);
+        for (const [, key] of LABELS) {
+            const value = within[key];
+            if (value !== undefined && value !== "" && out[key] === undefined) {
+                out[key] = value;
+            }
         }
     }
     return out;
