@@ -46,6 +46,7 @@ import { withLigaturesJoined, withLostLettersRestored } from "./ligatures.ts";
 import {
     cleanName,
     endsMidSentence,
+    FUNCTION_WORDS,
     headingLabels,
     readsAsProse,
     rejoinSplitWords,
@@ -2047,6 +2048,28 @@ const nameWords = (name: string): string[] =>
         .filter((w) => w.length > 0);
 
 /**
+ * Whether a heading opens on the whole caption and runs straight on into
+ * further words ("Mire Hound Hunting Grounds"): it titles prose about the
+ * creature. A fuller name sets its epithet off with a comma or brackets,
+ * joins it on with a connecting word ("… of the Low Glow"), closes on the
+ * statblock's tier, or puts its further words first.
+ */
+function titlesTopic(heading: string, caption: readonly string[]): boolean {
+    const opening = heading.split(",")[0] ?? "";
+    const words = nameWords(opening);
+    const next = words[caption.length];
+    // One further word may complete the name ("Larval" under "Larval Form").
+    return (
+        next !== undefined &&
+        words.length > caption.length + 1 &&
+        caption.every((w, i) => words[i] === w) &&
+        !opening.includes("(") &&
+        !FUNCTION_WORDS.has(next) &&
+        splitTier(`(${next})`).tier === null
+    );
+}
+
+/**
  * The prose entry whose heading a statblock's caption shortens: the nearest
  * heading within reach holding every word of the caption and more ("Repair
  * Servitor" under "Industrial or Heavy Repair Servitor"). Its heading is the
@@ -2070,7 +2093,8 @@ export function namingEntry(
             p >= pageIndex - STATBLOCK_PROSE_REACH &&
             words.length > 0 &&
             heading.size > words.length &&
-            words.every((w) => heading.has(w))
+            words.every((w) => heading.has(w)) &&
+            !titlesTopic(e.heading.text, words)
         ) {
             best = e;
         }

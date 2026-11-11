@@ -3994,6 +3994,22 @@ describe("statblock prose", () => {
             "ESHA WICK, THE LANTERN BEARER",
         );
         expect(namingEntry(entries, "Reed King", "Reed King Profile", 72)).toBeNull();
+        // A heading running straight on from the caption into several words titles prose about it;
+        // one further word, a connecting word or a tier may complete the name.
+        const topics = [
+            heading("MIRE HOUND HUNTING GROUNDS", 72),
+            heading("LARVAL FORM", 72),
+            heading("LAMP KEEPER OF THE LOW GLOW", 72),
+            heading("GLOW WARDEN HORDE", 72),
+        ];
+        expect(namingEntry(topics, "Mire Hound", "Mire Hound Profile", 72)).toBeNull();
+        expect(namingEntry(topics, "Larval", "Larval Profile", 72)?.heading.text).toBe("LARVAL FORM");
+        expect(namingEntry(topics, "Lamp Keeper", "Lamp Keeper Profile", 72)?.heading.text).toBe(
+            "LAMP KEEPER OF THE LOW GLOW",
+        );
+        expect(namingEntry(topics, "Glow Warden", "Glow Warden Profile", 72)?.heading.text).toBe(
+            "GLOW WARDEN HORDE",
+        );
     });
 
     it("names a caption set as its own heading by the epithet heading directly over it", () => {
