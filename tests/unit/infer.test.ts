@@ -90,6 +90,7 @@ import {
     introducingEntry,
     isUnmarkedSectionRow,
     keyedByBands,
+    epithetEntry,
     namingEntry,
     listsCaption,
     weaponProfileText,
@@ -3158,6 +3159,25 @@ describe("entry detection", () => {
         ]);
     });
 
+    it("joins a heading broken off on a connecting word to its next line set further below", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("WICK THE TALL, KEEPER OF", 620, "h", 12),
+                run("THE LAMP, WARDEN OF THE", 597, "h", 12),
+                run("LOW GLOW", 574, "h", 12),
+                run(body, 557, "b", 10),
+            ],
+        );
+        const entries = detectEntries(ir, new Set());
+        expect(entries.map((e) => e.heading.text)).toEqual([
+            "GLOW SECTION",
+            "WICK THE TALL, KEEPER OF THE LAMP, WARDEN OF THE LOW GLOW",
+        ]);
+    });
+
     it("joins a section heading wrapped across columns under a table to its second line", () => {
         const right = (r: IRTextRun): IRTextRun => ({ ...r, x: 330, column: 1 });
         const header: IRTextRun = { ...run("Glow Effect", 265, "b", 10), weight: "bold" };
@@ -3973,6 +3993,20 @@ describe("statblock prose", () => {
             "ESHA WICK, THE LANTERN BEARER",
         );
         expect(namingEntry(entries, "Reed King", "Reed King Profile", 72)).toBeNull();
+    });
+
+    it("names a caption set as its own heading by the epithet heading directly over it", () => {
+        const entries = [
+            heading("WICK, KEEPER OF THE LOW LAMP", 72),
+            heading("Keeper Wick", 72),
+            heading("REED KING SIGHTINGS", 73),
+            heading("Reed King", 73),
+        ];
+        expect(epithetEntry(entries, "Keeper Wick", "Keeper Wick", 72)?.heading.text).toBe(
+            "WICK, KEEPER OF THE LOW LAMP",
+        );
+        // A heading without an epithet titles the prose.
+        expect(epithetEntry(entries, "Reed King", "Reed King", 73)).toBeNull();
     });
 
     it("reads a craft's boxed weapon profile entry as panel lines, each weapon's qualities after it", () => {

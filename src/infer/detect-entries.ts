@@ -1000,7 +1000,12 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             // before any fields or body, is the same heading wrapped. One broken
             // off inside an open bracket ("Name (Advanced,") is set a little
             // further from its closing line.
-            const bracketOpen = /\([^)]*$/u.test(open.heading.text);
+            // So is one broken off on a connecting word ("Name, Keeper of" /
+            // "the Place"): the line cannot end the heading.
+            const openText = open.heading.text.trim();
+            const unfinished =
+                /\([^)]*$/u.test(openText) ||
+                FUNCTION_WORDS.has(openText.split(/\s+/u).at(-1)?.toLowerCase() ?? "");
             const wrappedHeading =
                 open.fields.length === 0 &&
                 bodyLines.length === 0 &&
@@ -1008,7 +1013,7 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
                 prevLine.pageIndex === line.pageIndex &&
                 prevLine.column === line.column &&
                 prevLine.y - line.y <=
-                    (bracketOpen ? OPEN_HEADING_WRAP_FACTOR : HEADING_WRAP_FACTOR) * heading.size;
+                    (unfinished ? OPEN_HEADING_WRAP_FACTOR : HEADING_WRAP_FACTOR) * heading.size;
             // A heading line opening the next column on the page, set like a
             // heading line that closed the column before with nothing after it
             // but a table (its runs no text), a caption or the page's margin

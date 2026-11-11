@@ -2124,6 +2124,24 @@ export function captionSection(entries: readonly Entry[], caption: string, pageI
     return own <= 0 ? null : (entries[own - 1] ?? null);
 }
 
+/**
+ * The heading directly over a caption set as a heading of its own, where it
+ * gives the caption's name with an epithet set off by a comma: the fuller
+ * printed name.
+ */
+export function epithetEntry(
+    entries: readonly Entry[],
+    caption: string,
+    captionLine: string,
+    pageIndex: number,
+): Entry | null {
+    const titled = captionSection(entries, caption, pageIndex);
+    if (titled === null || !titled.heading.text.includes(",")) {
+        return null;
+    }
+    return namingEntry([titled], caption, captionLine, pageIndex);
+}
+
 function extractActors(
     ir: IR,
     numeric: readonly DetectedNumericGrid[],
@@ -2153,10 +2171,16 @@ function extractActors(
         const caption = rejoinSplitWords(npc.name, nearbyWords(entries, grid.pageIndex));
         const exact = introducingEntry(entries, caption, grid.pageIndex);
         // A grid's banner prints the full name; a row's caption may shorten its heading.
+        // So may a caption set as a heading of its own, under a heading
+        // giving the name with its epithet set off by a comma ("Wick,
+        // Keeper of the Lamp" over "Keeper Wick"); a heading without one
+        // titles the prose ("Wick Sightings").
         const naming =
-            exact === null && grid.caption !== null
-                ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
-                : null;
+            grid.caption === null
+                ? null
+                : exact === null
+                  ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
+                  : epithetEntry(entries, caption, grid.caption, grid.pageIndex);
         // A naming heading may carry the tier the statblock itself does not print.
         // One listing several creatures ("X and Y") introduces this one but
         // names it no more fully than its caption.
