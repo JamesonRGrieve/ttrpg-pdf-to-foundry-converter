@@ -3,7 +3,7 @@ import type { JsonObject } from "../types/entity.ts";
 import { diagramArmour, HIT_LOCATIONS, type HitLocation, type LocationArmour } from "./armour-diagram.ts";
 import { inlineWeapons } from "./inline-weapons.ts";
 import { splitTier } from "./names.ts";
-import { listedSkills, skillKey, trainedSkillsOf } from "./npc-skills.ts";
+import { listedSkills, readsWhole, skillKey, trainedSkillsOf } from "./npc-skills.ts";
 import { splitTopLevel } from "./origin-paths.ts";
 import { panelWeapons } from "./panel-weapons.ts";
 import { mapRow } from "./rows.ts";
@@ -357,9 +357,11 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     }
     if (fields.skills !== undefined) {
         system["skills"] = tidyList(fields.skills);
-        const trained = trainedSkillsOf(listedSkills(tidyList(fields.skills)));
-        if (Object.keys(trained).length > 0) {
-            system["trainedSkills"] = trained;
+        // A line with an entry that did not read whole (another field's text
+        // run into it, a callout number beside it) is kept as printed only.
+        const skills = listedSkills(tidyList(fields.skills));
+        if (skills.length > 0 && skills.every(readsWhole)) {
+            system["trainedSkills"] = trainedSkillsOf(skills);
         }
     }
 

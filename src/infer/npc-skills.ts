@@ -91,6 +91,8 @@ export function listedSkills(line: string): ListedSkill[] {
             // A lore printed kind-last ("Lore: Scholastic (Wards)") is the "Scholastic Lore" skill.
             .replace(/^Lore:\s*(\p{L}+)\b/u, "$1 Lore")
             .replace(RANK_INSIDE, "($<spec>) $<plus>")
+            // A rank printed alone in brackets ("(+20)") leaves none behind.
+            .replace(/\s*\(\s*\)/gu, "")
             .trim();
         // Trailing groups come in either order ("(Ag) +20", "+10 (Int)"): peel
         // them until neither closes the entry, keeping the highest rank.
@@ -112,6 +114,18 @@ export function listedSkills(line: string): ListedSkill[] {
             }
             break;
         }
+        // A tag printed before the specialisation ("Lore (Int) (Reeds)") is
+        // the characteristic all the same.
+        name = name
+            .replace(/\s*\(([^()]*)\)/gu, (whole, inner: string) => {
+                const tagged = taggedCharacteristic(inner);
+                if (tagged === undefined || characteristic !== "") {
+                    return whole;
+                }
+                characteristic = tagged;
+                return "";
+            })
+            .trim();
         const key = skillKey(name.replace(/\([^()]*\)/gu, " "));
         if (key.length === 0 || NO_SKILLS.test(name)) {
             continue;
@@ -127,6 +141,15 @@ export function listedSkills(line: string): ListedSkill[] {
         });
     }
     return out;
+}
+
+/**
+ * Whether a listed skill read whole: outside its brackets its name is words
+ * alone. A rank or a number left in it ("Wading (S) +10 8", a callout beside
+ * the line; "Hush +20 (2)") shows the entry was not all skill.
+ */
+export function readsWhole(skill: ListedSkill): boolean {
+    return !/[+\d]/u.test(skill.name.replace(/\([^()]*\)/gu, " "));
 }
 
 /** The rank's cumulative mirrors, as the data model derives them. */

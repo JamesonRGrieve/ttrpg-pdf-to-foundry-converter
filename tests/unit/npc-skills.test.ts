@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { listedSkills, skillKey, trainedSkillsOf } from "../../src/infer/npc-skills.ts";
+import { listedSkills, readsWhole, skillKey, trainedSkillsOf } from "../../src/infer/npc-skills.ts";
 import { fillSkillCharacteristics } from "../../src/infer/pipeline.ts";
 import type { Entity, JsonValue } from "../../src/types/entity.ts";
 
@@ -59,6 +59,33 @@ describe("statblock skills", () => {
             ["Wading", "strength", 2],
         ]);
         expect(Object(trainedSkillsOf(skills)["lanternLore"]).entries).toHaveLength(3);
+    });
+
+    it("reads a characteristic tag printed before the specialisation", () => {
+        const [skill] = listedSkills("Lantern Lore (Int) (Reeds, Tides) +10");
+        expect(skill).toMatchObject({
+            key: "lanternLore",
+            name: "Lantern Lore (Reeds, Tides)",
+            specialization: "Reeds, Tides",
+            characteristic: "intelligence",
+            advance: 2,
+        });
+    });
+
+    it("reads a rank printed alone in brackets", () => {
+        expect(listedSkills("Hush (Ag) (+20)")[0]).toMatchObject({
+            name: "Hush",
+            characteristic: "agility",
+            advance: 3,
+        });
+    });
+
+    it("tells an entry that read whole from one with a rank or a number left in it", () => {
+        const whole = (line: string): boolean[] => listedSkills(line).map(readsWhole);
+        expect(whole("Hush (Ag) +20, Lantern Lore (Sector 13) (Int)")).toEqual([true, true]);
+        // A callout number beside the line, and a note after the rank.
+        expect(whole("Wading (S) +10 8")).toEqual([false]);
+        expect(whole("Hush (Ag) +20 (2)")).toEqual([false]);
     });
 
     it("keeps a modifier past the top rank as a bonus, and lists nothing for none", () => {
