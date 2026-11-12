@@ -903,7 +903,10 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
             .join(" ");
         // A caption line below the header — the next table's, or prose citing
         // this one ("Table 2-1: … above lists …") — is no record.
-        const proseKey = /\.\s+\p{Lu}/u.test(key) || isTableCaption(key);
+        // So is a sentence break before a word whose small capitals lost
+        // their case ("GLOW. remember").
+        const proseKey =
+            /\.\s+\p{Lu}/u.test(key) || /\p{Lu}{2,}\.\s+\p{Ll}{2,}/u.test(key) || isTableCaption(key);
         // A wide gap ends the table unless the line past it still fills
         // several columns (a gap between multi-line records).
         const gapBefore = i === 0 ? 0 : (gaps[i - 1] ?? 0);

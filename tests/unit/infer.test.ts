@@ -2794,6 +2794,16 @@ describe("table continuations", () => {
         // Prose citing the table by its caption is no record.
         const citing = [record(500), record(494), { y: 488, runs: [at("Table 3-1: Lamps", 0, 488)] }];
         expect(tableBody(citing, edges)).toHaveLength(2);
+        // A quotation set across the columns is no record: it breaks a sentence
+        // before small capitals whose case was lost. A quoted name is a record.
+        const quoting = (key: string) => [
+            record(500),
+            record(494),
+            { y: 488, runs: [at(key, 0, 488), at("wick", 100, 488), at("oil", 200, 488)] },
+        ];
+        expect(tableBody(quoting("“Ember” Wick"), edges)).toHaveLength(3);
+        expect(tableBody(quoting("GLOW. remember the"), edges)).toHaveLength(2);
+        expect(tableBody(quoting("Lamp Oil"), edges)).toHaveLength(3);
         // A heading set larger than the records, straight below them, ends the table.
         const heading = { y: 482, runs: [{ ...at("LAMP LORE", 0, 482), size: 12 }, at("ember", 200, 482)] };
         expect(tableBody([record(500), record(494), record(488), heading, prose(476)], edges)).toHaveLength(
