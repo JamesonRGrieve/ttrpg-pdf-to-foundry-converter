@@ -335,6 +335,14 @@ function psychicPower(cells: RowCells): RowMapping {
     if (cells.focusPower !== undefined && !isEmptyCell(cells.focusPower)) {
         out.system["focusPower"] = focusPowerTest(cells.focusPower, undefined);
     }
+    // A printed threshold is the focus power test's: the total the power needs.
+    const threshold = read(out, cells, "threshold", parseInteger);
+    if (threshold !== null) {
+        const focus = out.system["focusPower"];
+        const test: JsonObject =
+            typeof focus === "object" && focus !== null && !Array.isArray(focus) ? focus : {};
+        out.system["focusPower"] = { ...test, threshold };
+    }
     text("range", "range");
     text("subtype", "subtype");
     const filledCell = (v: string | undefined): string | undefined =>

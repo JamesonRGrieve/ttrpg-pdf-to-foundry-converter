@@ -73,6 +73,24 @@ describe("weapon-table load rows", () => {
         expect(talent.system["prerequisites"]).toMatchObject({ characteristics: { perception: 30 } });
     });
 
+    it("reads a power summary row's threshold, focus time and sustain columns", () => {
+        expect(["Name", "Threshold", "Focus", "Sustain"].map(headerRole)).toEqual([
+            "name",
+            "threshold",
+            "action",
+            "sustained",
+        ]);
+        const mapped = mapRow("psychicPower", {
+            name: "Spark",
+            threshold: "9",
+            action: "Half Action",
+            sustained: "Yes",
+        });
+        expect(Object(mapped.system["focusPower"]).threshold).toBe(9);
+        expect(mapped.system["sustained"]).toBe(true);
+        expect(mapped.unparsed).toEqual([]);
+    });
+
     it("reads a skill row's characteristic column as the schema's key", () => {
         expect(mapRow("skill", { name: "Wading", characteristic: "Strength" }).system["characteristic"]).toBe(
             "strength",

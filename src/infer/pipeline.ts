@@ -521,9 +521,26 @@ function extractTables(
             .toLowerCase();
         return text;
     };
+    let rollTables = 0;
     for (const table of tables) {
         // A captioned roll table is a RollTable, whatever items its rows also define.
-        addRollTable(table, out);
+        const madeRollTable = addRollTable(table, out);
+        if (madeRollTable) {
+            rollTables += 1;
+        }
+        /** A table no item comes from: unclassified unless it made a RollTable, with why. */
+        const skip = (reason: string): void => {
+            if (!madeRollTable) {
+                unclassified += 1;
+            }
+            log.debug(
+                `table p${out.page(table.pageIndex)} ${JSON.stringify(table.tableTitle ?? "")} ${madeRollTable ? "kept as a roll table only" : "unclassified"}: ${reason}; headers [${table.headers.join(" | ")}], roles [${columnRoles(
+                    table,
+                )
+                    .map((r) => (r === null ? "?" : r.join("+")))
+                    .join(" | ")}]`,
+            );
+        };
         // A caption naming a creation step ("Random Home World", "Divinations")
         // lists origins of that step — unless a page column makes it an index
         // of origins described elsewhere, each read where it is printed.
@@ -533,7 +550,7 @@ function extractTables(
             table.headers.some((h) => PAGE_HEADER.test(h.trim())) ||
             pairsSteps(originStep, table.headers, out.target.originSteps);
         if (originStep !== null && index) {
-            unclassified += 1;
+            skip("an index of origins described elsewhere");
             continue;
         }
         if (originStep !== null) {
@@ -551,7 +568,7 @@ function extractTables(
         // A name column headed by a creation step ("Home World or Origin")
         // lists that step's origins (their costs, say), not catalogue items.
         if (namesOriginStep(table.headers[0] ?? "", out.target.originSteps)) {
-            unclassified += 1;
+            skip("its name column lists a creation step's origins");
             continue;
         }
         // A caption naming a catalogue type ("… Force Fields") outranks what
@@ -568,20 +585,20 @@ function extractTables(
         const type =
             captionType ?? nameHeaderType(table) ?? TABLE_ITEM_TYPE[classifyTable(table).contentType];
         if (type === undefined) {
-            unclassified += 1;
+            skip("no caption, name header or column set names a document type");
             continue;
         }
         const roles = columnRoles(table);
         // A table with an Advance column anywhere (a banner word can take the
         // first header slot) lists purchases, not a catalogue.
         if (isAttributeScale(roles[0]) || isAdvanceList(roles.flatMap((r) => r ?? []))) {
-            unclassified += 1;
+            skip("a scale or list of advances, not a catalogue");
             continue;
         }
         const nameCol = nameColumn(table, roles);
         const sectionQualified = qualifiedBySection(table, nameCol);
         if (keyedByBands(table, nameCol)) {
-            unclassified += 1;
+            skip("its rows are keyed by bands of values, not names");
             continue;
         }
         // A caption naming a tier ("… Tier 2 …") gives every row that tier.
@@ -725,7 +742,7 @@ function extractTables(
             );
         }
     }
-    log.info(`tables: ${tables.length} detected, ${unclassified} unclassified`);
+    log.info(`tables: ${tables.length} detected, ${rollTables} roll tables, ${unclassified} unclassified`);
     return { tables: tables.length, unclassified, tableRuns: new Set(titled.flatMap((t) => t.runs)) };
 }
 
@@ -1966,18 +1983,19 @@ export function keyedByBands(table: DetectedTable, nameCol: number): boolean {
 const ROLL_TABLE_SEGMENT = "rolltables";
 
 /** Emit a captioned table whose rows are die results as a RollTable. */
-function addRollTable(table: DetectedTable, out: EntityCollector): void {
+/** Add a captioned roll table as a RollTable; whether one was made. */
+function addRollTable(table: DetectedTable, out: EntityCollector): boolean {
     // A table whose caption gives it no name is no document: a RollTable is named.
     const name = cleanName(table.tableTitle ?? "");
     if (name.length === 0) {
-        return;
+        return false;
     }
     const rows = table.rows
         .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
         .map((r) => rowTexts(r, table.headers.length));
     const roll = rollResults(rows);
     if (roll === null) {
-        return;
+        return false;
     }
     out.add(
         "RollTable",
@@ -1993,6 +2011,7 @@ function addRollTable(table: DetectedTable, out: EntityCollector): void {
         table.pageIndex,
         "table:roll",
     );
+    return true;
 }
 
 function rowTexts(row: TableRow, columns: number): string[] {

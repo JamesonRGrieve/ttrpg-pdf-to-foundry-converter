@@ -35,6 +35,7 @@ export type Role =
     | "focusPower"
     | "action"
     | "sustained"
+    | "threshold"
     | "subtype"
     | "roll"
     | "advance"
@@ -80,7 +81,9 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(protection|protection rating)$/u, "protection"],
     [/^(overload|overload chance)$/u, "overload"],
     [/^(focus power|focus power test|focus test)$/u, "focusPower"],
-    [/^(action|focus time)$/u, "action"],
+    // A power's focus time, printed "Focus" or run together.
+    [/^(action|focus ?time|focus)$/u, "action"],
+    [/^threshold$/u, "threshold"],
     [/^(sustained|sustain)$/u, "sustained"],
     [/^(subtype|sub type|keywords?)$/u, "subtype"],
     [/^(d\d+|roll|result)$/u, "roll"],
