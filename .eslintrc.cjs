@@ -61,6 +61,10 @@ module.exports = {
     ignorePatterns: [
         "dist",
         "dist-web",
+        "dist-foundry",
+        "dist-foundry-release",
+        ".foundry-release",
+        ".foundry-test-data-*",
         "web/public/vendor",
         "test-results",
         "playwright-report",

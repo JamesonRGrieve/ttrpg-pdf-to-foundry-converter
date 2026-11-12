@@ -50,6 +50,9 @@ async function run(request: RunRequest): Promise<void> {
         }
         documents.push({ pdf: new Uint8Array(pdf), target });
     }
+    // The documents hold the only references to the PDFs from here on, so each
+    // can be let go once it is read (releaseInputs below).
+    request.documents = [];
     const { ocrWorkers, maxInFlight } = request;
     const vendorBase = new URL("vendor/tesseract/", request.siteBase).href;
     const ocr = await BrowserTesseractEngine.create(ocrWorkers, RENDER_DPI, vendorBase);
@@ -62,10 +65,32 @@ async function run(request: RunRequest): Promise<void> {
             ocrStore: new MemoryOcrPageStore(),
             maxInFlight,
             log,
+            releaseInputs: true,
             onProgress: (progress) => post({ type: "progress", ...progress }),
         });
         if (result.module === null) {
             post({ type: "refused", refused: result.refused });
+            return;
+        }
+        if (request.output === "files") {
+            const files = result.module.files.map((f) => ({ relPath: f.relPath, contents: f.contents }));
+            post(
+                {
+                    type: "files",
+                    moduleId: result.module.id,
+                    files,
+                    warnings: result.warnings.length,
+                    refused: result.refused,
+                },
+                // Each buffer once: two views on one buffer cannot both be transferred.
+                [
+                    ...new Set(
+                        files.flatMap((f) =>
+                            typeof f.contents === "string" ? [] : [f.contents.buffer as ArrayBuffer],
+                        ),
+                    ),
+                ],
+            );
             return;
         }
         const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};

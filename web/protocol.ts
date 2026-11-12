@@ -25,6 +25,14 @@ export interface RunRequest {
     maxInFlight: number;
     /** Write the engine's debug lines to the log as well (every table, entry, statblock, entity and warning). */
     debug: boolean;
+    /** How the module comes back: zipped (the upload page), or as its files (the Foundry package). */
+    output?: "zip" | "files";
+}
+
+/** One file of the converted module, relative to the modules directory (`<id>/…`). */
+export interface ModuleFileMessage {
+    relPath: string;
+    contents: string | Uint8Array;
 }
 
 export interface PackSummary {
@@ -48,6 +56,14 @@ export type WorkerMessage =
           assets: number;
           warnings: number;
           /** Indexes of input PDFs refused as encrypted. */
+          refused: number[];
+      }
+    /** The module as its files (`output: "files"`). */
+    | {
+          type: "files";
+          moduleId: string;
+          files: ModuleFileMessage[];
+          warnings: number;
           refused: number[];
       }
     /** Every input was refused as encrypted. */

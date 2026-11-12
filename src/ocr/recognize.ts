@@ -37,6 +37,11 @@ export class MemoryOcrPageStore implements OcrPageStore {
     async write(key: string, pageIndex: number, words: OcrWord[]): Promise<void> {
         this.#pages.set(`${key}/${pageIndex}`, words);
     }
+
+    /** Forget every page (between the documents of a batch, so their words do not pile up). */
+    release(): void {
+        this.#pages.clear();
+    }
 }
 
 export interface RecognizeOptions {

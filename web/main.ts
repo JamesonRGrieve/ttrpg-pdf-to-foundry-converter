@@ -240,6 +240,8 @@ async function start(): Promise<void> {
     }
 
     const engine = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
+    /** Where the run last reported being, for the log line of a run that dies. */
+    let lastProgress = "starting";
     worker = engine;
     engine.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
         const message = event.data;
@@ -266,6 +268,7 @@ async function start(): Promise<void> {
                 progress.max = message.documents;
                 progress.value = message.document + (message.pages > 0 ? message.page / message.pages : 0);
                 status.textContent = `${files[message.document]?.name ?? "PDF"} (${message.document + 1} of ${message.documents}): page ${message.page} of ${message.pages}`;
+                lastProgress = `document ${message.document + 1} of ${message.documents}, OCR page ${message.page} of ${message.pages}`;
                 break;
             case "result":
                 showResult(message, files);
@@ -277,6 +280,7 @@ async function start(): Promise<void> {
                 break;
             case "error":
                 status.textContent = `Failed: ${message.message}`;
+                appendLog(`error: ${message.message}; last progress: ${lastProgress}`);
                 outOfMemory.hidden = !looksOutOfMemory(message.message);
                 finish();
                 break;
@@ -286,6 +290,10 @@ async function start(): Promise<void> {
         // A worker the browser kills (most often for memory) reports no message at all.
         const reason = typeof event.message === "string" && event.message.length > 0 ? event.message : null;
         status.textContent = `Failed: ${reason ?? "the converter stopped unexpectedly"}`;
+        // The log is what gets copied into a report, so it says so too, and where the run was.
+        appendLog(
+            `error: the converter stopped${reason === null ? " unexpectedly (most often the browser ending it for memory)" : `: ${reason}`}; last progress: ${lastProgress}`,
+        );
         outOfMemory.hidden = reason !== null && !looksOutOfMemory(reason);
         finish();
     });

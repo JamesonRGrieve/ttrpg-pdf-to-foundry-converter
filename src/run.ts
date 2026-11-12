@@ -12,6 +12,7 @@ import type { OcrEngine } from "./ocr/types.ts";
 import { emit, type EmittedPack } from "./stages/emit.ts";
 import { EXTRACTOR_ID, extract } from "./stages/extract.ts";
 import { homologate } from "./stages/homologate.ts";
+import { openImageFallback } from "./stages/image-fallback.ts";
 import { recoverImages } from "./stages/images.ts";
 import { type BuiltModule, buildModule, MODULE_ASSET_PLACEHOLDER } from "./stages/module.ts";
 import { normalize } from "./stages/normalize.ts";
@@ -147,8 +148,15 @@ async function readDocument(
             .map(([n, pages]) => `${n} columns × ${pages}`)
             .join(", ")}`,
     );
-    const assets = recoverImages(raw, opts.log);
-    log.debug(`images: ${assets.assets.length} recovered`);
+    // Images the in-house decoder refuses are decoded through the pinned MuPDF.
+    const fallback = openImageFallback(pdfBytes);
+    let assets: ImageAssets;
+    try {
+        assets = recoverImages(raw, opts.log, fallback.decode);
+    } finally {
+        fallback.close();
+    }
+    log.debug(`images: ${assets.assets.length} recovered of ${raw.images.length}`);
     await opts.irCache?.write(key, { ir, assets });
     return { ir, assets, cacheHit: false };
 }
@@ -194,12 +202,43 @@ export interface ModuleProgress {
 
 export type ModuleOptions = Omit<EngineOptions, "assetRefPrefix" | "onOcrPage" | "target"> & {
     onProgress?: (progress: ModuleProgress) => void;
+    /**
+     * Drop each document's PDF bytes once it is read, so a long batch does not
+     * hold every PDF in memory at once (the browser's worker sets it). The
+     * documents' `pdf` fields are emptied in place.
+     */
+    releaseInputs?: boolean;
 };
 
 /** One PDF and the output schema the user chose for it. */
 export interface ModuleDocument {
     pdf: Uint8Array;
     target: Target;
+}
+
+/** Whether two PDFs are the same bytes. */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+    if (a === b) {
+        return true;
+    }
+    if (a.byteLength !== b.byteLength) {
+        return false;
+    }
+    for (let i = 0; i < a.byteLength; i += 1) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** A store that can let go of what it holds between documents (the in-memory one). */
+interface Releasable {
+    release(): void;
+}
+
+function releasable(store: OcrPageStore): store is OcrPageStore & Releasable {
+    return typeof (store as Partial<Releasable>).release === "function";
 }
 
 /** The one game system a run's targets write for; a module belongs to a single system. */
@@ -245,8 +284,12 @@ export async function runModule(
     const system = moduleSystem(documents);
     const results: (EngineResult & { target: Target })[] = [];
     const refused: number[] = [];
-    for (const [index, { pdf, target }] of documents.entries()) {
-        const { onProgress, ...engineOpts } = opts;
+    for (const [index, document] of documents.entries()) {
+        const { pdf, target } = document;
+        const { onProgress, releaseInputs, ...engineOpts } = opts;
+        opts.log.info(
+            `document ${index + 1} of ${documents.length}: ${pdf.byteLength} bytes, target ${targetId(target)}`,
+        );
         const result = await runEngine(pdf, {
             ...engineOpts,
             target,
@@ -262,6 +305,15 @@ export async function runModule(
             refused.push(index);
         } else {
             results.push({ ...result, target });
+        }
+        // What this document no longer needs: its OCR words (unless the next
+        // document is the same PDF, read again for another target) and its bytes.
+        const next = documents[index + 1];
+        if (releasable(opts.ocrStore) && !(next !== undefined && sameBytes(next.pdf, pdf))) {
+            opts.ocrStore.release();
+        }
+        if (releaseInputs === true && !documents.slice(index + 1).some((d) => d.pdf === pdf)) {
+            (document as { pdf: Uint8Array }).pdf = new Uint8Array(0);
         }
     }
     const warnings = results.flatMap((r) => r.warnings);

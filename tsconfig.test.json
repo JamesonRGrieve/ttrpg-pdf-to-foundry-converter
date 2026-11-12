@@ -6,6 +6,14 @@
         "declaration": false,
         "types": ["node", "vitest/globals"]
     },
-    "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"],
+    "include": [
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "scripts/**/*.ts",
+        "e2e/**/*.ts",
+        "e2e-foundry/**/*.ts",
+        "playwright.config.ts",
+        "playwright.foundry.config.ts"
+    ],
     "exclude": ["node_modules", "dist", ".cache"]
 }

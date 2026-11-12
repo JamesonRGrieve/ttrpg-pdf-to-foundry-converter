@@ -17,7 +17,22 @@
  */
 export const RELEASE = "2026-11-11-13-50";
 export const ENGINE_VERSION = "0.2.0";
-export const IR_VERSION = 46;
+export const IR_VERSION = 53;
+
+/**
+ * The Foundry package's version for a release stamp, as semver Foundry's
+ * package listing and the release tags (`v<version>`) take:
+ * `<year>.<month and day>.<hour and minute>` with leading zeros dropped
+ * (2026-01-05-09-05 → 2026.105.905). Later releases compare higher.
+ */
+export function packageVersion(release: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})$/u.exec(release);
+    if (m === null) {
+        throw new Error(`release stamp must be YYYY-MM-DD-HH-MM, got ${JSON.stringify(release)}`);
+    }
+    const [, year, month, day, hour, minute] = m;
+    return `${Number(year)}.${Number(`${month}${day}`)}.${Number(`${hour}${minute}`)}`;
+}
 
 /** Where the latest release is published, as `{"release": "<RELEASE>"}`. */
 export const RELEASE_FEED_URL =

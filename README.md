@@ -96,7 +96,8 @@ Several modules install side by side: the module id is a hash of the module's
 own contents, pack names are namespaced by the module, image paths point into
 the module, and nothing touches the system or other packages. Packs are named
 `<target>-<book>-<category>`; the book segment comes from the PDF's own metadata
-title. The wh40k-rpg system finds packs by what they declare, not by their
+title. A module carries only the images its documents use. The wh40k-rpg
+system finds packs by what they declare, not by their
 names, so each wh40k-rpg pack carries `flags["wh40k-rpg"]`: its line, its
 category (the segment without an `items-` prefix) and `homebrew: false`.
 
@@ -107,6 +108,43 @@ latest release from `release.json` beside the web page and, if a newer
 converter exists, says so once (for all converted modules) and offers to
 rebuild. It changes nothing, stays silent offline, and has a checkbox to hide
 the notice until a newer release.
+
+## The Foundry package
+
+The `ttrpg-pdf-converter` package runs the converter inside Foundry v14.
+Install it from Foundry's setup screen under _Add-on Modules → Install
+Module_, with this manifest URL:
+
+```
+https://github.com/JamesonRGrieve/ttrpg-pdf-to-foundry-converter/releases/latest/download/module.json
+```
+
+Enable it in a world on the wh40k-rpg system. The GM gets a _Convert PDF_
+button in the Compendium sidebar. Choose the PDFs and each one's game line,
+then convert. The work runs in the GM's browser, and the packs are written into
+the world as compendiums in one folder per conversion, with their images under
+`worlds/<world>/ttrpg-pdf-converter/assets`.
+
+Converting the same book again updates those compendiums. Documents the new
+conversion changes are replaced, new ones are added, and ones it no longer
+produces are removed. Any of these you have edited since the last import are
+listed in a dialog, where you keep your version or take the new one; keeping
+yours is the default. Documents you added to those compendiums yourself are
+never touched.
+
+Build it with `pnpm foundry:build`. The package is written to `dist-foundry/`
+and its release zip to `dist-foundry-release/`. Releases follow the wh40k-rpg
+system's flow (`.github/workflows/release.yml`):
+
+- Every push to `main` refreshes a rolling `nightly` prerelease.
+- A `v<version>` tag publishes a versioned release once the maintainer
+  approves it, and registers it on the Foundry package listing. The version
+  is the converter release as `year.monthday.hourminute`, so
+  `2026-11-11-13-50` is `v2026.1111.1350`.
+
+`pnpm test:foundry` runs the package's e2e suite in a real headless Foundry v14
+(`.foundry-release`, a local Foundry release that is never committed) with the
+wh40k-rpg system built beside this repository.
 
 ## How it works
 

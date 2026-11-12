@@ -5,6 +5,7 @@ import type { ImageAsset, ImageAssets, RawDoc, RawImageXObject } from "../types/
 import { id16 } from "../util/hash.ts";
 import { byteCompare, numAsc } from "../util/ordered.ts";
 import { encodePngRgba } from "../util/png.ts";
+import type { ImageDecoder } from "./image-fallback.ts";
 
 /**
  * Stage 3 — Image recovery, Tier A (spec §6.1). Two rules govern byte-stability:
@@ -19,8 +20,11 @@ import { encodePngRgba } from "../util/png.ts";
  * a system ICC profile (§6.1). Assets are content-addressed (§6.1): identical
  * bytes dedup to one file, and two users produce the same asset tree.
  *
- * Unsupported inputs (LZW/CCITT, indexed palettes, sub-byte depths, Flate with a
- * TIFF/unknown predictor we don't model) are refused with a warning rather than
+ * Palette (`/Indexed`) images are expanded through their lookup table, and an
+ * ICC-based image takes its component count from the profile's `/N`; gray and
+ * palette samples may be 1, 2, 4 or 8 bits, any sample 16 (its high byte kept).
+ * Unsupported inputs (LZW/CCITT, separation and Lab colour spaces, Flate with
+ * an unknown predictor) are refused with a warning naming why, rather than
  * guessed (§6.3 / §8.6). Tier B raster fallback is a separate, opt-in path.
  */
 
@@ -115,8 +119,80 @@ function unfilterTiff(data: Uint8Array, rowBytes: number, bpp: number): Uint8Arr
     return out;
 }
 
+/**
+ * Components per sample: one for a palette image (each sample an index), else
+ * the device family's count, the count the colour space defines (an ICC
+ * profile's `/N`), the predictor's `/Colors`, or three.
+ */
 function componentsOf(img: RawImageXObject): number {
-    return COMPONENTS_BY_COLORSPACE[img.colorspace] ?? img.decodeParms?.colors ?? 3;
+    if ((img.palette ?? null) !== null) {
+        return 1;
+    }
+    return COMPONENTS_BY_COLORSPACE[img.colorspace] ?? img.components ?? img.decodeParms?.colors ?? 3;
+}
+
+/** A named colour space the decoder has no conversion for (separations, Lab, patterns). */
+function unconvertible(img: RawImageXObject): boolean {
+    return (
+        img.colorspace !== "" &&
+        (img.palette ?? null) === null &&
+        COMPONENTS_BY_COLORSPACE[img.colorspace] === undefined &&
+        (img.components ?? null) === null
+    );
+}
+
+/** Bit depths a sample may have; below 8 only for one-component (gray or palette) images. */
+const SUB_BYTE_DEPTHS = new Set([1, 2, 4]);
+
+/**
+ * Samples at 8 bits each, `components` per pixel, from rows of `bpc`-bit
+ * samples (each row padded to a whole byte). A sub-byte sample is scaled to
+ * 0–255, unless it is a palette index; a 16-bit sample keeps its high byte.
+ */
+function toEightBit(
+    data: Uint8Array,
+    width: number,
+    height: number,
+    components: number,
+    bpc: number,
+    index: boolean,
+): Uint8Array {
+    if (bpc === 8) {
+        return data;
+    }
+    const perRow = width * components;
+    const rowBytes = Math.ceil((perRow * bpc) / 8);
+    const out = new Uint8Array(perRow * height);
+    const max = (1 << bpc) - 1;
+    for (let y = 0; y < height; y += 1) {
+        for (let i = 0; i < perRow; i += 1) {
+            let value: number;
+            if (bpc === 16) {
+                value = byteAt(data, y * rowBytes + i * 2);
+            } else {
+                const bit = i * bpc;
+                const byte = byteAt(data, y * rowBytes + (bit >> 3));
+                const raw = (byte >> (8 - bpc - (bit & 7))) & max;
+                value = index ? raw : Math.round((raw * 255) / max);
+            }
+            out[y * perRow + i] = value;
+        }
+    }
+    return out;
+}
+
+/** Palette indices mapped to their entries (an index past the table takes its last entry). */
+function expandPalette(indices: Uint8Array, palette: { components: number; lookup: Uint8Array }): Uint8Array {
+    const n = palette.components;
+    const last = Math.max(0, Math.floor(palette.lookup.length / n) - 1);
+    const out = new Uint8Array(indices.length * n);
+    indices.forEach((index, p) => {
+        const entry = Math.min(index, last) * n;
+        for (let c = 0; c < n; c += 1) {
+            out[p * n + c] = byteAt(palette.lookup, entry + c);
+        }
+    });
+    return out;
 }
 
 /** Fixed-intent CMYK→RGB (naive complement). No ICC, ever (§6.1). */
@@ -163,7 +239,32 @@ function encodeRasterToPng(
     return encodePngRgba(rgba, width, height);
 }
 
-function recoverImage(img: RawImageXObject, log: Logger): RasterResult | null {
+/**
+ * Recover an image: in-house where it can be (byte-stable passthrough or
+ * PNG re-encoding), else through `fallback` (the pinned MuPDF) when given.
+ * A skipped image logs why.
+ */
+function recoverImage(img: RawImageXObject, log: Logger, fallback?: ImageDecoder): RasterResult | null {
+    const own = decodeInHouse(img);
+    if (typeof own !== "string") {
+        return own;
+    }
+    const decoded = fallback?.(img.objectId) ?? null;
+    if (decoded !== null) {
+        log.debug(`image ${img.objectId}: ${own}; decoded by the fallback decoder`);
+        return {
+            ext: "png",
+            bytes: encodeRasterToPng(decoded.samples, decoded.width, decoded.height, decoded.components),
+            width: decoded.width,
+            height: decoded.height,
+        };
+    }
+    log.warn(`image ${img.objectId}: ${own}; skipped`);
+    return null;
+}
+
+/** The image decoded in-house, or why it cannot be. */
+function decodeInHouse(img: RawImageXObject): RasterResult | string {
     if (img.filter === "DCTDecode") {
         return { ext: "jpg", bytes: img.bytes, width: img.width, height: img.height };
     }
@@ -171,61 +272,64 @@ function recoverImage(img: RawImageXObject, log: Logger): RasterResult | null {
         return { ext: "jpx", bytes: img.bytes, width: img.width, height: img.height };
     }
     if (img.filter !== "FlateDecode" && img.filter !== "") {
-        log.warn(`image ${img.objectId}: unsupported filter ${JSON.stringify(img.filter)}; skipped`);
-        return null;
+        return `unsupported filter ${JSON.stringify(img.filter)}`;
     }
-    if (img.bpc !== 8) {
-        log.warn(`image ${img.objectId}: unsupported bit depth ${img.bpc}; skipped`);
-        return null;
+    if (unconvertible(img)) {
+        return `unsupported colour space ${img.colorspace}`;
     }
     const components = componentsOf(img);
-    if (![1, 3, 4].includes(components)) {
-        log.warn(`image ${img.objectId}: unsupported component count ${components}; skipped`);
-        return null;
+    if (!(img.bpc === 8 || img.bpc === 16 || (components === 1 && SUB_BYTE_DEPTHS.has(img.bpc)))) {
+        return `unsupported bit depth ${img.bpc}`;
+    }
+    const outComponents = img.palette?.components ?? components;
+    if (![1, 3, 4].includes(outComponents)) {
+        return `unsupported component count ${outComponents}`;
     }
 
     let decoded: Uint8Array;
     try {
         decoded = img.filter === "FlateDecode" ? unzlibSync(img.bytes) : img.bytes;
     } catch (err) {
-        log.warn(
-            `image ${img.objectId}: inflate failed (${err instanceof Error ? err.message : "error"}); skipped`,
-        );
-        return null;
+        return `inflate failed (${err instanceof Error ? err.message : "error"})`;
     }
 
     const predictor = img.decodeParms?.predictor ?? 1;
     const columns = img.decodeParms?.columns ?? img.width;
-    const rowBytes = columns * components;
-    const bpp = components;
+    const rowBytes = Math.ceil((columns * components * img.bpc) / 8);
+    const bpp = Math.max(1, Math.ceil((components * img.bpc) / 8));
     let samples = decoded;
     if (predictor >= 10) {
         samples = unfilterPng(decoded, rowBytes, bpp);
     } else if (predictor === 2) {
         samples = unfilterTiff(decoded, rowBytes, bpp);
     } else if (predictor !== 1) {
-        log.warn(`image ${img.objectId}: unsupported predictor ${predictor}; skipped`);
-        return null;
+        return `unsupported predictor ${predictor}`;
     }
 
-    if (samples.length < img.width * img.height * components) {
-        log.warn(`image ${img.objectId}: decoded sample buffer too small; skipped`);
-        return null;
+    if (samples.length < Math.ceil((img.width * components * img.bpc) / 8) * img.height) {
+        return "decoded sample buffer too small";
     }
+    const palette = img.palette ?? null;
+    const eight = toEightBit(samples, img.width, img.height, components, img.bpc, palette !== null);
+    const pixels = palette === null ? eight : expandPalette(eight, palette);
     return {
         ext: "png",
-        bytes: encodeRasterToPng(samples, img.width, img.height, components),
+        bytes: encodeRasterToPng(pixels, img.width, img.height, outComponents),
         width: img.width,
         height: img.height,
     };
 }
 
-export function recoverImages(raw: RawDoc, log: Logger): ImageAssets {
+/**
+ * Every image of the document as an asset. `fallback` decodes the images
+ * the in-house decoder refuses (the pinned MuPDF, `image-fallback.ts`).
+ */
+export function recoverImages(raw: RawDoc, log: Logger, fallback?: ImageDecoder): ImageAssets {
     const byAssetId = new Map<string, ImageAsset>();
     const objectToAsset = new Map<string, string>();
 
     for (const img of raw.images) {
-        const recovered = recoverImage(img, log);
+        const recovered = recoverImage(img, log, fallback);
         if (recovered === null) {
             continue;
         }

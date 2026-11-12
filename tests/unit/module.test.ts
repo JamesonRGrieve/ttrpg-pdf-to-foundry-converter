@@ -129,8 +129,31 @@ describe("module packaging", () => {
     });
 
     it("gives distinct content distinct module ids, so modules install side by side", () => {
-        const other = input({ assets: [{ relPath: "x2.png", bytes: new Uint8Array([9]) }] });
-        expect(buildModule(other).id).not.toBe(buildModule(input()).id);
+        const base = input();
+        const [gear, bestiary] = base.packs;
+        if (gear === undefined || bestiary === undefined) {
+            throw new Error("two packs expected");
+        }
+        const other = input({
+            packs: [{ ...gear, documents: [...gear.documents, doc("dddddddddddddddd", "Ember")] }, bestiary],
+        });
+        expect(buildModule(other).id).not.toBe(buildModule(base).id);
+    });
+
+    it("ships only the images a document references", () => {
+        // Page art and scanned pages are recovered too, but no document shows them.
+        const module = buildModule(
+            input({
+                assets: [
+                    { relPath: "x1.png", bytes: new Uint8Array([1, 2, 3]) },
+                    { relPath: "page-art.png", bytes: new Uint8Array([9]) },
+                ],
+            }),
+        );
+        expect(module.files.filter((f) => f.relPath.includes("/assets/")).map((f) => f.relPath)).toEqual([
+            `${module.id}/assets/x1.png`,
+        ]);
+        expect(module.id).toBe(buildModule(input()).id);
     });
 
     it("declares each pack's system flags under the system's id, beside the release", () => {

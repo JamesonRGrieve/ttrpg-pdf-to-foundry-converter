@@ -27,6 +27,8 @@
         "web:dev": "pnpm web:assets && vite",
         "web:build": "pnpm web:assets && vite build",
         "web:typecheck": "tsc -p tsconfig.web.json",
+        "foundry:build": "pnpm web:assets && vite build -c vite.foundry.config.ts && node scripts/package-foundry.mjs",
+        "test:foundry": "pnpm foundry:build && playwright test -c playwright.foundry.config.ts",
         "test:e2e": "playwright test",
         "fixtures:render": "node scripts/render-fixtures.mjs",
         "golden:update": "tsx scripts/update-golden.ts",

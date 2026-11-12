@@ -8,13 +8,28 @@ export function posixRelative(root, full) {
 }
 
 /** Directories never scanned by CI gates (generated / vendored / regenerable). */
-const IGNORED = new Set(["node_modules", ".git", "dist", ".cache", ".tmp", "coverage", ".vitest"]);
+const IGNORED = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    ".cache",
+    ".tmp",
+    "coverage",
+    ".vitest",
+    // The Foundry e2e suite's local Foundry release and its throwaway worlds (third-party files, never committed),
+    // and Playwright's own reports (page snapshots of whatever system a test world ran).
+    ".foundry-release",
+    "test-results",
+    "playwright-report",
+]);
+/** Throwaway Foundry e2e data directories, one per test server port. */
+const IGNORED_PREFIX = ".foundry-test-data-";
 
 /** Recursively list repo-relative file paths, skipping ignored/binary trees. */
 export function listFiles(root, dir = root) {
     const out = [];
     for (const entry of readdirSync(dir).sort()) {
-        if (IGNORED.has(entry)) {
+        if (IGNORED.has(entry) || entry.startsWith(IGNORED_PREFIX)) {
             continue;
         }
         const full = join(dir, entry);

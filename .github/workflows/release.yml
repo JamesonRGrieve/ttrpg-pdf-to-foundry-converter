@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Release
+
+# Builds the Foundry package (ttrpg-pdf-converter) and publishes it as a GitHub
+# release, on one of two channels, as the wh40k-rpg system and the cartography
+# module do (scripts/prepare-release-manifest.mjs stamps the manifest for each):
+#
+#   * nightly — every push to `main` (or a manual dispatch) republishes the
+#     rolling, ephemeral PRE-RELEASE under the fixed `nightly` tag, so testers can
+#     install from a stable manifest URL. Version = the built version + this
+#     workflow's run_number. Not an official release.
+#   * release — pushing a `v<version>` tag cuts an OFFICIAL versioned release once
+#     the maintainer approves the `release` environment deployment in GitHub. The
+#     tag must equal the package version of src/version.ts's RELEASE (see
+#     packageVersion: RELEASE 2026-11-11-13-50 is v2026.1111.1350). It runs the
+#     full gate first. The published manifest URL is the /releases/latest/ alias
+#     (installs follow future releases); the download URL is pinned to the tag, so
+#     each version's manifest fetches its own zip, the form the Foundry package
+#     listing expects. A tag with a prerelease label (v2026.1111.1350-rc.1)
+#     publishes as a prerelease and never becomes "latest".
+#
+# What ships: the converter engine, its worker and the pinned OCR runtime, the
+# LICENSE and README. No book content: every value in a conversion comes from the
+# user's own PDF, in the user's own browser.
+
+on:
+    push:
+        branches: [main]
+        tags: ["v*"]
+    workflow_dispatch:
+
+permissions:
+    contents: write # required to create/update releases
+
+concurrency:
+    group: release-${{ github.ref }}
+    # A newer main push supersedes an in-flight nightly; a tagged release is never cancelled.
+    cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+    publish:
+        name: Build + publish (${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'nightly' }})
+        runs-on: ubuntu-latest
+        # A tagged release runs in the `release` environment, which requires the
+        # maintainer's approval in GitHub before any step (and its secrets) runs.
+        environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || '' }}
+        env:
+            CHANNEL: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'nightly' }}
+            TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'nightly' }}
+            RUN: ${{ github.run_number }}
+            REPO_URL: https://github.com/${{ github.repository }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.1.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+
+            # An official release must pass the same gate ci.yml enforces on main.
+            - if: env.CHANNEL == 'release'
+              run: pnpm check
+
+            - name: Build the package
+              run: |
+                  pnpm web:assets
+                  pnpm exec vite build -c vite.foundry.config.ts
+
+            - name: Stamp version + manifest URLs
+              env:
+                  MANIFEST_FILE: dist-foundry/module.json
+              run: node scripts/prepare-release-manifest.mjs
+
+            - name: Package the zip (module.json at zip root)
+              run: node scripts/package-foundry.mjs
+
+            - name: Publish rolling `nightly` prerelease
+              if: env.CHANNEL == 'nightly'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: nightly
+                  name: Nightly build (pre-release)
+                  prerelease: true
+                  make_latest: false
+                  target_commitish: ${{ github.sha }} # re-point the nightly tag at this build
+                  body: |
+                      Automated rolling build of `main`. Ephemeral, pre-release.
+                      Commit: ${{ github.sha }}
+
+                      Install in Foundry → Add-on Modules → Install Module → paste Manifest URL:
+                      `${{ env.REPO_URL }}/releases/download/nightly/module.json`
+                  files: |
+                      dist-foundry-release/module.json
+                      dist-foundry-release/ttrpg-pdf-converter.zip
+
+            - name: Publish versioned release
+              if: env.CHANNEL == 'release'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  name: ${{ github.ref_name }}
+                  prerelease: ${{ contains(github.ref_name, '-') }}
+                  make_latest: ${{ !contains(github.ref_name, '-') }}
+                  generate_release_notes: true
+                  body: |
+                      Install in Foundry → Add-on Modules → Install Module → paste Manifest URL:
+                      `${{ env.REPO_URL }}/releases/latest/download/module.json`
+                  files: |
+                      dist-foundry-release/module.json
+                      dist-foundry-release/ttrpg-pdf-converter.zip
+
+            # Register an official (non-prerelease) version on the foundryvtt.com
+            # package listing, so Foundry's in-app installer offers it. Needs the
+            # package release token as the FOUNDRY_RELEASE_TOKEN secret of the
+            # `release` environment; the script fails loudly if it is missing.
+            - name: Publish to the Foundry package listing
+              if: env.CHANNEL == 'release' && !contains(github.ref_name, '-')
+              env:
+                  FOUNDRY_RELEASE_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+              run: node scripts/publish-foundry-release.mjs

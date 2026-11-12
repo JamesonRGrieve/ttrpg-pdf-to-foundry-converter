@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { unzlibSync } from "fflate";
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream } from "pdf-lib";
+import {
+    decodePDFRawStream,
+    PDFArray,
+    PDFDict,
+    PDFDocument,
+    PDFHexString,
+    PDFName,
+    PDFNumber,
+    PDFRawStream,
+    PDFRef,
+    PDFStream,
+    PDFString,
+} from "pdf-lib";
 import { PINS } from "../pins.ts";
 import type {
     DocMeta,
@@ -170,6 +182,69 @@ function readDecodeParms(
     };
 }
 
+/** Components per sample of the colour spaces named by a device or calibrated family alone. */
+const FAMILY_COMPONENTS: Readonly<Record<string, number>> = {
+    DeviceGray: 1,
+    CalGray: 1,
+    G: 1,
+    DeviceRGB: 3,
+    CalRGB: 3,
+    RGB: 3,
+    DeviceCMYK: 4,
+    CMYK: 4,
+};
+
+interface ColorSpace {
+    name: string;
+    components: number | null;
+    palette: { components: number; lookup: Uint8Array } | null;
+}
+
+/** An object, its indirect reference followed. */
+function resolved(doc: PDFDocument, value: unknown): unknown {
+    return value instanceof PDFRef ? doc.context.lookup(value) : value;
+}
+
+/**
+ * An image's colour space: its family, the components per sample it
+ * defines (an ICC profile's `/N`), and, for an indexed space, its palette
+ * (the base space's components per entry and the lookup bytes).
+ */
+function readColorSpace(doc: PDFDocument, value: unknown): ColorSpace {
+    const space = resolved(doc, value);
+    if (space instanceof PDFName) {
+        const name = nameOf(space);
+        return { name, components: FAMILY_COMPONENTS[name] ?? null, palette: null };
+    }
+    if (!(space instanceof PDFArray)) {
+        return { name: "", components: null, palette: null };
+    }
+    const [family, ...rest] = space.asArray().map((v) => resolved(doc, v));
+    const name = nameOf(family);
+    if (name === "ICCBased") {
+        const profile = rest[0];
+        const n = profile instanceof PDFRawStream ? numberOf(profile.dict, "N", 0) : 0;
+        return { name, components: n > 0 ? n : null, palette: null };
+    }
+    if (name === "Indexed" || name === "I") {
+        const base = readColorSpace(doc, space.asArray()[1]);
+        const table = rest[2];
+        const lookup =
+            table instanceof PDFHexString || table instanceof PDFString
+                ? table.asBytes()
+                : table instanceof PDFRawStream
+                  ? decodePDFRawStream(table).decode()
+                  : null;
+        const entry = base.components ?? FAMILY_COMPONENTS[base.name] ?? null;
+        return {
+            name: "Indexed",
+            components: 1,
+            palette: lookup === null || entry === null ? null : { components: entry, lookup },
+        };
+    }
+    return { name, components: FAMILY_COMPONENTS[name] ?? null, palette: null };
+}
+
 /** Enumerate every image XObject, returning raw (still-encoded) stream bytes. */
 function extractImageXObjects(doc: PDFDocument): RawImageXObject[] {
     const out: RawImageXObject[] = [];
@@ -190,14 +265,15 @@ function extractImageXObjects(doc: PDFDocument): RawImageXObject[] {
                       .filter((f) => f.length > 0)
                       .join("+")
                 : nameOf(filterVal);
-        const csVal = dict.get(PDFName.of("ColorSpace"));
-        const colorspace = csVal instanceof PDFArray ? nameOf(csVal.asArray()[0]) : nameOf(csVal);
+        const space = readColorSpace(doc, dict.get(PDFName.of("ColorSpace")));
         const smaskVal = dict.get(PDFName.of("SMask"));
         out.push({
             objectId: ref.toString(),
             width: numberOf(dict, "Width", 0),
             height: numberOf(dict, "Height", 0),
-            colorspace,
+            colorspace: space.name,
+            components: space.components,
+            palette: space.palette,
             filter,
             bpc: numberOf(dict, "BitsPerComponent", 8),
             smaskRef: smaskVal instanceof PDFRef ? smaskVal.toString() : null,

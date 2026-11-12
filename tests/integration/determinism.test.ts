@@ -10,6 +10,7 @@ import { MemoryOcrPageStore } from "../../src/ocr/recognize.ts";
 import type { OcrEngine } from "../../src/ocr/types.ts";
 import { runEngine } from "../../src/run.ts";
 import { extract } from "../../src/stages/extract.ts";
+import { recoverImages } from "../../src/stages/images.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -104,16 +105,14 @@ describe("encrypted refusal", { timeout: CASE_TIMEOUT_MS }, () => {
 
 describe("image recovery (Tier A)", () => {
     it("dedups a reused image to a single content-addressed asset", async () => {
-        const output = await runCase(
-            { name: "images", pdfs: ["fixtures/rendered/images.pdf"] },
-            repoRoot,
-            "img-test",
-        );
-        const assetKeys = [...output.keys()].filter((k) => k.includes("/assets/"));
+        // A module ships only the images its documents reference, so the
+        // recovery stage is checked directly.
+        const pdf = new Uint8Array(readFileSync(resolve(repoRoot, "fixtures/rendered/images.pdf")));
+        const assets = recoverImages(await extract(pdf), createLogger("error")).assets;
         // 5 XObjects (RGB reused across 2 pages, JPEG, RGBA, CMYK) → 4 unique assets.
-        expect(assetKeys).toHaveLength(4);
-        for (const key of assetKeys) {
-            expect(key).toMatch(/^pdf-compendium-dh2-[0-9a-f]{12}\/assets\/[A-Za-z0-9]{16}\.(png|jpg|jpx)$/);
+        expect(assets).toHaveLength(4);
+        for (const asset of assets) {
+            expect(`${asset.assetId}.${asset.ext}`).toMatch(/^[A-Za-z0-9]{16}\.(png|jpg|jpx)$/u);
         }
     });
 });

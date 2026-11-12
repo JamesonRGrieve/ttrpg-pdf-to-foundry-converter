@@ -51,7 +51,16 @@ export interface RawImageXObject {
     objectId: string;
     width: number;
     height: number;
+    /** The colour space's family name (`DeviceRGB`, `ICCBased`, `Indexed`…), or "" when none reads. */
     colorspace: string;
+    /**
+     * Colour components per sample as the colour space defines them (an
+     * ICC profile's `/N`), or null when the family alone does not say (the
+     * decoder then falls back on the device name).
+     */
+    components?: number | null;
+    /** An `/Indexed` image's palette: its base space's components per entry and the lookup bytes. */
+    palette?: { components: number; lookup: Uint8Array } | null;
     filter: string;
     bpc: number;
     smaskRef: string | null;

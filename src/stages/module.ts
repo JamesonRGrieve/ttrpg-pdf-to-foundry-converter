@@ -144,11 +144,36 @@ export function moduleId(
     return ["pdf-compendium", ...targets, hash].join("-");
 }
 
+/** Every string in a value (documents reference their images by path strings). */
+function strings(value: JsonValue, out: string[] = []): string[] {
+    if (typeof value === "string") {
+        out.push(value);
+    } else if (Array.isArray(value)) {
+        for (const v of value) {
+            strings(v, out);
+        }
+    } else if (value !== null && typeof value === "object") {
+        for (const v of Object.values(value)) {
+            strings(v, out);
+        }
+    }
+    return out;
+}
+
 export function buildModule(input: ModuleInput): BuiltModule {
     const packs = mergePacks(input.packs);
-    const assets = [...new Map(input.assets.map((a) => [a.relPath, a] as const)).values()].sort((a, b) =>
-        byteCompare(a.relPath, b.relPath),
+    // Only the images a document shows ship: a page's background art, or a
+    // scanned page itself, is no document's picture and stays out.
+    const prefix = `${MODULE_ASSET_PLACEHOLDER}/`;
+    const referenced = new Set(
+        packs
+            .flatMap((p) => p.documents.flatMap((d) => strings(d)))
+            .flatMap((s) => s.split(prefix).slice(1))
+            .map((rest) => /^[^\s"'<>)]+/u.exec(rest)?.[0] ?? ""),
     );
+    const assets = [...new Map(input.assets.map((a) => [a.relPath, a] as const)).values()]
+        .filter((a) => referenced.has(a.relPath))
+        .sort((a, b) => byteCompare(a.relPath, b.relPath));
     const id = moduleId(input.targets, packs, assets);
     const sources = [...new Set(input.sources)].sort(byteCompare);
 

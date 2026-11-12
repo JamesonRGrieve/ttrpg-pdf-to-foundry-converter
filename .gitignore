@@ -16,6 +16,11 @@ coverage/
 
 # Web build output and the OCR runtime staged into it (copied from node_modules).
 dist-web/
+dist-foundry/
+dist-foundry-release/
+# A local Foundry v14 release (or a symlink to one) for the Foundry e2e suite, and its test worlds; never committed.
+.foundry-release
+.foundry-test-data-*/
 web/public/vendor/
 
 # Corpus-audit tooling and its results. These drive the engine against a private
