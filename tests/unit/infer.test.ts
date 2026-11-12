@@ -9,6 +9,8 @@ import {
     shipTableRoles,
 } from "../../src/infer/columns.ts";
 import {
+    buildLines,
+    chapterTitles,
     detectEntries,
     endsSentence,
     type Entry,
@@ -3224,6 +3226,62 @@ describe("entry detection", () => {
         const entries = detectEntries(ir, new Set());
         expect(entries.map((e) => e.heading.text)).toEqual(["GLOW SECTION", "DIM GLOW"]);
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
+    });
+
+    it("ends every section at a chapter title read as part of a figure, opening no entry for it", () => {
+        const lines = (title: (y: number) => IRTextRun[]) =>
+            detectEntries(
+                irOf(
+                    [0, 1],
+                    [
+                        run("LAMPCRAFT", 700, "h", 14),
+                        run(body, 680, "b", 10),
+                        run("Wick Replacements", 660, "h", 12),
+                        run(body, 640, "b", 10),
+                        // The next page opens a chapter: its title set off the column's
+                        // edge beside a centred epigraph, as a figure's labels are.
+                        ...title(750).map((r) => ({ ...r, pageIndex: 1 })),
+                        {
+                            ...run("“A lamp is a promise.”", 700, "b", 10),
+                            pageIndex: 1,
+                            x: 140,
+                            italic: true,
+                        },
+                        { ...run("— Lamp-keeper's saying", 688, "b", 10), pageIndex: 1, x: 200 },
+                        { ...run("Snuffing", 676, "h", 9), pageIndex: 1, x: 90 },
+                        { ...run("(Wick)", 664, "h", 9), pageIndex: 1, x: 170 },
+                        { ...run("TRIMMING", 640, "h", 12), pageIndex: 1 },
+                        { ...run(body, 620, "b", 10), pageIndex: 1 },
+                    ],
+                ),
+                new Set(),
+            );
+        const trimming = (entries: ReturnType<typeof detectEntries>) =>
+            entries.find((e) => e.heading.text === "TRIMMING")?.sections;
+        // Set four times the text's size: the chapter ends "Wick Replacements".
+        const chapter = lines((y) => [{ ...run("Lighting", y, "h", 40), x: 120 }]);
+        expect(trimming(chapter)).not.toContain("Wick Replacements");
+        expect(
+            chapterTitles(
+                buildLines(
+                    irOf(
+                        [1],
+                        [
+                            { ...run("Lighting", 750, "h", 40), pageIndex: 1 },
+                            { ...run(body, 700, "b", 10), pageIndex: 1 },
+                        ],
+                    ),
+                ),
+                10,
+            ).map((l) => l.text),
+        ).toEqual(["Lighting"]);
+        // A title little larger than the text is no chapter's.
+        expect(
+            chapterTitles(
+                buildLines(irOf([1], [run("Lighting", 750, "h", 14), run(body, 700, "b", 10)])),
+                10,
+            ),
+        ).toEqual([]);
     });
 
     it("does not nest headings under the last name of a contents list", () => {

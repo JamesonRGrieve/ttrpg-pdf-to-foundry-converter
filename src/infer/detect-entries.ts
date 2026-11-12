@@ -386,6 +386,10 @@ export function withoutRunningFurniture<T extends TextLine>(
 const EDGE_TOLERANCE = 4;
 /** Fewest lines on a column edge for the edge to be trusted. */
 const MIN_EDGE_LINES = 3;
+/** Times the text's size a chapter title is set at or above. */
+const DISPLAY_HEADING_SIZE = 3.5;
+/** Fewest letters a chapter title runs to (a drop cap's fragment is shorter). */
+const MIN_DISPLAY_LETTERS = 4;
 /** Fewest consecutive off-edge lines that make a figure. */
 const FIGURE_MIN_LINES = 4;
 /**
@@ -514,6 +518,25 @@ export function withoutFigures(lines: readonly TextLine[]): TextLine[] {
         flush();
     }
     return lines.filter((l) => !dropped.has(l));
+}
+
+/**
+ * Chapter titles: lines set at `DISPLAY_HEADING_SIZE` times the text's size
+ * or more, of a word or more, each the topmost line of its page column.
+ */
+export function chapterTitles(lines: readonly TextLine[], textSize: number): TextLine[] {
+    const topOf = new Map<string, number>();
+    for (const l of lines) {
+        const key = `${l.pageIndex}:${l.column}`;
+        topOf.set(key, Math.max(topOf.get(key) ?? Number.NEGATIVE_INFINITY, l.y));
+    }
+    return lines.filter(
+        (l) =>
+            textSize > 0 &&
+            Math.max(...l.runs.map((r) => r.size)) >= DISPLAY_HEADING_SIZE * textSize &&
+            (l.text.match(/\p{L}/gu)?.length ?? 0) >= MIN_DISPLAY_LETTERS &&
+            l.y === topOf.get(`${l.pageIndex}:${l.column}`),
+    );
 }
 
 /**
@@ -790,7 +813,21 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
     // (a heading beside a header's second line, a field beside a caption) is
     // read without them, its other runs grouped by baseline again (a table's
     // run may have bridged two baselines into one line).
-    const lines = withoutFigures(withoutRunningFurniture(buildLines(ir), marginal)).flatMap((l) => {
+    const unfigured = withoutRunningFurniture(buildLines(ir), marginal);
+    const prose = withoutFigures(unfigured);
+    // A chapter's title, set far larger than the text at the head of its
+    // column, ends every section before it even where it is read as part of
+    // a figure (set off the column's edge beside an epigraph): it opens no
+    // entry, but nothing before it carries on past it.
+    const kept = new Set(prose);
+    const boundaries = new Set(chapterTitles(unfigured, body.size).filter((l) => !kept.has(l)));
+    const ordered = [...prose, ...boundaries].sort(
+        (a, b) => a.pageIndex - b.pageIndex || a.column - b.column || b.y - a.y,
+    );
+    const lines = ordered.flatMap((l) => {
+        if (boundaries.has(l)) {
+            return [l];
+        }
         const runs = l.runs.filter((r) => !tableRuns.has(r));
         if (runs.length === l.runs.length) {
             return [l];
@@ -995,6 +1032,12 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         // A table caption, however its text is laid out, labels a table.
         if (captions.has(line)) {
             previous = line;
+            continue;
+        }
+        if (boundaries.has(line)) {
+            close();
+            current = null;
+            stack.length = 0;
             continue;
         }
         const heading = headingOf(line, body, marginal(line), headingFaces);
