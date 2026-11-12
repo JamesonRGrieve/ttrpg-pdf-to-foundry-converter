@@ -81,6 +81,7 @@ import {
     ROLLED_ROW,
     captionSection,
     citeFirstPage,
+    consolidate,
     embedNpcItems,
     fitModifications,
     givenNames,
@@ -896,6 +897,38 @@ describe("npc statblocks", () => {
             { name: "oil flasks", type: "gear", system: { quantity: 2 } },
             { name: "1d5 lamp coins", type: "gear" },
             { name: "2nd-best cloak", type: "gear" },
+        ]);
+    });
+
+    it("keeps statblocks of one name with different characteristics apart, and merges the rest", () => {
+        let ordinal = 0;
+        const entity = (documentType: "Item" | "Actor", fields: Record<string, JsonValue>): Entity => ({
+            blockId: `b${ordinal}`,
+            documentType,
+            group: "dh2",
+            pack: "p",
+            ordinal: ordinal++,
+            fields,
+            images: {},
+            provenance: { pageIndex: ordinal, y: 0 },
+        });
+        const weak = { ws: { base: 30 }, bs: { base: 25 } };
+        const strong = { ws: { base: 45 }, bs: { base: 40 } };
+        const entities = [
+            entity("Actor", { name: "Lamp Warden", type: "npc", system: { characteristics: weak } }),
+            entity("Actor", { name: "Lamp Warden", type: "npc", system: { characteristics: strong } }),
+            entity("Actor", { name: "Moth Keeper", type: "npc", system: { characteristics: weak } }),
+            // A read of the same name without a statblock joins the one statblock it has.
+            entity("Actor", { name: "Moth Keeper", type: "npc", system: { notes: "keeps moths" } }),
+            entity("Item", { name: "Wick Lance", type: "weapon", system: { damage: "1d10" } }),
+            entity("Item", { name: "Wick Lance", type: "weapon", system: { range: 3 } }),
+        ];
+        const merged = consolidate(entities, new Map(), new Map(), "dh2", createLogger("error"));
+        expect(merged.map((e) => [e.documentType, e.fields["name"], e.fields["system"]])).toEqual([
+            ["Actor", "Lamp Warden", { characteristics: weak }],
+            ["Actor", "Lamp Warden", { characteristics: strong }],
+            ["Actor", "Moth Keeper", { characteristics: weak, notes: "keeps moths" }],
+            ["Item", "Wick Lance", expect.objectContaining({ damage: "1d10", range: 3 })],
         ]);
     });
 

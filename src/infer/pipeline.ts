@@ -2996,7 +2996,7 @@ function characteristicSignature(e: Entity): string | null {
     return isJsonObject(characteristics) ? JSON.stringify(characteristics) : null;
 }
 
-function consolidate(
+export function consolidate(
     entities: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
     prose: ReadonlyMap<string, string>,
