@@ -21,6 +21,8 @@ export interface DetectedTable {
     headers: string[];
     rows: TableRow[];
     tableTitle: string | null;
+    /** The text runs of the table's header and records, where the detector keeps them. */
+    runs?: IRTextRun[];
 }
 
 /** A captioned table with the text runs of its header and records. */

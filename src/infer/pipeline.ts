@@ -7,6 +7,13 @@ import { byteCompare } from "../util/ordered.ts";
 import { escapeHtml, NOTE_MARKERS } from "../util/text.ts";
 import { applyAmmunitionEffects, applyAmmunitionWeaponTypes, usedWithArmourTypes } from "./ammunition.ts";
 import { inferBookSlug, inferBookTitle } from "./book.ts";
+import {
+    type AdvancementTable,
+    attachCareerAdvancement,
+    headingAbove,
+    isCharacteristicCostTable,
+    type KindOf,
+} from "./career-advancement.ts";
 import { classifyTable } from "./classify.ts";
 import {
     headerRole,
@@ -497,7 +504,8 @@ function extractTables(
     ir: IR,
     out: EntityCollector,
     log: Logger,
-): { tables: number; unclassified: number; tableRuns: Set<IRTextRun> } {
+): { tables: number; unclassified: number; tableRuns: Set<IRTextRun>; advancement: AdvancementTable[] } {
+    const advancement: AdvancementTable[] = [];
     const titled = detectTitledTables(ir);
     const titledPages = new Set(titled.map((t) => t.pageIndex));
     const tables = continuedTables([
@@ -541,6 +549,35 @@ function extractTables(
                     .join(" | ")}]`,
             );
         };
+        // A career's advancement tables (its characteristic costs, its ranks'
+        // advances) feed the career's own document, where the target holds them.
+        const runs = table.runs ?? [];
+        if (out.target.careerAdvancement === true && runs.length > 0) {
+            const costs = isCharacteristicCostTable(table.headers);
+            if (costs || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
+                advancement.push({
+                    kind: costs ? "characteristics" : "advances",
+                    pageIndex: table.pageIndex,
+                    column: Math.min(...runs.map((r) => r.column)),
+                    top: Math.max(...runs.map((r) => r.y)),
+                    heading: headingAbove(ir, runs),
+                    headers: table.headers,
+                    // Each row as wide as its cells reach: a merged header may stand over two of them.
+                    rows: table.rows
+                        .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
+                        .map((r) =>
+                            rowTexts(
+                                r,
+                                Math.max(table.headers.length, ...r.cells.map((c) => c.colIndex + 1)),
+                            ),
+                        ),
+                });
+            }
+            if (costs) {
+                skip("a career's characteristic advance costs");
+                continue;
+            }
+        }
         // A caption naming a creation step ("Random Home World", "Divinations")
         // lists origins of that step — unless a page column makes it an index
         // of origins described elsewhere, each read where it is printed.
@@ -743,7 +780,12 @@ function extractTables(
         }
     }
     log.info(`tables: ${tables.length} detected, ${rollTables} roll tables, ${unclassified} unclassified`);
-    return { tables: tables.length, unclassified, tableRuns: new Set(titled.flatMap((t) => t.runs)) };
+    return {
+        tables: tables.length,
+        unclassified,
+        tableRuns: new Set(titled.flatMap((t) => t.runs)),
+        advancement,
+    };
 }
 
 /**
@@ -3039,6 +3081,18 @@ export function applyHeadedRules(
     }
 }
 
+/** What the document defines each name as: its talents, traits and skills, by name. */
+function kindsOf(entities: readonly Entity[]): KindOf {
+    const kinds = new Map<string, "talent" | "trait" | "skill">();
+    for (const e of entities) {
+        const type = e.fields["type"];
+        if (e.documentType === "Item" && (type === "talent" || type === "trait" || type === "skill")) {
+            kinds.set(nameKey(String(e.fields["name"])), type);
+        }
+    }
+    return (name) => kinds.get(nameKey(name)) ?? null;
+}
+
 /** Field names that read badly split at their capitals. */
 const FIELD_LABELS: Readonly<Record<string, string>> = {
     rof: "Rate of fire",
@@ -3187,7 +3241,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
 
     const out = new EntityCollector(target, book, numbering, sourceBookLabel(line, inferBookTitle(ir)));
     const descriptions = new Map<string, string>();
-    const { tables, unclassified, tableRuns } = extractTables(ir, out, log);
+    const { tables, unclassified, tableRuns, advancement } = extractTables(ir, out, log);
     // A statblock's panel is no running prose: its lines join no entry.
     const numeric = detectNumericGrids(ir);
     const detected = detectEntries(ir, new Set([...tableRuns, ...numeric.flatMap((g) => g.panelRuns ?? [])]));
@@ -3220,6 +3274,14 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
+    attachCareerAdvancement(
+        out.entities.filter((e) => {
+            const system = e.fields["system"];
+            return isJsonObject(system) && system["step"] === "career";
+        }),
+        advancement,
+        kindsOf(out.entities),
+    );
     const entities = consolidate(out.entities, descriptions, headedProse(detected), line, log);
     applyHeadedRules(entities, headedRules(detected), line);
     embedNpcItems(entities);

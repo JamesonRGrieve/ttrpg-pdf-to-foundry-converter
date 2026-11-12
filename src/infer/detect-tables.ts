@@ -187,6 +187,8 @@ export function detectTables(ir: IR): DetectedTable[] {
         let tableStart = -1;
         let headerRow: TableRow | null = null;
         const tableRows: TableRow[] = [];
+        /** The runs of the table being read: its header and records. */
+        const tableRuns: IRTextRun[] = [];
 
         for (const [i, row] of sorted.entries()) {
             const cells = assignRunsToColumns(row.runs, columns);
@@ -195,6 +197,7 @@ export function detectTables(ir: IR): DetectedTable[] {
                 if (tableStart === -1) {
                     tableStart = i;
                 }
+                tableRuns.push(...row.runs);
                 const isHeader = headerSet(row, measured) && !headerRow;
                 const spanning = isSpanningHeader(row, columns, measured);
 
@@ -225,18 +228,20 @@ export function detectTables(ir: IR): DetectedTable[] {
                     });
                 }
             } else if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
-                pushTable(tables, buildTable(pageIndex, headerRow, tableRows));
+                pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
                 tableStart = -1;
                 headerRow = null;
                 tableRows.length = 0;
+                tableRuns.length = 0;
             } else if (tableStart !== -1) {
                 tableStart = -1;
                 headerRow = null;
                 tableRows.length = 0;
+                tableRuns.length = 0;
             }
         }
         if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
-            pushTable(tables, buildTable(pageIndex, headerRow, tableRows));
+            pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
         }
     }
     return tables;
@@ -254,13 +259,18 @@ function median(values: readonly number[]): number {
     return sorted.length === 0 ? 0 : (sorted[Math.floor(sorted.length / 2)] ?? 0);
 }
 
-function buildTable(pageIndex: number, headerRow: TableRow | null, rows: TableRow[]): DetectedTable | null {
+function buildTable(
+    pageIndex: number,
+    headerRow: TableRow | null,
+    rows: TableRow[],
+    runs: readonly IRTextRun[],
+): DetectedTable | null {
     const cellLengths = rows.flatMap((r) => r.cells.map((c) => c.text.trim().length)).filter((n) => n > 0);
     if (median(cellLengths) > PROSE_CELL_LENGTH) {
         return null;
     }
     const headers = headerRow ? headerRow.cells.map((c) => c.text.trim()) : [];
-    return { pageIndex, headers, rows: [...rows], tableTitle: null };
+    return { pageIndex, headers, rows: [...rows], tableTitle: null, runs: [...runs] };
 }
 
 function pushTable(tables: DetectedTable[], table: DetectedTable | null): void {

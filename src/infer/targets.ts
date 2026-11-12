@@ -37,6 +37,11 @@ export interface TargetSchema {
     line: Line;
     actorTypes: ActorTypes;
     originSteps: readonly OriginStepDef[];
+    /**
+     * The line's careers carry their advancement tables (characteristic
+     * costs and rank 1 advances) in the schema's `careerAdvancement`.
+     */
+    careerAdvancement?: true;
 }
 
 /** The dnd5e system's rulesets (its `system.source.rules` values). */
@@ -125,6 +130,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
             step("lineage", 7, ["lineage"], "origins-lineages"),
             step("eliteAdvance", 8, ["elite advance"], "origins-elite-advances", true),
         ],
+        careerAdvancement: true,
     },
     dw: {
         system: "wh40k-rpg",
