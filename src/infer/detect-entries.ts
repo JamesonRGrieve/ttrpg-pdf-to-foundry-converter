@@ -48,6 +48,8 @@ const MIN_JUSTIFIED_NEIGHBOURS = 2;
 const PANEL_MEASURE_SHARE = 0.85;
 /** Size step (points) that separates two heading levels. */
 const LEVEL_STEP = 0.4;
+/** Fewest headings in a row, each but the last with nothing under it, that read as a contents list. */
+const MIN_CONTENTS_LIST = 4;
 /** A gap inside a line wider than this many font-sizes separates table columns, not words. */
 // A display face's word space can run past one font-size (≈1.25×); table
 // header labels sit further apart (≈1.4× and up).
@@ -879,6 +881,14 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
 
     const entries: Entry[] = [];
     const stack: Heading[] = [];
+    /**
+     * The closing heading of a contents list (a run of headings at one size
+     * with nothing under them, as a chapter's opening page lists its parts):
+     * it heads its own text but no headings after it.
+     */
+    const listed = new Set<Heading>();
+    /** Headings in a row at one size, each with nothing under it. */
+    let emptySiblings = 0;
     let current: Entry | null = null;
     /** The open entry's (last) heading line. */
     let headingLine: TextLine | null = null;
@@ -1033,9 +1043,19 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             }
         }
         if (heading !== null) {
+            const before: Entry | null = current;
             close();
-            while ((stack.at(-1)?.size ?? Number.POSITIVE_INFINITY) <= heading.size + LEVEL_STEP) {
+            const sibling = before !== null && Math.abs(before.heading.size - heading.size) < LEVEL_STEP;
+            const empty = before !== null && before.fields.length === 0 && before.body.trim().length <= 2;
+            emptySiblings = sibling && empty ? emptySiblings + 1 : 0;
+            while (
+                (stack.at(-1)?.size ?? Number.POSITIVE_INFINITY) <= heading.size + LEVEL_STEP ||
+                listed.has(stack.at(-1) ?? heading)
+            ) {
                 stack.pop();
+            }
+            if (emptySiblings >= MIN_CONTENTS_LIST - 1) {
+                listed.add(heading);
             }
             current = { heading, sections: stack.map((h) => h.text), fields: [], body: "" };
             headingLine = line;

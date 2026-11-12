@@ -3216,6 +3216,40 @@ describe("entry detection", () => {
         expect(entries[1]?.sections).toEqual(["GLOW SECTION"]);
     });
 
+    it("does not nest headings under the last name of a contents list", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("LAMPCRAFT", 760, "h", 20),
+                // A list's names are set further apart than a heading's wrapped lines.
+                run("WICKS", 720, "h", 14),
+                run("OILS", 680, "h", 14),
+                run("GLASS", 640, "h", 14),
+                run("SHADES", 600, "h", 14),
+                run(body, 580, "b", 10),
+                run("TRIMMING", 560, "h", 12),
+                run(body, 540, "b", 10),
+            ],
+        );
+        const entries = detectEntries(ir, new Set());
+        expect(entries.find((e) => e.heading.text === "TRIMMING")?.sections).toEqual(["LAMPCRAFT"]);
+        // One heading straight after another is no list: it still heads what follows.
+        const short = detectEntries(
+            irOf(
+                [0],
+                [
+                    run("WICKS", 720, "h", 14),
+                    run("SHADES", 680, "h", 14),
+                    run(body, 660, "b", 10),
+                    run("TRIMMING", 640, "h", 12),
+                    run(body, 620, "b", 10),
+                ],
+            ),
+            new Set(),
+        );
+        expect(short.find((e) => e.heading.text === "TRIMMING")?.sections).toEqual(["SHADES"]);
+    });
+
     it("runs a field value on into a line opening in lower case, wherever that line starts", () => {
         const bold = (text: string, y: number, x: number): IRTextRun => ({
             ...run(text, y, "b", 10),
