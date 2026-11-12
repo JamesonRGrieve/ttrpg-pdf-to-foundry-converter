@@ -166,8 +166,8 @@ function armour(cells: RowCells): RowMapping {
         // A dash for armour points: the item protects no location.
         out.variantized["armourPoints"] = Object.fromEntries(BODY_LOCATIONS.map((loc) => [loc, 0]));
     }
-    const maxAg = read(out, cells, "maxAgility", parseInteger);
-    out.variantized["maxAgility"] = maxAg;
+    // The system's armour model holds one number here (null for no limit), not a value per line.
+    out.system["maxAgility"] = read(out, cells, "maxAgility", parseInteger);
     out.system["modifications"] = [];
     commonPhysical(out, cells);
     return out;

@@ -117,6 +117,13 @@ describe("weapon-table load rows", () => {
         expect(some.variantized["coverage"]).toEqual(["body", "leftArm", "rightArm"]);
     });
 
+    it("writes an armour's maximum agility as one number, the shape the system's armour model holds", () => {
+        const capped = mapRow("armour", { name: "Ward Plate", armourPoints: "4", maxAgility: "40" });
+        expect(capped.system["maxAgility"]).toBe(40);
+        expect(capped.variantized["maxAgility"]).toBeUndefined();
+        expect(mapRow("armour", { name: "Ward Coat", armourPoints: "2" }).system["maxAgility"]).toBeNull();
+    });
+
     it("drops armour-table rows that print no protective profile", () => {
         expect(rowType("armour", { name: "Padded Coat", armourPoints: "2", weight: "3kg" })).toBe("armour");
         expect(rowType("armour", { name: "Ward Plate", protection: "40" })).toBe("armour");
