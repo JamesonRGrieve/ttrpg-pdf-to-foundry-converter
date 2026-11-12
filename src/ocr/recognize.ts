@@ -52,6 +52,36 @@ export interface RecognizeOptions {
     onPage?: (done: number, total: number) => void;
 }
 
+/**
+ * What reads a scanned page, in order: the first reading, then the passes
+ * that fill what it missed (each adds only words over nothing confident).
+ */
+const SCAN_PASS_NAMES = [
+    "PP-OCRv4 (Latin and Chinese script)",
+    "Tesseract",
+    "Tesseract sparse",
+    "Tesseract sparse on a binarized copy",
+    "Tesseract on an inverted copy",
+] as const;
+
+/**
+ * One line per scanned page: the words the first reading kept, what each
+ * later pass added, and how sure recognition was of the words kept (their
+ * mean confidence, 0–100), so a page read badly shows in the log.
+ */
+export function scanPageSummary(
+    pageIndex: number,
+    first: number,
+    added: readonly number[],
+    words: readonly OcrWord[],
+): string {
+    const [reader, ...later] = SCAN_PASS_NAMES;
+    const passes = later.map((name, i) => `${name} +${added[i] ?? 0}`).join(", ");
+    const mean =
+        words.length === 0 ? 0 : Math.round(words.reduce((n, w) => n + w.confidence, 0) / words.length);
+    return `scanned page p${pageIndex + 1}: ${reader} read ${first} words; ${passes}; ${words.length} kept, mean confidence ${mean}`;
+}
+
 /** Progress is logged at this page interval. */
 const LOG_EVERY = 25;
 
@@ -140,6 +170,7 @@ export async function recognizeDocument(
         const [first, ...later] = passes;
         const read = first?.get(p.pageIndex) ?? [];
         let words = [...read];
+        const added = later.map(() => 0);
         later.forEach((pass, i) => {
             for (const w of pass.get(p.pageIndex) ?? []) {
                 const under = words.filter((m) => overlaps(m.box, w.box));
@@ -152,9 +183,11 @@ export async function recognizeDocument(
                         ...words.filter((m) => !under.includes(m)),
                         { ...w, ...rowPrint(w, read), line: (i + 1) * PASS_LINE_BASE + w.line },
                     ];
+                    added[i] = (added[i] ?? 0) + 1;
                 }
             }
         });
+        opts.log.info(scanPageSummary(p.pageIndex, read.length, added, words));
         return { pageIndex: p.pageIndex, words, cells: [] };
     });
 
