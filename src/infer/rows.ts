@@ -105,7 +105,24 @@ function commonPhysical(out: RowMapping, cells: RowCells): void {
     out.system["quantity"] = 1;
 }
 
-function weapon(cells: RowCells): RowMapping {
+/**
+ * A penetration cell printing a figure and then words ("2 Tearing,") holds
+ * the opening of the qualities column beside it: the words go back to the
+ * qualities, ahead of what that cell kept.
+ */
+export function withQualitiesReturned(cells: RowCells): RowCells {
+    const bled = /^\s*(\d+)\s+(\p{L}.*)$/u.exec(cells.penetration ?? "");
+    if (bled === null || bled[1] === undefined || bled[2] === undefined) {
+        return cells;
+    }
+    const special = [bled[2].trim(), cells.special?.trim() ?? ""]
+        .filter((s) => s.length > 0 && !isEmptyCell(s))
+        .join(" ");
+    return { ...cells, penetration: bled[1], special };
+}
+
+function weapon(printed: RowCells): RowMapping {
+    const cells = withQualitiesReturned(printed);
     const out = mapping();
     const cls = read(out, cells, "class", parseWeaponClass);
     const range = read(out, cells, "range", parseRange);

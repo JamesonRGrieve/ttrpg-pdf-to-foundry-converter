@@ -206,12 +206,13 @@ export function parseShipPower(raw: string): { used: number; generated: number }
     if (isEmptyCell(text)) {
         return { used: 0, generated: 0 };
     }
-    const m = /^(\+)?(\d+)$/u.exec(text);
+    // Generation is printed as a "+" or by a word saying so after the figure ("40 Generated").
+    const m = /^(\+)?(\d+)(?:\s+(generated))?$/iu.exec(text);
     if (m === null) {
         return null;
     }
     const value = Number(m[2]);
-    return m[1] === "+" ? { used: 0, generated: value } : { used: value, generated: 0 };
+    return m[1] === "+" || m[3] !== undefined ? { used: 0, generated: value } : { used: value, generated: 0 };
 }
 
 const HULL_TYPE_SET: ReadonlySet<string> = new Set(HULL_TYPES);

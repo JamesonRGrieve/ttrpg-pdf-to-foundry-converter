@@ -53,6 +53,11 @@ describe("vehicle profiles", () => {
         });
     });
 
+    it("reads a carrying capacity of None as zero", () => {
+        const { unparsed } = parseVehicle(panelPairs("CARRYING CAPACITY: None."));
+        expect(unparsed).toEqual([]);
+    });
+
     it("makes a craft with the Flyer trait an aircraft", () => {
         const { kind, system } = parseVehicle(panelPairs("VEHICLE TRAITS: ENCLOSED, FLYER, SKIMMER"));
         expect(kind).toBe("aircraft");

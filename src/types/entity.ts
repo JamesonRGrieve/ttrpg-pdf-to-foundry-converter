@@ -29,6 +29,12 @@ export interface Entity {
     images: Record<string, string>;
     /** Source page/coordinate context for diagnostics. */
     provenance: { pageIndex: number; y: number };
+    /**
+     * Values read for a field that no parser could turn into it, as
+     * `field: value`: kept in the document's description, so nothing printed
+     * is lost.
+     */
+    unparsed?: string[];
 }
 
 export interface EntityGraph {

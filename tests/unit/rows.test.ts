@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { headerRole } from "../../src/infer/columns.ts";
-import { isLoadRow, mapRow, rowType } from "../../src/infer/rows.ts";
+import { isLoadRow, mapRow, rowType, withQualitiesReturned } from "../../src/infer/rows.ts";
 
 describe("weapon-table load rows", () => {
     const shell = {
@@ -232,6 +232,23 @@ describe("weapon classes and renown", () => {
         expect(mapped.system["class"]).toBe("melee");
         expect(mapped.system["secondaryClass"]).toBe("thrown");
         expect(mapped.system["renown"]).toBe("famed");
+    });
+
+    it("returns words in a penetration cell to the qualities beside it", () => {
+        const mapped = mapRow("weapon", {
+            name: "Wick Pike",
+            class: "Melee",
+            damage: "1d10 R",
+            penetration: "0 Primitive,",
+            special: "Unbalanced",
+        });
+        expect(Object(mapped.system["damage"]).penetration).toBe(0);
+        expect(mapped.unparsed).toEqual([]);
+        expect(withQualitiesReturned({ penetration: "2 Tearing", special: "—" })).toEqual({
+            penetration: "2",
+            special: "Tearing",
+        });
+        expect(withQualitiesReturned({ penetration: "4" })).toEqual({ penetration: "4" });
     });
 
     it("sets no second class for a weapon of one class", () => {

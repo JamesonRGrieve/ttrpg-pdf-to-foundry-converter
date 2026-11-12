@@ -149,7 +149,13 @@ export function splitFields(text: string): Partial<Record<StatField, string>> {
  * opens with words ("Threat: add 5 for each gift") is a rule note, not the field.
  */
 const LEADING_INT = /^\s*\(?(\d+)/u;
-const MOVEMENT = /(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/u;
+/** A rate printed as a dash is one the creature does not move at. */
+const RATE = String.raw`(\d+|[-–—])`;
+const MOVEMENT = new RegExp(String.raw`${RATE}\s*/\s*${RATE}\s*/\s*${RATE}\s*/\s*${RATE}`, "u");
+/** A movement printed as a dash, "N/A" or 0: the creature does not move (a note may follow in brackets). */
+const NO_MOVEMENT = /^\s*(?:[-–—](?:\s*\/\s*[-–—]){0,3}|N\/A|0)\s*(?:\(|$)/iu;
+const rate = (text: string | undefined): number =>
+    text === undefined || !/\d/u.test(text) ? 0 : Number(text);
 /** Panel statblocks print each movement rate after its own schema label. */
 const MOVEMENT_LABELLED = /\bHALF\s*(\d+)\s*FULL\s*(\d+)\s*CHARGE\s*(\d+)\s*RUN\s*(\d+)/iu;
 /** Panel statblocks print labels without a colon. */
@@ -200,7 +206,12 @@ const locationsOf = (phrase: string): readonly HitLocation[] =>
  * Null when the line gives no points at a hit location (a vehicle's facings).
  */
 export function armourOf(text: string, horde = false): JsonObject | null {
-    const printed = text.replace(/\btotal\s+tb\b.*$/isu, "").trim();
+    // A toughness-bonus total printed into the line (from the panel's next
+    // column) is none of the armour: the locations may follow it.
+    const printed = text
+        .replace(/\btotal\s+tb\s*:?\s*\d*/giu, " ")
+        .replace(/\s+/gu, " ")
+        .trim();
     const line =
         horde || !OWN_LOCATION.test(printed)
             ? printed.replace(/\bhorde\b/giu, "All")
@@ -217,6 +228,15 @@ export function armourOf(text: string, horde = false): JsonObject | null {
     const firstPoints = tokens.findIndex((t) => t["points"] !== undefined);
     const firstWhere = tokens.findIndex((t) => t["where"] !== undefined);
     const lone = /^\d+\W*$/u.exec(line);
+    // One value and no location named ("Scaly hide (3)"): it covers every location.
+    const sole = firstWhere < 0 ? tokens.filter((t) => t["points"] !== undefined) : [];
+    if (sole.length === 1 && lone === null) {
+        const value = Number(sole[0]?.["points"]);
+        for (const loc of HIT_LOCATIONS) {
+            points[loc] = value;
+        }
+        return authoredArmour(points);
+    }
     if (lone !== null || (firstWhere < 0 && /^none\b/iu.test(line))) {
         const value = lone === null ? 0 : Number.parseInt(line, 10);
         for (const loc of HIT_LOCATIONS) {
@@ -264,6 +284,12 @@ function authoredArmour(points: LocationArmour): JsonObject {
     return { mode: "locations", total: points.body, authored: true, locations: { ...points } };
 }
 
+/** A text up to its first sentence's closing stop (dropped), where another sentence follows. */
+export function firstSentence(text: string): string {
+    const m = /^(.*?\S)\.\s+(?=\S)/u.exec(text);
+    return m?.[1] ?? text;
+}
+
 export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     const { name, tier } = splitTier(grid.name);
     const system: JsonObject = {};
@@ -293,7 +319,9 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
         }
         const m = LEADING_INT.exec(text);
         if (m === null) {
-            unparsed.push(`${field}: ${text}`);
+            // A field's value is a few words: prose run on after its first
+            // sentence (a sidebar set beside the panel) is none of it.
+            unparsed.push(`${field}: ${firstSentence(text)}`);
             return null;
         }
         return Number(m[1]);
@@ -332,16 +360,19 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
     }
     const movement =
         fields.movement === undefined ? MOVEMENT_LABELLED.exec(panel) : MOVEMENT.exec(fields.movement);
-    if (movement !== null) {
+    const still = fields.movement !== undefined && movement === null && NO_MOVEMENT.test(fields.movement);
+    if (movement !== null || still) {
         system["movement"] = {
-            half: Number(movement[1]),
-            full: Number(movement[2]),
-            charge: Number(movement[3]),
-            run: Number(movement[4]),
+            half: rate(movement?.[1]),
+            full: rate(movement?.[2]),
+            charge: rate(movement?.[3]),
+            run: rate(movement?.[4]),
         };
         system["movementManual"] = true;
-    } else if (fields.movement !== undefined) {
-        unparsed.push(`movement: ${fields.movement}`);
+    }
+    // What the rates leave out (a note in brackets) is kept as printed.
+    if (fields.movement !== undefined && movement === null && (!still || fields.movement.includes("("))) {
+        unparsed.push(`movement: ${fields.movement.trim()}`);
     }
     // The armour line is read into the schema's locations; the skills line
     // into its trained skills, the printed line kept beside them as printed.

@@ -116,6 +116,10 @@ export function parseVehicle(pairs: ReadonlyMap<string, string>): ParsedVehicle 
         if (text === undefined) {
             return null;
         }
+        // "None" counts nothing: zero.
+        if (/^\s*none\.?\s*$/iu.test(text)) {
+            return 0;
+        }
         const m = /^([+-]?\d+)/u.exec(text.replace(/\s+/gu, ""));
         if (m === null) {
             unparsed.push(`${label}: ${text}`);

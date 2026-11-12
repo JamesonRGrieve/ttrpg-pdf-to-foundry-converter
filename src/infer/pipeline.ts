@@ -237,7 +237,11 @@ class EntityCollector {
         body: JsonObject,
         pageIndex: number,
         blockId: string,
+        unparsed: readonly string[] = [],
     ): void {
+        for (const u of unparsed) {
+            this.warnings.push(`p${this.page(pageIndex)} ${String(body["name"])}: unparsed ${u}`);
+        }
         this.entities.push({
             blockId,
             documentType,
@@ -247,6 +251,7 @@ class EntityCollector {
             fields: body,
             images: {},
             provenance: { pageIndex, y: 0 },
+            ...(unparsed.length > 0 ? { unparsed: [...unparsed] } : {}),
         });
     }
 }
@@ -691,9 +696,6 @@ function extractTables(
                     mapped.system["category"] = category;
                 }
             }
-            for (const u of mapped.unparsed) {
-                out.warnings.push(`p${out.page(table.pageIndex)} ${name}: unparsed ${u}`);
-            }
             records.push({ name: fullName, itemType, cells, mapped });
             // An ammunition's Used With cell is read as its printed `Used With` line.
             const usedWith = cells.usedWith?.trim();
@@ -719,6 +721,7 @@ function extractTables(
                 }),
                 table.pageIndex,
                 `${TABLE_READING}${itemType}${rolled ? ROLLED_ROW : ""}`,
+                mapped.unparsed,
             );
         }
     }
@@ -1130,9 +1133,6 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
         return false;
     }
     const { kind, system, unparsed } = parseVehicle(pairs);
-    for (const u of unparsed) {
-        out.warnings.push(`p${out.page(entry.heading.pageIndex)} ${name}: unparsed ${u}`);
-    }
     const prose = entry.body
         .split(PARAGRAPH_SPLIT)
         .filter((p) => /\p{Ll}/u.test(p) && panelPairs(p).size === 0)
@@ -1192,7 +1192,7 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
             .join(""),
     });
     vehicle["items"] = carried;
-    out.add("Actor", CRAFT_SEGMENT[kind], vehicle, entry.heading.pageIndex, VEHICLE_BLOCK);
+    out.add("Actor", CRAFT_SEGMENT[kind], vehicle, entry.heading.pageIndex, VEHICLE_BLOCK, unparsed);
     return true;
 }
 
@@ -1292,9 +1292,6 @@ function addShip(
         return false;
     }
     const { system, unparsed } = parseShip(pairs, hullHint);
-    for (const u of unparsed) {
-        out.warnings.push(`p${out.page(entry.heading.pageIndex)} ${name}: unparsed ${u}`);
-    }
     out.add(
         "Actor",
         CRAFT_SEGMENT.voidcraft,
@@ -1311,6 +1308,7 @@ function addShip(
         }),
         entry.heading.pageIndex,
         "entry:voidcraft",
+        unparsed,
     );
     return true;
 }
@@ -2289,9 +2287,6 @@ function extractActors(
             continue;
         }
         const npc = { ...parsed, name: labelled[i] ?? parsed.name };
-        for (const u of npc.unparsed) {
-            out.warnings.push(`p${out.page(grid.pageIndex)} ${npc.name}: unparsed ${u}`);
-        }
         const caption = rejoinSplitWords(npc.name, nearbyWords(entries, grid.pageIndex));
         const exact = introducingEntry(entries, caption, grid.pageIndex);
         // A grid's banner prints the full name; a row's caption may shorten its heading.
@@ -2387,7 +2382,7 @@ function extractActors(
         });
         // Bare until `embedNpcItems` finds the document's own copy of each.
         actor["items"] = npc.items.map(bareItem);
-        out.add("Actor", ACTOR_SEGMENT, actor, grid.pageIndex, "grid:npc");
+        out.add("Actor", ACTOR_SEGMENT, actor, grid.pageIndex, "grid:npc", npc.unparsed);
         // A statblock's named rules are traits of their own.
         for (const ability of npc.abilities) {
             out.add(
@@ -3025,6 +3020,50 @@ export function applyHeadedRules(
     }
 }
 
+/** Field names that read badly split at their capitals. */
+const FIELD_LABELS: Readonly<Record<string, string>> = {
+    rof: "Rate of fire",
+    psyRating: "Psy rating",
+};
+
+/** A field's name as a label: "armourPoints" → "Armour points". */
+function fieldLabel(field: string): string {
+    const words = FIELD_LABELS[field] ?? field.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").toLowerCase();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * A value read for a field that no parser could turn into it is kept at the
+ * end of the document's description, one labelled paragraph each, so what
+ * the page prints is not lost.
+ */
+export function keepUnparsed(entities: readonly Entity[], line: Line): void {
+    for (const e of entities) {
+        const system = e.fields["system"];
+        if (e.unparsed === undefined || e.unparsed.length === 0 || !isJsonObject(system)) {
+            continue;
+        }
+        const kept = e.unparsed
+            .map((u) => {
+                const at = u.indexOf(": ");
+                const field = at < 0 ? "" : u.slice(0, at);
+                const value = (at < 0 ? u : u.slice(at + 2)).trim();
+                return `<p><strong>${escapeHtml(fieldLabel(field))}:</strong> ${escapeHtml(value)}</p>`;
+            })
+            .join("");
+        const description = system["description"];
+        const own = isJsonObject(description) ? description[line] : undefined;
+        if (isJsonObject(own) && typeof own["value"] === "string") {
+            own["value"] = `${own["value"]}${kept}`;
+        } else {
+            system["description"] = {
+                ...(isJsonObject(description) ? description : {}),
+                [line]: { value: kept, chat: "", summary: "" },
+            };
+        }
+    }
+}
+
 /**
  * An actor's characteristics as printed, or null when it has none: two
  * statblocks of one name that print different characteristics are two
@@ -3089,6 +3128,11 @@ export function consolidate(
         }
         for (const e of rest) {
             mergeInto(head.fields, e.fields);
+        }
+        // What any reading could not parse is kept, once.
+        const unparsed = [...new Set(group.flatMap((e) => e.unparsed ?? []))];
+        if (unparsed.length > 0) {
+            head.unparsed = unparsed;
         }
         preferTableBenefit(head, group);
         // A statblock is cited by its own entry; a same-named one elsewhere
@@ -3171,6 +3215,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     applyFocusSkillCharacteristics(entities);
     applyOriginPrerequisites(entities, target.originSteps);
     applyOrderTests(entities);
+    keepUnparsed(entities, line);
     // Last: every pass above reads these fields flat.
     for (const entity of entities) {
         const system = entity.fields["system"];

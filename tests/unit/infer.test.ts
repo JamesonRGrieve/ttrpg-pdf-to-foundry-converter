@@ -94,6 +94,7 @@ import {
     epithetEntry,
     headedNames,
     headingOverCaption,
+    keepUnparsed,
     namingEntry,
     listsCaption,
     weaponProfileText,
@@ -793,6 +794,11 @@ describe("npc statblocks", () => {
         expect(at("7")).toEqual([7, 7, 7, 7, 7, 7]);
         expect(at("None Total TB: 3")).toEqual([0, 0, 0, 0, 0, 0]);
         expect(at("Front 20, Side 18, Rear 12")).toBeNull();
+        // One value naming no location covers them all.
+        expect(at("Glow Hide (3) Total TB: 6")).toEqual([3, 3, 3, 3, 3, 3]);
+        // A total printed into the line leaves the locations after it.
+        expect(at("Lamp Plate Total TB: 8 (Arms 8, Body 10, Head 8, Legs 8)")).toEqual([8, 10, 8, 8, 8, 8]);
+        expect(at("Reed Mail (Body Total TB: 9 6, Arms and Legs 4, Head 2)")).toEqual([2, 6, 4, 4, 4, 4]);
     });
 
     it("reads a horde's armour value for a horde, and leaves it out of a creature's own", () => {
@@ -820,6 +826,64 @@ describe("npc statblocks", () => {
         expect(npc.system["wounds"]).toBeUndefined();
         expect(npc.system["movement"]).toEqual({ half: 3, full: 6, charge: 9, run: 18 });
         expect(Object(Object(npc.system["armour"])["locations"]).head).toBe(5);
+    });
+
+    it("reads dashed movement rates as none, and keeps a classification it cannot count", () => {
+        const npc = (text: string) =>
+            parseNpc({
+                pageIndex: 0,
+                name: "LAMP MOTH",
+                caption: null,
+                bannerNumber: null,
+                labels: [],
+                values: [],
+                associatedText: [text],
+                blocks: [],
+            });
+        expect(npc("Movement: 3/6/9/–").system["movement"]).toEqual({ half: 3, full: 6, charge: 9, run: 0 });
+        const still = npc("Movement: N/A");
+        expect(still.system["movement"]).toEqual({ half: 0, full: 0, charge: 0, run: 0 });
+        expect(still.unparsed).toEqual([]);
+        // A note beside the dash is kept as printed.
+        expect(npc("Movement: – (Flying 12)").unparsed).toEqual(["movement: – (Flying 12)"]);
+        // A threat printed as a classification: its first sentence, not the prose run on after it.
+        const classed = npc("Threat: Glim Minoris. Notes from the lamp-keeper follow here.");
+        expect(classed.system["threatLevel"]).toBeUndefined();
+        expect(classed.unparsed).toEqual(["threat: Glim Minoris"]);
+    });
+
+    it("keeps what no parser read at the end of the description", () => {
+        const item: Entity = {
+            blockId: "b",
+            documentType: "Item",
+            group: "dh2",
+            pack: "p",
+            ordinal: 0,
+            fields: {
+                name: "Wick Gun",
+                type: "weapon",
+                system: { description: { dh2: { value: "<p>Old.</p>" } } },
+            },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+            unparsed: ["damage: Special", "rof: S/–/<3>"],
+        };
+        const bare: Entity = {
+            ...item,
+            fields: { name: "Wick Pike", type: "weapon", system: {} },
+            unparsed: ["weight: x1/2"],
+        };
+        keepUnparsed([item, bare], "dh2");
+        expect(item.fields["system"]).toEqual({
+            description: {
+                dh2: {
+                    value: "<p>Old.</p><p><strong>Damage:</strong> Special</p><p><strong>Rate of fire:</strong> S/–/&lt;3&gt;</p>",
+                },
+            },
+        });
+        expect(bare.fields["system"]).toEqual({
+            description: { dh2: { value: "<p><strong>Weight:</strong> x1/2</p>", chat: "", summary: "" } },
+        });
     });
 
     it("finds the heading a statblock's caption follows", () => {

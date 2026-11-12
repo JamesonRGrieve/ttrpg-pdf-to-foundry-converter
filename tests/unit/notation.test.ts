@@ -384,6 +384,7 @@ describe("ship component cells", () => {
     it("reads power drawn, or made when signed", () => {
         expect(parseShipPower("4")).toEqual({ used: 4, generated: 0 });
         expect(parseShipPower("+40")).toEqual({ used: 0, generated: 40 });
+        expect(parseShipPower("40 Generated")).toEqual({ used: 0, generated: 40 });
         expect(parseShipPower("—")).toEqual({ used: 0, generated: 0 });
         expect(parseShipPower("a lot")).toBeNull();
     });
