@@ -13,22 +13,22 @@
             "extractor": "pdfjs-dist 4.10.38 + pdf-lib 1.17.1",
             "irVersion": 53,
             "ocr": "tesseract.js@7.0.0+core@7.0.0/simd-lstm+@tesseract.js-data/eng@1.0.0/4.0.0_best_int+psm3+dpi300+words2|ppocr@1.4.2/ch_PP-OCRv4_det_infer.onnx+ch_PP-OCRv4_rec_infer.onnx+ort@1.30.0/wasm1+det/2+rec48+r19",
-            "release": "2026-11-12-03-11",
+            "release": "2026-11-12-03-30",
             "renderer": "mupdf@1.28.1/300dpi/gray",
             "target": "dh2"
         }
     },
-    "id": "pdf-compendium-dh2-28ad24371506",
+    "id": "pdf-compendium-dh2-4d4fb06eb11a",
     "packFolders": [
         {
-            "name": "PDF Compendium 28ad24371506",
+            "name": "PDF Compendium 4d4fb06eb11a",
             "packs": [
-                "dh2-table-1-l-wayfarer-weapons-actors-bestiary",
-                "dh2-table-1-l-wayfarer-weapons-items-armour",
-                "dh2-table-1-l-wayfarer-weapons-items-mutations",
-                "dh2-table-1-l-wayfarer-weapons-items-talents",
-                "dh2-table-1-l-wayfarer-weapons-items-weapons",
-                "dh2-table-1-l-wayfarer-weapons-rolltables"
+                "dh2-untitled-actors-bestiary",
+                "dh2-untitled-items-armour",
+                "dh2-untitled-items-mutations",
+                "dh2-untitled-items-talents",
+                "dh2-untitled-items-weapons",
+                "dh2-untitled-rolltables"
             ]
         }
     ],
@@ -36,7 +36,7 @@
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "actors-bestiary",
@@ -44,20 +44,20 @@
                     "line": "dh2"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Actors Bestiary",
-            "name": "dh2-table-1-l-wayfarer-weapons-actors-bestiary",
+            "label": "Untitled Actors Bestiary",
+            "name": "dh2-untitled-actors-bestiary",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-actors-bestiary",
+            "path": "packs/dh2-untitled-actors-bestiary",
             "system": "wh40k-rpg",
             "type": "Actor"
         },
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "armour",
@@ -66,20 +66,20 @@
                     "startingEquipment": 1001
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Armour",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-armour",
+            "label": "Untitled Items Armour",
+            "name": "dh2-untitled-items-armour",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-armour",
+            "path": "packs/dh2-untitled-items-armour",
             "system": "wh40k-rpg",
             "type": "Item"
         },
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "mutations",
@@ -87,20 +87,20 @@
                     "line": "dh2"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Mutations",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-mutations",
+            "label": "Untitled Items Mutations",
+            "name": "dh2-untitled-items-mutations",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-mutations",
+            "path": "packs/dh2-untitled-items-mutations",
             "system": "wh40k-rpg",
             "type": "Item"
         },
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "talents",
@@ -108,20 +108,20 @@
                     "line": "dh2"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Talents",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-talents",
+            "label": "Untitled Items Talents",
+            "name": "dh2-untitled-items-talents",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-talents",
+            "path": "packs/dh2-untitled-items-talents",
             "system": "wh40k-rpg",
             "type": "Item"
         },
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "weapons",
@@ -130,20 +130,20 @@
                     "startingEquipment": 1002
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Items Weapons",
-            "name": "dh2-table-1-l-wayfarer-weapons-items-weapons",
+            "label": "Untitled Items Weapons",
+            "name": "dh2-untitled-items-weapons",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-items-weapons",
+            "path": "packs/dh2-untitled-items-weapons",
             "system": "wh40k-rpg",
             "type": "Item"
         },
         {
             "flags": {
                 "foundry-pdf-parser": {
-                    "release": "2026-11-12-03-11"
+                    "release": "2026-11-12-03-30"
                 },
                 "wh40k-rpg": {
                     "category": "rolltables",
@@ -151,13 +151,13 @@
                     "line": "dh2"
                 }
             },
-            "label": "Table 1 L Wayfarer Weapons Rolltables",
-            "name": "dh2-table-1-l-wayfarer-weapons-rolltables",
+            "label": "Untitled Rolltables",
+            "name": "dh2-untitled-rolltables",
             "ownership": {
                 "ASSISTANT": "OWNER",
                 "PLAYER": "OBSERVER"
             },
-            "path": "packs/dh2-table-1-l-wayfarer-weapons-rolltables",
+            "path": "packs/dh2-untitled-rolltables",
             "system": "wh40k-rpg",
             "type": "RollTable"
         }
@@ -170,6 +170,6 @@
             }
         ]
     },
-    "title": "PDF Compendium: table-1-l-wayfarer-weapons (2026-11-12-03-11)",
-    "version": "2026-11-12-03-11"
+    "title": "PDF Compendium: untitled (2026-11-12-03-30)",
+    "version": "2026-11-12-03-30"
 }
