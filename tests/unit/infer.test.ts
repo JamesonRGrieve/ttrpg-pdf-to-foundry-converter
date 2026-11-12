@@ -93,6 +93,7 @@ import {
     keyedByBands,
     epithetEntry,
     headedNames,
+    headingOverCaption,
     namingEntry,
     listsCaption,
     weaponProfileText,
@@ -838,6 +839,31 @@ describe("npc statblocks", () => {
         expect(captionSection(entries, "Glim Beast", 4)?.heading.text).toBe("GLIM BEAST");
         expect(captionSection(entries, "Glim Beast", 5)?.heading.text).toBe("WICK HORROR");
         expect(captionSection(entries, "Lamp Warden", 5)).toBeNull();
+    });
+
+    it("finds the heading over each panel when one caption is printed over several", () => {
+        const entry = (text: string, pageIndex: number) => ({
+            heading: { text, size: 10, style: "h", pageIndex },
+            sections: [],
+            fields: [],
+            body: "",
+        });
+        const entries = [
+            entry("THE LAMP IN THE MIRE", 7),
+            entry("Beast Profile", 7),
+            entry("WICK KEEPER", 7),
+            entry("Keeper Profile", 7),
+            entry("GLIM, MOTH OF THE LOW GLOW", 7),
+            entry("Beast Profile", 7),
+            entry("Beast Profile", 8),
+        ];
+        expect(headingOverCaption(entries, "Beast Profile", 7, 0)?.heading.text).toBe("THE LAMP IN THE MIRE");
+        expect(headingOverCaption(entries, "Beast Profile", 7, 1)?.heading.text).toBe(
+            "GLIM, MOTH OF THE LOW GLOW",
+        );
+        // No third caption on the page, and a caption opening its page has no heading over it there.
+        expect(headingOverCaption(entries, "Beast Profile", 7, 2)).toBeNull();
+        expect(headingOverCaption(entries, "Beast Profile", 8, 0)).toBeNull();
     });
 
     it("lists a statblock's talents, traits, weapons and gear as bare items", () => {

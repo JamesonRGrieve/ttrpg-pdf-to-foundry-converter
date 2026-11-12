@@ -2182,6 +2182,29 @@ export function epithetEntry(
     return namingEntry([titled], caption, captionLine, pageIndex);
 }
 
+/**
+ * The heading printed directly over a statblock's caption where the caption
+ * reads as an entry of its own: of the page's entries headed by the caption,
+ * the one at `occurrence` (the statblocks sharing a caption, in reading
+ * order), and the entry before it on the same page. None when that entry is
+ * another caption.
+ */
+export function headingOverCaption(
+    entries: readonly Entry[],
+    captionLine: string,
+    pageIndex: number,
+    occurrence: number,
+): Entry | null {
+    const key = nameKey(captionLine);
+    const at = entries
+        .map((e, i) => (e.heading.pageIndex === pageIndex && nameKey(e.heading.text) === key ? i : -1))
+        .filter((i) => i >= 0)[occurrence];
+    const over = at === undefined ? undefined : entries[at - 1];
+    return over === undefined || over.heading.pageIndex !== pageIndex || nameKey(over.heading.text) === key
+        ? null
+        : over;
+}
+
 /** Fewest captions that are a nearby heading and one same closing word for that word to be a label. */
 const MIN_HEADED_LABELS = 3;
 
@@ -2255,6 +2278,11 @@ function extractActors(
     );
     /** The first statblock read under each name: its characteristics, and whether its section names it. */
     const signatures = new Map<string, { signature: string; underOwn: boolean }>();
+    /** The headings statblocks have taken their names from, and how often each page's captions were read. */
+    const claimed = new Set<Entry>();
+    const captionsSeen = new Map<string, number>();
+    const captionKey = (grid: DetectedNumericGrid): string =>
+        `${grid.pageIndex}\u0000${nameKey(grid.caption ?? "")}`;
     for (const [i, grid] of grids.entries()) {
         const parsed = npcs[i];
         if (parsed === undefined) {
@@ -2271,12 +2299,27 @@ function extractActors(
         // giving the name with its epithet set off by a comma ("Wick,
         // Keeper of the Lamp" over "Keeper Wick"); a heading without one
         // titles the prose ("Wick Sightings").
-        const naming =
+        const found =
             grid.caption === null
                 ? null
                 : exact === null
                   ? namingEntry(entries, caption, grid.caption, grid.pageIndex)
                   : epithetEntry(entries, caption, grid.caption, grid.pageIndex);
+        // A caption printed over several panels on a page ("Beast Profile")
+        // names a kind, not a creature: a heading an earlier panel took is
+        // not this one's, which is the heading printed over its own caption.
+        const occurrence = grid.caption === null ? 0 : (captionsSeen.get(captionKey(grid)) ?? 0);
+        if (grid.caption !== null) {
+            captionsSeen.set(captionKey(grid), occurrence + 1);
+        }
+        const own =
+            found !== null && claimed.has(found) && grid.caption !== null
+                ? headingOverCaption(entries, grid.caption, grid.pageIndex, occurrence)
+                : null;
+        const naming = own ?? found;
+        if (naming !== null) {
+            claimed.add(naming);
+        }
         // A naming heading may carry the tier the statblock itself does not print.
         // One listing several creatures ("X and Y") introduces this one but
         // names it no more fully than its caption.
