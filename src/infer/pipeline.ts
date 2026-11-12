@@ -2982,23 +2982,67 @@ export function applyHeadedRules(
     }
 }
 
+/**
+ * An actor's characteristics as printed, or null when it has none: two
+ * statblocks of one name that print different characteristics are two
+ * creatures (a weaker and a stronger version), not one entity read twice.
+ */
+function characteristicSignature(e: Entity): string | null {
+    if (e.documentType !== "Actor") {
+        return null;
+    }
+    const system = e.fields["system"];
+    const characteristics = isJsonObject(system) ? system["characteristics"] : undefined;
+    return isJsonObject(characteristics) ? JSON.stringify(characteristics) : null;
+}
+
 function consolidate(
     entities: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
     prose: ReadonlyMap<string, string>,
     line: Line,
+    log: Logger,
 ): Entity[] {
     const richness = (e: Entity): number => JSON.stringify(e.fields).length;
-    const groups = new Map<string, Entity[]>();
+    // By pack and name, then by printed characteristics: actors of one name
+    // whose statblocks differ stay apart. One read without characteristics
+    // joins the statblock of its name when there is just one.
+    const byName = new Map<string, Map<string | null, Entity[]>>();
     for (const e of entities) {
         const key = `${e.pack}\u0000${singularKey(String(e.fields["name"]))}`;
-        groups.set(key, [...(groups.get(key) ?? []), e]);
+        const bySignature = byName.get(key) ?? new Map<string | null, Entity[]>();
+        const signature = characteristicSignature(e);
+        bySignature.set(signature, [...(bySignature.get(signature) ?? []), e]);
+        byName.set(key, bySignature);
+    }
+    const groups: Entity[][] = [];
+    for (const bySignature of byName.values()) {
+        const loose = bySignature.get(null) ?? [];
+        const statblocks = [...bySignature].filter(([signature]) => signature !== null).map(([, g]) => g);
+        const [only] = statblocks;
+        if (statblocks.length === 1 && only !== undefined) {
+            groups.push([...only, ...loose]);
+        } else {
+            groups.push(...statblocks);
+            if (loose.length > 0) {
+                groups.push(loose);
+            }
+        }
     }
     const merged: Entity[] = [];
-    for (const group of groups.values()) {
+    for (const group of groups) {
         const [head, ...rest] = [...group].sort((a, b) => richness(b) - richness(a) || a.ordinal - b.ordinal);
         if (head === undefined) {
             continue;
+        }
+        if (rest.length > 0) {
+            log.debug(
+                `merged ${group.length} × ${String(head.documentType === "Actor" ? "actor" : (head.fields["type"] ?? head.documentType))} ${JSON.stringify(head.fields["name"])} (pages ${[
+                    ...new Set(group.map((e) => e.provenance.pageIndex + 1)),
+                ]
+                    .sort((a, b) => a - b)
+                    .join(", ")}) into ${head.pack}`,
+            );
         }
         for (const e of rest) {
             mergeInto(head.fields, e.fields);
@@ -3070,7 +3114,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);
-    const entities = consolidate(out.entities, descriptions, headedProse(detected), line);
+    const entities = consolidate(out.entities, descriptions, headedProse(detected), line, log);
     applyHeadedRules(entities, headedRules(detected), line);
     embedNpcItems(entities);
     fillSkillCharacteristics(entities);
