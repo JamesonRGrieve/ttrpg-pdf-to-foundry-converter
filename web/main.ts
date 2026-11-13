@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { DEFAULT_TARGET, OFFERED_TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
 import type { RunRequest, WorkerMessage } from "./protocol.ts";
-import { estimateMemoryMb, looksOutOfMemory, planResources } from "./resources.ts";
+import { automaticBudgetMb, estimateMemoryMb, looksOutOfMemory, planResources } from "./resources.ts";
 
 /**
  * The upload page: hand one or more PDFs to the engine worker, show overall
@@ -46,8 +46,15 @@ function fillCores(): void {
 }
 fillCores();
 
-/** The memory budget chosen, in MB, or null to use everything. */
-const memoryBudget = (): number | null => (memory.value === "" ? null : Number(memory.value));
+/** The memory budget chosen, in MB, or null to use everything; left on automatic, sized from the device. */
+const memoryBudget = (): number | null => {
+    if (memory.value === "all") {
+        return null;
+    }
+    return memory.value === ""
+        ? automaticBudgetMb((navigator as Navigator & { deviceMemory?: number }).deviceMemory)
+        : Number(memory.value);
+};
 
 const estimate = element("estimate", HTMLParagraphElement);
 const outOfMemory = element("oom", HTMLParagraphElement);

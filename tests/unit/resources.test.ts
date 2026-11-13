@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import {
+    automaticBudgetMb,
     ENGINE_BASE_MB,
     estimateMemoryMb,
     looksOutOfMemory,
@@ -21,6 +22,16 @@ describe("resource plan", () => {
             maxInFlight: 8 * PAGES_AHEAD_PER_WORKER,
             overBudget: false,
         });
+    });
+
+    it("budgets three quarters of the memory the device reports when none is chosen", () => {
+        expect(automaticBudgetMb(8)).toBe(6144);
+        expect(automaticBudgetMb(0.5)).toBe(384);
+        // Where the browser reports nothing, the run uses everything, as before.
+        expect(automaticBudgetMb(undefined)).toBeNull();
+        expect(automaticBudgetMb(0)).toBeNull();
+        // A device reporting 4 GB runs fewer workers than its cores would.
+        expect(planResources(32, automaticBudgetMb(4), 0).ocrWorkers).toBeLessThan(32);
     });
 
     it("never plans fewer than one worker", () => {

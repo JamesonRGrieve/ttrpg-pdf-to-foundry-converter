@@ -52,7 +52,8 @@
                     <select id="cores"></select>
                     <label for="memory">Memory budget</label>
                     <select id="memory">
-                        <option value="" selected>Use everything</option>
+                        <option value="" selected>Automatic (from this device's memory)</option>
+                        <option value="all">Use everything</option>
                         <option value="1024">1 GB</option>
                         <option value="2048">2 GB</option>
                         <option value="4096">4 GB</option>
@@ -64,7 +65,8 @@
                     </p>
                     <p class="hint">
                         The converter reads one page per core. A memory budget reads fewer pages at once to
-                        fit it (an approximate fit). The result is the same either way; only the speed
+                        fit it (an approximate fit). Automatic budgets three quarters of the memory your
+                        browser reports for this device. The result is the same either way; only the speed
                         changes.
                     </p>
                 </fieldset>

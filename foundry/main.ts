@@ -2,7 +2,7 @@
 import { DEFAULT_TARGET, OFFERED_TARGET_IDS, targetFor, targetId } from "../src/infer/targets.ts";
 import { RELEASE } from "../src/version.ts";
 import type { RunRequest, WorkerMessage } from "../web/protocol.ts";
-import { looksOutOfMemory, planResources } from "../web/resources.ts";
+import { automaticBudgetMb, looksOutOfMemory, planResources } from "../web/resources.ts";
 import { importModule } from "./importer.ts";
 import { PACKAGE_ID, readConvertedModule } from "./sync.ts";
 
@@ -109,7 +109,7 @@ async function run(view: View, chosen: readonly Chosen[]): Promise<void> {
     );
     const plan = planResources(
         Number(view.cores.value),
-        null,
+        automaticBudgetMb((navigator as Navigator & { deviceMemory?: number }).deviceMemory),
         documents.reduce((n, d) => n + d.pdf.byteLength, 0),
     );
     const worker = new Worker(new URL("../web/engine.worker.ts", import.meta.url), { type: "module" });

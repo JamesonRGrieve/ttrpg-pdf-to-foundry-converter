@@ -24,6 +24,22 @@ export const ENGINE_BASE_MB = 500;
 
 const MB = 1024 * 1024;
 
+/** Share of the memory the browser reports that the automatic budget takes. */
+export const AUTOMATIC_SHARE = 0.75;
+
+/**
+ * The budget a run takes when none is chosen, in MB: a share of the memory
+ * the browser reports for the device (`navigator.deviceMemory`, in GB, where
+ * the browser gives it), else null (use everything). A run sized by cores
+ * alone can outgrow a smaller machine, and a browser ends a worker that does
+ * without telling the page.
+ */
+export function automaticBudgetMb(deviceMemoryGb: number | undefined): number | null {
+    return deviceMemoryGb === undefined || !(deviceMemoryGb > 0)
+        ? null
+        : Math.floor(deviceMemoryGb * 1024 * AUTOMATIC_SHARE);
+}
+
 export interface ResourcePlan {
     /** OCR workers run side by side. */
     ocrWorkers: number;
