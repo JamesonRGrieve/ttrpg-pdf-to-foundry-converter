@@ -121,6 +121,27 @@ describe("recovering images through the fallback decoder", () => {
     });
 });
 
+describe("decoding a stencil mask", () => {
+    it("reads an image mask, which has no colour of its own, as dark ink on white", async () => {
+        // Eight pixels, one bit each: a 0 bit marks where the stencil paints.
+        const pdf = await pdfWithImages([
+            {
+                dict: { Width: 8, Height: 1, BitsPerComponent: 1, ImageMask: true },
+                data: new Uint8Array([0b10101010]),
+            },
+        ]);
+        const raw = await extract(pdf);
+        const fallback = openImageFallback(pdf);
+        try {
+            const decoded = fallback.decode(raw.images[0]?.objectId ?? "");
+            expect(decoded?.components).toBe(1);
+            expect([...(decoded?.samples ?? [])]).toEqual([255, 0, 255, 0, 255, 0, 255, 0]);
+        } finally {
+            fallback.close();
+        }
+    });
+});
+
 describe("recovering images in other colour spaces", () => {
     it("expands a palette image through its lookup table, at 8 or fewer bits per index", () => {
         const { assets, warnings } = recover([

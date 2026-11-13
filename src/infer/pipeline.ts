@@ -530,6 +530,9 @@ function extractTables(
         return text;
     };
     let rollTables = 0;
+    /** Advance tables: those read into a career's advancement, and those no schema field holds for the target. */
+    let careerTables = 0;
+    let advanceTables = 0;
     for (const table of tables) {
         // A captioned roll table is a RollTable, whatever items its rows also define.
         const madeRollTable = addRollTable(table, out);
@@ -537,6 +540,7 @@ function extractTables(
             rollTables += 1;
         }
         /** A table no item comes from: unclassified unless it made a RollTable, with why. */
+        let toCareer = false;
         const skip = (reason: string): void => {
             if (!madeRollTable) {
                 unclassified += 1;
@@ -555,6 +559,7 @@ function extractTables(
         if (out.target.careerAdvancement === true && runs.length > 0) {
             const costs = isCharacteristicCostTable(table.headers);
             if (costs || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
+                toCareer = true;
                 advancement.push({
                     kind: costs ? "characteristics" : "advances",
                     pageIndex: table.pageIndex,
@@ -574,7 +579,10 @@ function extractTables(
                 });
             }
             if (costs) {
-                skip("a career's characteristic advance costs");
+                careerTables += 1;
+                log.debug(
+                    `table p${out.page(table.pageIndex)} ${JSON.stringify(table.tableTitle ?? "")} read into a career's advancement: its characteristic costs`,
+                );
                 continue;
             }
         }
@@ -629,7 +637,20 @@ function extractTables(
         // A table with an Advance column anywhere (a banner word can take the
         // first header slot) lists purchases, not a catalogue.
         if (isAttributeScale(roles[0]) || isAdvanceList(roles.flatMap((r) => r ?? []))) {
-            skip("a scale or list of advances, not a catalogue");
+            if (isAdvanceList(roles.flatMap((r) => r ?? []))) {
+                // A list of advances is no catalogue: a career's, where the
+                // target's careers hold their advancement, else nothing holds it.
+                if (toCareer) {
+                    careerTables += 1;
+                } else {
+                    advanceTables += 1;
+                }
+                log.debug(
+                    `table p${out.page(table.pageIndex)} ${JSON.stringify(table.tableTitle ?? "")} ${toCareer ? "read into a career's advancement" : "an advance list: no schema field holds it for this target"}; headers [${table.headers.join(" | ")}]`,
+                );
+                continue;
+            }
+            skip("a characteristic scale, not a catalogue");
             continue;
         }
         const nameCol = nameColumn(table, roles);
@@ -779,7 +800,9 @@ function extractTables(
             );
         }
     }
-    log.info(`tables: ${tables.length} detected, ${rollTables} roll tables, ${unclassified} unclassified`);
+    log.info(
+        `tables: ${tables.length} detected, ${rollTables} roll tables, ${careerTables} career advance tables, ${advanceTables} advance tables (no schema field for this target), ${unclassified} unclassified`,
+    );
     return {
         tables: tables.length,
         unclassified,

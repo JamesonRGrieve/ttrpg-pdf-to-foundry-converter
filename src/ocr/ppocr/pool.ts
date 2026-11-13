@@ -30,6 +30,13 @@ interface Pending {
     reject: (err: Error) => void;
 }
 
+/**
+ * Longest a worker may take over one page before it is taken for dead. A
+ * browser may end a worker (for memory) without any error event reaching the
+ * page; without a limit, the run would wait on that page for ever.
+ */
+export const PAGE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export class PpOcrPool implements PageReader {
     readonly id = PPOCR_READER_ID;
     readonly #spawn: () => ReaderPort;
@@ -39,14 +46,18 @@ export class PpOcrPool implements PageReader {
     readonly #idle: ReaderPort[] = [];
     readonly #queue: { request: ReadRequest; pending: Pending }[] = [];
     readonly #pending = new Map<number, Pending>();
+    /** Each page's watchdog, cleared when its worker answers. */
+    readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
+    readonly #timeoutMs: number;
     #nextId = 0;
     /** Why the pool stopped (a worker died): every read after fails with it. */
     #broken: Error | null = null;
 
-    /** A pool of `size` workers, each started by `spawn`. */
-    constructor(spawn: () => ReaderPort, size: number) {
+    /** A pool of `size` workers, each started by `spawn`; a page unanswered after `timeoutMs` fails the run. */
+    constructor(spawn: () => ReaderPort, size: number, timeoutMs: number = PAGE_TIMEOUT_MS) {
         this.#spawn = spawn;
         this.#size = Math.max(1, size);
+        this.#timeoutMs = timeoutMs;
     }
 
     read(page: RenderedPage): Promise<OcrWord[]> {
@@ -63,7 +74,15 @@ export class PpOcrPool implements PageReader {
     }
 
     async close(): Promise<void> {
+        this.#clearTimers();
         await Promise.all(this.#ports.map((p) => p.terminate()));
+    }
+
+    #clearTimers(): void {
+        for (const timer of this.#timers.values()) {
+            clearTimeout(timer);
+        }
+        this.#timers.clear();
     }
 
     #start(): void {
@@ -84,6 +103,19 @@ export class PpOcrPool implements PageReader {
                 return;
             }
             this.#pending.set(job.request.id, job.pending);
+            const id = job.request.id;
+            this.#timers.set(
+                id,
+                setTimeout(
+                    () =>
+                        this.#fail(
+                            new Error(
+                                `no answer for a page in ${Math.round(this.#timeoutMs / 1000)} s (most often the browser ending the worker for memory)`,
+                            ),
+                        ),
+                    this.#timeoutMs,
+                ),
+            );
             port.post(job.request);
         }
     }
@@ -91,6 +123,8 @@ export class PpOcrPool implements PageReader {
     #settle(port: ReaderPort, response: ReadResponse): void {
         const pending = this.#pending.get(response.id);
         this.#pending.delete(response.id);
+        clearTimeout(this.#timers.get(response.id));
+        this.#timers.delete(response.id);
         this.#idle.push(port);
         if (pending !== undefined) {
             if ("error" in response) {
@@ -104,6 +138,10 @@ export class PpOcrPool implements PageReader {
 
     /** A worker that died fails the run: every page held or waiting is rejected. */
     #fail(err: Error): void {
+        if (this.#broken !== null) {
+            return;
+        }
+        this.#clearTimers();
         this.#broken = new Error(`PP-OCR worker died: ${err.message}`);
         for (const pending of this.#pending.values()) {
             pending.reject(this.#broken);

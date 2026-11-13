@@ -156,7 +156,11 @@ async function readDocument(
     } finally {
         fallback.close();
     }
-    log.debug(`images: ${assets.assets.length} recovered of ${raw.images.length}`);
+    // An image printed several times is one asset: the count says how many of the PDF's images are recovered.
+    const covered = assets.assets.reduce((n, a) => n + a.sourceObjectIds.length, 0);
+    log.debug(
+        `images: ${covered} of ${raw.images.length} recovered, as ${assets.assets.length} assets (identical images share one)`,
+    );
     await opts.irCache?.write(key, { ir, assets });
     return { ir, assets, cacheHit: false };
 }

@@ -174,10 +174,14 @@ describe("column regions", () => {
         expect(ir.pages.map((p) => p.columns)).toEqual([2, 1, 2]);
     });
 
-    it("takes no layout from a single page", () => {
+    it("takes no layout from a single page, but splits a page by its own gutters under a full-width block", () => {
         const rows = [530, 518, 506].map((y) => raw(2, LEFT, y, 450, `spanning row ${y}`));
         const ir = normalize(doc([...columns(0, 700, 20), ...columns(2, 700, 10), ...rows], [0, 2]));
-        expect(ir.pages.map((p) => p.columns)).toEqual([2, 1]);
+        // The second page's two prose columns, then the rows across them: its own gutter,
+        // found with the full-width rows left out, not a layout the first page lent it.
+        expect(ir.pages.map((p) => p.columns)).toEqual([2, 3]);
+        const own = normalize(doc([...columns(2, 700, 10), ...rows], [2]));
+        expect(own.pages.map((p) => p.columns)).toEqual([3]);
     });
 
     it("keeps a page of full-width prose as one column", () => {

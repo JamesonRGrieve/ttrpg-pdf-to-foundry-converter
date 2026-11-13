@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     answerRead,
     PpOcrPool,
@@ -88,6 +88,25 @@ describe("PpOcrPool", () => {
 });
 
 describe("answerRead", () => {
+    it("fails the run when a worker goes silent on a page, as one the browser ended without an error does", async () => {
+        vi.useFakeTimers();
+        try {
+            const port = new HeldPort();
+            const pool = new PpOcrPool(() => port, 1, 1000);
+            const answered = pool.read(page(0));
+            port.answer();
+            expect(await answered).toEqual([word("p0")]);
+            // Answered in time: its watchdog is cleared and never fires.
+            vi.advanceTimersByTime(5000);
+            const silent = pool.read(page(1));
+            vi.advanceTimersByTime(1000);
+            await expect(silent).rejects.toThrow(/no answer for a page in 1 s/u);
+            await expect(pool.read(page(2))).rejects.toThrow(/PP-OCR worker died/u);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("answers with the reader's words, or with its error", async () => {
         const reader = {
             id: "r",

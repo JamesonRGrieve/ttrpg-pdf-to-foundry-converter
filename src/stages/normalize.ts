@@ -372,6 +372,37 @@ function regionLayout(
     return { layout: { columnOf, lefts }, splitLines };
 }
 
+/** Share of the text block's width a run spans to be a line across the page, not a column's. */
+const SPANNING_SHARE = 0.6;
+
+/**
+ * A page's own column layout, read from its gutters with every run spanning
+ * most of the text block left out (a full-width block across the columns,
+ * which hides the gutters to the whole-page test); null when none shows. It
+ * is a candidate for `regionLayout`, which splits only regions whose every
+ * column is prose.
+ */
+function ownLayout(runs: readonly RawTextRun[], page: RawPage): DocumentLayout | null {
+    const body = runs.filter(
+        (r) =>
+            r.width > 0 &&
+            !inFurnitureBand(r.y, page.height) &&
+            !inSideMargin(r.x, r.x + r.width, page.width),
+    );
+    if (body.length === 0) {
+        return null;
+    }
+    const width = Math.max(...body.map((r) => r.x + r.width)) - Math.min(...body.map((r) => r.x));
+    const narrow = runs.filter((r) => r.width < SPANNING_SHARE * width);
+    const geom = detectGeometry(narrow, page);
+    // Every column as wide as a page layout's (a table's cell gap is no gutter).
+    const edges = [...geom.columnLefts, Math.max(...body.map((r) => r.x + r.width))];
+    const narrowest = Math.min(...edges.slice(1).map((e, i) => e - (edges[i] ?? 0)));
+    return geom.columnLefts.length < 2 || narrowest < MIN_COLUMN_SHARE * page.width
+        ? null
+        : { gutters: geom.columnLefts.slice(1), rights: geom.columnRights };
+}
+
 function buildSortedSet(values: Iterable<number>): number[] {
     return [...new Set(values)].sort(numAsc);
 }
@@ -419,9 +450,13 @@ export function normalize(raw: RawDoc): IR {
         // the one reading the most lines as columns: a three-column layout
         // splitting a two-line strip must not keep the page's two-column
         // text below it, set at another of the document's gutters, as one.
+        // Failing those, the page's own gutters measured without its
+        // full-width lines: a boxed sidebar may cross the document's gutter
+        // where a block across the page hides the page's own.
+        const own = geom.columnLefts.length === 1 ? ownLayout(pageRuns, page) : null;
         const regional =
             geom.columnLefts.length === 1
-                ? (layouts.get(page.pageIndex % 2) ?? []).reduce<{
+                ? [...(layouts.get(page.pageIndex % 2) ?? []), ...(own === null ? [] : [own])].reduce<{
                       layout: ColumnLayout;
                       splitLines: number;
                   } | null>((found, candidate) => {

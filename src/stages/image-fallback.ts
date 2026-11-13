@@ -42,6 +42,21 @@ export function openImageFallback(pdfBytes: Uint8Array): ImageFallback {
             image = pdf.loadImage(pdf.newIndirect(num));
             pixmap = image.toPixmap();
             const space = pixmap.getColorSpace();
+            // A stencil mask (often JBIG2) has no colour, only coverage: ink
+            // where it is set, on the page beneath. It reads as dark ink on white.
+            if (space === null && pixmap.getAlpha() && pixmap.getNumberOfComponents() === 1) {
+                const width = pixmap.getWidth();
+                const height = pixmap.getHeight();
+                const stride = pixmap.getStride();
+                const coverage = new Uint8Array(pixmap.getPixels());
+                const samples = new Uint8Array(width * height);
+                for (let y = 0; y < height; y += 1) {
+                    for (let x = 0; x < width; x += 1) {
+                        samples[y * width + x] = 255 - (coverage[y * stride + x] ?? 0);
+                    }
+                }
+                return { width, height, components: 1, samples };
+            }
             const gray = space?.isGray() === true;
             const rgb = space?.isRGB() === true;
             // Anything else (CMYK, a separation, an indexed space MuPDF did not expand) becomes RGB.
