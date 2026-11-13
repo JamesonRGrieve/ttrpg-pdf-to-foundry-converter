@@ -1066,9 +1066,17 @@ export function readInlineOrigins(
  * would leave no name.
  */
 export function withoutStepLabel(heading: string, labels: readonly string[]): string {
+    // Display type may split a word's letters ("C areer P ath"): any letter may be followed by a space.
+    const spaced = (word: string): string =>
+        [...word]
+            .filter((c) => /\p{L}/u.test(c))
+            .map((c) => c.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+            .join("\\s*");
     for (const label of labels) {
-        const escaped = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-        const cut = heading.replace(new RegExp(String.raw`\s+${escaped}(?:\s+path)?\s*$`, "iu"), "").trim();
+        const words = label.split(/\s+/u).map(spaced).join("\\s+");
+        const cut = heading
+            .replace(new RegExp(`\\s+${words}(?:\\s+${spaced("path")})?\\s*$`, "iu"), "")
+            .trim();
         if (cut !== heading.trim() && letters(cut).length > 0) {
             return cut;
         }

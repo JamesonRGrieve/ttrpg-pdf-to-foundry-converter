@@ -480,6 +480,9 @@ describe("origins granted by inline fields", () => {
         expect(origins.map((o) => [o.name, o.step.key])).toEqual([["Lampwright", "career"]]);
         expect(withoutStepLabel("Lampwright Career Path", ["career"])).toBe("Lampwright");
         expect(withoutStepLabel("Career Path", ["career"])).toBe("Career Path");
+        // A display heading's letters split by the text layer.
+        expect(withoutStepLabel("Lampwright C areer P ath", ["career"])).toBe("Lampwright");
+        expect(withoutStepLabel("Lore of the Lamp", ["lure of the void"])).toBe("Lore of the Lamp");
     });
 
     it("names an origin by the earlier heading it extends, its step by a section naming it anywhere", () => {
