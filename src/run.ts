@@ -131,9 +131,14 @@ async function readDocument(
         );
     }
     const arbitrated = arbitrate(raw, ocr);
-    const changed = arbitrated.textRuns.filter((r, i) => r.text !== raw.textRuns[i]?.text).length;
+    // Arbitration splits, joins, rewrites and adds runs: a run is kept when
+    // the text layer has it at the same place with the same text.
+    const at = (r: { pageIndex: number; x: number; y: number; text: string }): string =>
+        `${r.pageIndex}|${Math.round(r.x)}|${Math.round(r.y)}|${r.text}`;
+    const layer = new Set(raw.textRuns.map(at));
+    const kept = arbitrated.textRuns.filter((r) => layer.has(at(r))).length;
     log.debug(
-        `arbitrate: ${arbitrated.textRuns.length} text runs after cross-reference with OCR (${raw.textRuns.length} in the text layer; ${changed} differ in place)`,
+        `arbitrate: ${arbitrated.textRuns.length} text runs after cross-reference with OCR (${raw.textRuns.length} in the text layer): ${kept} kept as the layer has them, ${arbitrated.textRuns.length - kept} rewritten, split, joined or added from OCR`,
     );
     const ir = normalize(arbitrated);
     const columns = new Map<number, number>();

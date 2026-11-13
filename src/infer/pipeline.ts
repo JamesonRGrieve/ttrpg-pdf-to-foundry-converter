@@ -2337,15 +2337,15 @@ export function headedNames(
 }
 
 function extractActors(
-    ir: IR,
     numeric: readonly DetectedNumericGrid[],
+    statRows: readonly DetectedNumericGrid[],
     entries: readonly Entry[],
     out: EntityCollector,
 ): number {
     // Statblocks print their characteristics as a grid or as a row. A label
     // nearly every grid's banner carries ("… Profile") is no part of a name;
     // row captions already drop theirs.
-    const grids = [...numeric, ...detectStatRows(ir)];
+    const grids = [...numeric, ...statRows];
     const npcs = grids.map(parseNpc);
     const bannerNames = captionNames(
         npcs.slice(0, numeric.length).map((n) => n.name),
@@ -3271,7 +3271,10 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     log.debug(
         `read: ${ir.pages.length} pages, ${ir.runs.length} text runs, ${ir.pages.filter((p) => !p.hasTextLayer).length} pages without a text layer`,
     );
-    log.debug(`structure: ${detected.length} headed entries, ${numeric.length} statblock grids`);
+    const statRows = detectStatRows(ir);
+    log.debug(
+        `structure: ${detected.length} headed entries (every heading the text holds; only those of a document type become documents), statblocks: ${numeric.length} printed as grids, ${statRows.length} as rows`,
+    );
     for (const g of numeric) {
         log.debug(
             `statblock grid p${out.page(g.pageIndex)} ${JSON.stringify(g.name)}: ${g.values.join(" ")}`,
@@ -3291,7 +3294,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
         out,
         descriptions,
     );
-    const grids = extractActors(ir, numeric, detected, out);
+    const grids = extractActors(numeric, statRows, detected, out);
     dropCreatureGear(out.entities);
     extractOriginPaths(detected, runningHeads(ir), out);
     const inline = extractInlineWeapons(detected, out);
@@ -3328,7 +3331,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
         }
     }
     log.info(
-        `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged), ${out.warnings.length} unparsed cells`,
+        `entities: ${entities.length} (${out.entities.length - entities.length} duplicates merged; ${entities.filter((e) => e.blockId.startsWith("entry:")).length} read from headed entries), ${out.warnings.length} unparsed cells`,
     );
     const byType = new Map<string, number>();
     for (const entity of entities) {
