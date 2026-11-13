@@ -15,6 +15,7 @@ import {
     readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
+    withoutStepLabel,
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
@@ -454,6 +455,31 @@ describe("origins granted by inline fields", () => {
             { name: "Dim Sight" },
             { name: "Lantern Bearer (+2)" },
         ]);
+    });
+
+    it("names an origin by its section, less the step's own words, when the heading's words before its labels only connect", () => {
+        const rt = TARGETS.rt.originSteps;
+        const origins = readInlineOrigins(
+            [
+                at("LAMPWRIGHT CAREER PATH", "display", ["Careers"], [], "Keepers of the lamps."),
+                // The heading "Starting Skills, Talents, and Gear" read as two: its second line keeps the fields.
+                at("STARTING SKILLS, TALENTS,", "sub", ["Careers", "LAMPWRIGHT CAREER PATH"]),
+                at(
+                    "AND GEAR",
+                    "sub2",
+                    ["Careers", "LAMPWRIGHT CAREER PATH"],
+                    [
+                        ["Starting Skills", "Wading, Hush."],
+                        ["Starting Talents", "Steady Hand."],
+                        ["Starting Gear", "A lamp."],
+                    ],
+                ),
+            ],
+            rt,
+        );
+        expect(origins.map((o) => [o.name, o.step.key])).toEqual([["Lampwright", "career"]]);
+        expect(withoutStepLabel("Lampwright Career Path", ["career"])).toBe("Lampwright");
+        expect(withoutStepLabel("Career Path", ["career"])).toBe("Career Path");
     });
 
     it("names an origin by the earlier heading it extends, its step by a section naming it anywhere", () => {

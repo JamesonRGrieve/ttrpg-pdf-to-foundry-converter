@@ -1018,7 +1018,11 @@ export function readInlineOrigins(
         const cut = words.findIndex(
             (w) => letters(w).length > 0 && (labelWords.has(letters(w)) || labelField(w) !== undefined),
         );
-        const own = words.slice(0, cut < 0 ? words.length : cut).join(" ");
+        // Connecting words alone ("And" before "Gear", a heading's second line) name nothing.
+        const before = words.slice(0, cut < 0 ? words.length : cut);
+        const own = before.every((w) => letters(w).length === 0 || FUNCTION_WORDS.has(letters(w)))
+            ? ""
+            : before.join(" ");
         const sectionText = entry.sections.at(-1);
         const section = entries.slice(0, i).findLast((e) => e.heading.text === sectionText);
         // A display heading the text layer split ("O perator") is rejoined by
@@ -1035,10 +1039,10 @@ export function readInlineOrigins(
             .reverse()
             .map((e) => ({ e, words: wordPrefix(headingName(e.heading.text), entry.heading.text) }))
             .find(({ words }) => words !== null);
-        const name = rejoinSplitWords(
-            extended?.words ?? (own.length > 0 ? own : headingName(sectionText ?? "")),
-            vocabulary,
-        );
+        // A section named for its origin and the step ("<Name> Career Path")
+        // names the origin without the step's own words.
+        const sectionName = withoutStepLabel(headingName(sectionText ?? ""), step.labels);
+        const name = rejoinSplitWords(extended?.words ?? (own.length > 0 ? own : sectionName), vocabulary);
         if (letters(name).length === 0) {
             return;
         }
@@ -1054,6 +1058,22 @@ export function readInlineOrigins(
         });
     });
     return out;
+}
+
+/**
+ * A heading with a closing label of the step dropped ("<Name> Career Path" →
+ * "<Name>" for the step labelled "career"); the heading as it is when that
+ * would leave no name.
+ */
+export function withoutStepLabel(heading: string, labels: readonly string[]): string {
+    for (const label of labels) {
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+        const cut = heading.replace(new RegExp(String.raw`\s+${escaped}(?:\s+path)?\s*$`, "iu"), "").trim();
+        if (cut !== heading.trim() && letters(cut).length > 0) {
+            return cut;
+        }
+    }
+    return heading;
 }
 
 /** A heading naming an origin's abilities: "<Origin> Special Ability" / "… Abilities". */
