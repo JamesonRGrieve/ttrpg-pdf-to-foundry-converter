@@ -1443,6 +1443,14 @@ describe("entry typing", () => {
         expect(item.variantized["category"]).toBe("mark");
         const honour = entry("WICK WARDEN", [["Cost", "1,000 xp"]], ["Distinctions"]);
         expect(entryItem(honour, "specialAbility").variantized["category"]).toBe("distinction");
+        // An advanced speciality's ability, named after its kind; a speciality's own is its origin's grant.
+        const advanced = entry("WARDEN SPECIAL ABILITY: STEADY FLAME", [], ["Wick Warden", "Prerequisites"]);
+        expect(entryType(advanced)).toBe("specialAbility");
+        expect(entryItem(advanced, "specialAbility").name).toBe("Steady Flame");
+        expect(entryItem(advanced, "specialAbility").variantized["category"]).toBe("advanced");
+        expect(entryType(entry("SPECIAL ABILITY: STEADY FLAME", [], ["Wick Warden"]))).not.toBe(
+            "specialAbility",
+        );
         // A price in experience under no such section types nothing here.
         expect(entryType(entry("WICK WARDEN", [["Cost", "1,000 xp"]], ["Lanterns"]))).not.toBe(
             "specialAbility",

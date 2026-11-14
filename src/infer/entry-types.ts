@@ -348,6 +348,13 @@ export function specialAbilityCategory(
     return null;
 }
 
+/** A heading naming the schema's special-ability kind before the ability's own name: "… Special Ability: <Name>". */
+const ABILITY_HEADING = /(?:^|\bspecial\s+)ability\s*:\s*(?<name>\S.*)$/iu;
+
+/** Under a heading of prerequisites: what follows belongs to something entered on them. */
+const underPrerequisites = (sections: readonly string[]): boolean =>
+    sections.some((section) => /^\s*prerequisites?\s*$/iu.test(section));
+
 /** A price in experience: "250 xp". */
 const XP_PRICE = /^\s*(?<xp>\d[\d,]*)\s*xp\b/iu;
 /** A `Type:` field naming how an ability is used: "Passive", or the action it takes. */
@@ -372,6 +379,13 @@ export function entryType(entry: Entry): ItemType | null {
     // A pact under a section of dark pacts (the schema's kind, by its label).
     if (/\bpact\b/iu.test(entry.heading.text) && entry.sections.some((s) => DARK_PACTS.test(s))) {
         return "darkPact";
+    }
+    // A heading naming the schema's kind before its own name ("… Special
+    // Ability: <Name>") under an advanced speciality (one entered on
+    // prerequisites). A speciality's or archetype's own ability is a grant of
+    // its origin, not an item.
+    if (ABILITY_HEADING.test(entry.heading.text) && underPrerequisites(entry.sections)) {
+        return "specialAbility";
     }
     // An ability priced in experience under a section of the schema's
     // special-ability categories ("… Marks", "Distinctions").
@@ -1234,7 +1248,15 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
     );
     // An order's heading may close on the action it takes: "Volley (Comrade Half Action)".
     const actionTag = type === "order" ? ACTION_TAG.exec(headingName) : null;
-    const name = actionTag === null ? headingName : headingName.slice(0, actionTag.index);
+    // A special ability's heading may name whose it is first ("<Speciality> Special Ability: <Name>").
+    const ability =
+        type === "specialAbility" ? ABILITY_HEADING.exec(headingName)?.groups?.["name"] : undefined;
+    const name =
+        ability !== undefined
+            ? ability.trim()
+            : actionTag === null
+              ? headingName
+              : headingName.slice(0, actionTag.index);
     const printedCharacteristic = fields.get(fieldKey(CHARACTERISTIC_FIELD))?.toLowerCase() ?? "";
     const characteristic = headed ?? CHARACTERISTICS[printedCharacteristic] ?? null;
     const html = toHtml(entry.body);
@@ -1364,7 +1386,12 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             system["benefit"] = html;
             break;
         case "specialAbility": {
-            const category = specialAbilityCategory(entry.sections);
+            // One named "… Ability:" under an advanced speciality is that speciality's.
+            const category =
+                specialAbilityCategory(entry.sections) ??
+                (ABILITY_HEADING.test(entry.heading.text) && underPrerequisites(entry.sections)
+                    ? "advanced"
+                    : null);
             if (category !== null) {
                 variantized["category"] = category;
             }
