@@ -992,6 +992,19 @@ describe("npc statblocks", () => {
         ]);
     });
 
+    it("reads gear listed with a weapon's profile in its brackets as that weapon", () => {
+        const [lamp, wick] = listedItems(
+            "Lamp gun (30m; S/2/-; 1d10+2 E; Pen 1; Clip 20; Reload Full), wick",
+            "gear",
+        );
+        expect(lamp).toMatchObject({
+            name: "Lamp gun",
+            type: "weapon",
+            system: { damage: { formula: "1d10", bonus: 2, penetration: 1 }, clip: { max: 20 } },
+        });
+        expect(wick).toEqual({ name: "wick", type: "gear" });
+    });
+
     it("keeps statblocks of one name with different characteristics apart, and merges the rest", () => {
         let ordinal = 0;
         const entity = (documentType: "Item" | "Actor", fields: Record<string, JsonValue>): Entity => ({

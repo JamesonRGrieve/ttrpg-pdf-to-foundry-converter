@@ -522,7 +522,8 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
         .filter((entry) => /\p{L}/u.test(entry) && !NO_ENTRY.test(entry))
         .map((entry) => {
             const inner = CLOSING_PARENTHETICAL.exec(entry)?.groups?.["inner"]?.trim() ?? "";
-            if (type === "weapon") {
+            // Gear listed with a weapon's profile in its brackets is a weapon.
+            if (type === "weapon" || (type === "gear" && inlineWeapons(entry).length > 0)) {
                 // The name ends where its profile opens, however the line runs on;
                 // a profile printed in the brackets is the weapon's own.
                 const counted = countedName(/^[^(:]+/u.exec(entry)?.[0].trim() ?? entry);
@@ -532,8 +533,8 @@ export function listedItems(text: string, type: NpcItem["type"]): NpcItem[] {
                     ...(counted.quantity === null ? {} : { quantity: counted.quantity }),
                 };
                 return Object.keys(system).length === 0
-                    ? { name: counted.name, type }
-                    : { name: counted.name, type, system };
+                    ? { name: counted.name, type: "weapon" }
+                    : { name: counted.name, type: "weapon", system };
             }
             if (type === "gear") {
                 const counted = countedName(entry);
