@@ -2708,8 +2708,8 @@ function skillOf(name: string): { key: string; specialisation: string } {
  * A trained skill a statblock lists without its characteristic takes the one
  * the document itself gives the skill: its own entry for the skill, else the
  * characteristic the document's statblocks most often print beside it. A
- * specialisation left without one takes its skill's. A statblock with a
- * skill the document tags nowhere carries no trained skills of its own.
+ * specialisation left without one takes its skill's. A skill the document
+ * tags nowhere keeps an empty characteristic, which the system resolves.
  */
 export function fillSkillCharacteristics(entities: readonly Entity[]): void {
     const rows = (actor: Entity): [string, JsonObject][] => {
@@ -2798,17 +2798,8 @@ export function fillSkillCharacteristics(entities: readonly Entity[]): void {
             }
         }
     }
-    // The schema authors every skill's characteristic explicitly. A statblock
-    // listing a skill the document tags nowhere keeps only its printed line,
-    // which the system keys on load against its own skill list.
-    for (const actor of entities) {
-        const system = actor.fields["system"];
-        if (isJsonObject(system) && rows(actor).some(([, row]) => row["characteristic"] === "")) {
-            actor.fields["system"] = Object.fromEntries(
-                Object.entries(system).filter(([field]) => field !== "trainedSkills"),
-            );
-        }
-    }
+    // A skill the document tags nowhere keeps an empty characteristic: the
+    // system rolls it against its own skill's characteristic (#725).
 }
 
 function isJsonObject(v: JsonValue | undefined): v is JsonObject {

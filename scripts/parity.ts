@@ -90,6 +90,34 @@ async function systemLoader(root: string | undefined): Promise<Loader> {
     const migrations = NPC_MIGRATIONS.map((name) => module[name]).filter(
         (m): m is Migration => m !== undefined,
     );
+    // A trained skill stored without its characteristic rolls against the one the
+    // system resolves for it (#725): score what the sheet uses.
+    const definitions = (await import(join(root, "src/module/data/shared/skill-definitions.ts"))) as {
+        resolveSkillCharacteristic?: (key: string, ...own: (string | undefined)[]) => string;
+    };
+    const resolveCharacteristic = definitions.resolveSkillCharacteristic;
+    const resolveSkills = (source: Record<string, unknown>): void => {
+        const trained = source["trainedSkills"];
+        if (resolveCharacteristic === undefined || typeof trained !== "object" || trained === null) {
+            return;
+        }
+        for (const [key, row] of Object.entries(trained as Record<string, Record<string, unknown>>)) {
+            if (typeof row !== "object" || row === null) {
+                continue;
+            }
+            if (row["characteristic"] === "") {
+                row["characteristic"] = resolveCharacteristic(key);
+            }
+            const entries = Array.isArray(row["entries"])
+                ? (row["entries"] as Record<string, unknown>[])
+                : [];
+            for (const entry of entries) {
+                if (entry["characteristic"] === "") {
+                    entry["characteristic"] = row["characteristic"];
+                }
+            }
+        }
+    };
     return (type, system) => {
         if (type !== "npc" || typeof system !== "object" || system === null || Array.isArray(system)) {
             return system;
@@ -98,6 +126,7 @@ async function systemLoader(root: string | undefined): Promise<Loader> {
         for (const migrate of migrations) {
             migrate(source);
         }
+        resolveSkills(source);
         return source as Json;
     };
 }

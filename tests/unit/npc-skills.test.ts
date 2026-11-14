@@ -191,8 +191,11 @@ describe("statblock skills", () => {
             "intelligence",
         ]);
         expect(trained.wading.characteristic).toBe("strength");
-        // A skill the document tags nowhere: that statblock keeps its printed line alone.
-        expect(Object(untagged.fields["system"])).toEqual({ skills: "Lantern Lore (Reeds), Hush" });
+        // A skill the document tags nowhere keeps an empty characteristic, which the system resolves;
+        // the rest of that statblock's skills still take the document's.
+        const kept = Object(Object(untagged.fields["system"])["trainedSkills"]);
+        expect(kept.hush.characteristic).toBe("");
+        expect(kept.lanternLore.characteristic).toBe("intelligence");
     });
 
     it("takes a specialisation's characteristic from the document's entry for that specialisation", () => {
@@ -253,6 +256,19 @@ describe("statblock skills", () => {
         expect(trained.wading.entries.map((e: { characteristic: string }) => e.characteristic)).toEqual([
             "strength",
             "toughness",
+        ]);
+    });
+
+    it("reads a list closed by a conjunction, a missing comma after a tag, and running text as no skill", () => {
+        expect(
+            listedSkills("Wading, Hush (Ag) Glazing (Int) +10, and Snuffing +10, any others as needed").map(
+                (k) => [k.name, k.characteristic, k.advance],
+            ),
+        ).toEqual([
+            ["Wading", "", 1],
+            ["Hush", "agility", 1],
+            ["Glazing", "intelligence", 2],
+            ["Snuffing", "", 2],
         ]);
     });
 });

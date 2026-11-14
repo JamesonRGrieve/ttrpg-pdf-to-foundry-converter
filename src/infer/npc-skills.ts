@@ -85,9 +85,18 @@ function perSpecialisation(entry: string): string[] {
 /** The skills a printed line lists, in order. */
 export function listedSkills(line: string): ListedSkill[] {
     const out: ListedSkill[] = [];
-    for (const entry of splitTopLevel(line, /^,\s*/u).flatMap(perSpecialisation)) {
+    // A characteristic tag closes its entry: one run into the next with no
+    // comma ("Concealment (Ag) Deceive (Fel)") is two.
+    const separated = line.replace(
+        /\(([^()]{1,4})\)((?:\s*\+\d+)?)\s+(?=\p{Lu})/gu,
+        (whole, inner: string, rank: string) =>
+            taggedCharacteristic(inner) === undefined ? whole : `(${inner})${rank}, `,
+    );
+    for (const entry of splitTopLevel(separated, /^,\s*/u).flatMap(perSpecialisation)) {
         let name = entry
             .replace(/[.;\s]+$/u, "")
+            // The list's closing conjunction ("…, and Tracking") is not part of the name.
+            .replace(/^(?:and|or)\s+/iu, "")
             // A lore printed kind-last ("Lore: Scholastic (Wards)") is the "Scholastic Lore" skill.
             .replace(/^Lore:\s*(\p{L}+)\b/u, "$1 Lore")
             .replace(RANK_INSIDE, "($<spec>) $<plus>")
@@ -127,7 +136,8 @@ export function listedSkills(line: string): ListedSkill[] {
             })
             .trim();
         const key = skillKey(name.replace(/\([^()]*\)/gu, " "));
-        if (key.length === 0 || NO_SKILLS.test(name)) {
+        // A skill's name is capitalised: running text in the list ("any others as needed") is none.
+        if (key.length === 0 || NO_SKILLS.test(name) || /^\p{Ll}/u.test(name)) {
             continue;
         }
         const advance = Math.min(TOP_RANK, Math.floor(plus / RANK_STEP) + 1);
