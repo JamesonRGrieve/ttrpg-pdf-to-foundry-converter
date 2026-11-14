@@ -364,6 +364,7 @@ describe("a career's advancement tables", () => {
                 [
                     ["Trimming +10 100", "S", "", "Trimming"],
                     ["the guild,", "hence Snuffing", "", "200", "", "T Ag 30"],
+                    ["", "Wick Ward", "300 T -"],
                 ],
                 kindOf,
             ),
@@ -380,6 +381,7 @@ describe("a career's advancement tables", () => {
                 type: "talent",
                 prerequisites: [{ type: "characteristic", key: "agility", value: 30 }],
             },
+            { name: "Wick Ward", cost: 300, type: "talent", prerequisites: [] },
         ]);
     });
 });

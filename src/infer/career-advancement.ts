@@ -72,9 +72,12 @@ export function headingBeside(ir: IR, tableRuns: readonly IRTextRun[], line: rea
     if (first === undefined) {
         return "";
     }
-    const left = Math.min(...line.map((r) => r.x));
+    // The line starts at its "Advance" cell: a label set before it on the line is beside the table.
+    const start = line.find((r) => /^\s*advances?\b/iu.test(r.text));
+    const left = start?.x ?? Math.min(...line.map((r) => r.x));
     const size = Math.max(...line.map((r) => r.size));
-    const faces = new Set(tableRuns.map((r) => r.font));
+    // The faces of the table's own columns: a label the table took in from its margin is not one.
+    const faces = new Set(tableRuns.filter((r) => r.x >= left - size).map((r) => r.font));
     return ir.runs
         .filter(
             (r) =>
@@ -346,10 +349,19 @@ const TYPE = /^(skill|talent|S|T)(?=\s|$)\s*(.*)$/isu;
 /** A name and its cost read as one cell ("Awareness 100"), perhaps with running text after. */
 const NAME_COST = /^(.*?\S)\s+(\d[\d,]*)(?:\s+\p{Ll}.*)?$/u;
 
+/** A cost and a type in one cell. */
+const COST_TYPE = /^(\d[\d,]*)\s+((?:skill|talent|S|T)(?=\s|$).*)$/isu;
+
 /** A row whose name and cost share a cell, with them parted; any other row as it is. */
 function splitNameCost(row: readonly string[]): string[] {
     if (row.some((c, i) => i > 0 && COST.test(c))) {
         return [...row];
+    }
+    // A cost and the type after it read as one cell ("100 S -", "100 T Ag 30").
+    const joined = row.findIndex((c, i) => i > 0 && COST_TYPE.test(c));
+    const ct = COST_TYPE.exec(row[joined] ?? "");
+    if (ct?.[1] !== undefined && ct[2] !== undefined) {
+        return [...row.slice(0, joined), ct[1], ct[2], ...row.slice(joined + 1)];
     }
     const at = row.findIndex((c) => NAME_COST.test(c));
     const m = NAME_COST.exec(row[at] ?? "");
