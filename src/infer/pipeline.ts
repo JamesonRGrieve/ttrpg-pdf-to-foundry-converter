@@ -2444,10 +2444,19 @@ function extractActors(
         // (an animate craft rolls its attacks off it): its characteristics
         // and the talents and traits it lists ride on the craft, and no NPC
         // is read beside it.
-        if (isVehicleProfile(panelPairs(grid.associatedText.join("\n")))) {
-            const craft = out.entities.find(
-                (e) => e.blockId === VEHICLE_BLOCK && nameKey(String(e.fields["name"])) === nameKey(name),
-            );
+        // So is one named for a craft whose profile is printed beside it
+        // (on its page or the next), its profile in the craft's own entry,
+        // that prints no wounds: a creature printed with a mount's profile
+        // too (wounds and a vehicle profile) is both.
+        const woundless = !isJsonObject(npc.system["wounds"]);
+        const craft = out.entities.find(
+            (e) =>
+                woundless &&
+                e.blockId === VEHICLE_BLOCK &&
+                nameKey(String(e.fields["name"])) === nameKey(name) &&
+                Math.abs(e.provenance.pageIndex - grid.pageIndex) <= 1,
+        );
+        if (craft !== undefined || isVehicleProfile(panelPairs(grid.associatedText.join("\n")))) {
             const craftSystem = craft?.fields["system"];
             if (craft !== undefined && isJsonObject(craftSystem)) {
                 craftSystem["characteristics"] = craftCharacteristics(npc.system["characteristics"]);

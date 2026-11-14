@@ -357,6 +357,18 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
     });
     const bodySize = bodyStyle(ir).size;
     const sizeOf = (l: TextLine): number => Math.max(...l.runs.map((r) => r.size));
+    // The size most of a line's letters are set in: a stray glyph set large
+    // beside it (a mark from the margin) does not make it a heading.
+    const textSizeOf = (l: TextLine): number => {
+        const letters = new Map<number, number>();
+        for (const r of l.runs) {
+            letters.set(r.size, (letters.get(r.size) ?? 0) + r.text.trim().length);
+        }
+        return [...letters].reduce(
+            (a, b) => (b[1] > a[1] || (b[1] === a[1] && b[0] > a[0]) ? b : a),
+            [0, -1],
+        )[0];
+    };
     const sameColumn = (a: TextLine, b: TextLine): boolean =>
         a.pageIndex === b.pageIndex && a.column === b.column;
     // On a page with a text layer, a line read only from the page image is
@@ -488,7 +500,7 @@ export function detectStatRows(ir: IR): DetectedNumericGrid[] {
                 line === undefined ||
                 previous === undefined ||
                 captions.has(j) ||
-                (sizeOf(line) > bodySize + HEADING_STEP && !recoveredMark(line))
+                (textSizeOf(line) > bodySize + HEADING_STEP && !recoveredMark(line))
             ) {
                 break;
             }
