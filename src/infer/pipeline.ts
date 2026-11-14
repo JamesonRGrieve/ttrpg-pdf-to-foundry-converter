@@ -1221,7 +1221,8 @@ function addVehicle(out: EntityCollector, entry: Entry, parts: readonly Entry[])
             }
         }
     }
-    const name = cleanName(entry.heading.text);
+    // A threat tier printed beside the name ("(Elite)") is the statblock's, not the craft's name.
+    const name = splitTier(cleanName(entry.heading.text)).name;
     // A profile under a prose fragment (an errata line quoting a rule) names no vehicle.
     if (!startsLikeName(name) || readsAsProse(name) || endsMidSentence(name)) {
         return false;

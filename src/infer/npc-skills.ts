@@ -83,11 +83,30 @@ function perSpecialisation(entry: string): string[] {
 }
 
 /** The skills a printed line lists, in order. */
+/**
+ * A printed skill list with its print noise evened out: full-width brackets
+ * as plain ones, a rank's sign set apart from its figure ("+ 10"), a full
+ * stop standing for the comma between entries, footnote marks, and a
+ * bracket closed twice or opened never ("Barter Fel) +20").
+ */
+function printedList(line: string): string {
+    return (
+        line
+            .normalize("NFKC")
+            .replace(/[†‡*]+/gu, "")
+            .replace(/\+\s+(\d)/gu, "+$1")
+            .replace(/([)\d])\.\s+(?=\p{Lu})/gu, "$1, ")
+            // A rank after a closed tag, closed again ("(Fel) +20)"): the second bracket is stray.
+            .replace(/(\)\s*\+\d+)\)/gu, "$1")
+            .replace(/(^|,\s*)([^,()]+?)\s+(WS|BS|S|T|Ag|Int|Per|WP|Fel)\)/gu, "$1$2 ($3)")
+    );
+}
+
 export function listedSkills(line: string): ListedSkill[] {
     const out: ListedSkill[] = [];
     // A characteristic tag closes its entry: one run into the next with no
     // comma ("Concealment (Ag) Deceive (Fel)") is two.
-    const separated = line.replace(
+    const separated = printedList(line).replace(
         /\(([^()]{1,4})\)((?:\s*\+\d+)?)\s+(?=\p{Lu})/gu,
         (whole, inner: string, rank: string) =>
             taggedCharacteristic(inner) === undefined ? whole : `(${inner})${rank}, `,

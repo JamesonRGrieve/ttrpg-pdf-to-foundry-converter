@@ -271,4 +271,17 @@ describe("statblock skills", () => {
             ["Snuffing", "", 2],
         ]);
     });
+
+    it("evens out print noise: full-width brackets, a spaced rank, full stops between entries, marks, stray brackets", () => {
+        expect(
+            listedSkills("Wading (S） + 10. Hush Fel) +20, Glazing (Int) +10), Snuffing (Ag). ††").map(
+                (k) => [k.name, k.characteristic, k.advance],
+            ),
+        ).toEqual([
+            ["Wading", "strength", 2],
+            ["Hush", "fellowship", 3],
+            ["Glazing", "intelligence", 2],
+            ["Snuffing", "agility", 1],
+        ]);
+    });
 });
