@@ -17,6 +17,7 @@ import { parseAvailability } from "./notation.ts";
  * ("ENORMOUS") must not read as part of the label after them.
  */
 const PANEL_LABELS = [
+    "type",
     "front",
     "side",
     "rear",
@@ -48,6 +49,34 @@ const SIZE_SCALE = [
     "monumental",
     "titanic",
 ] as const;
+
+/**
+ * A printed vehicle type as the schema's `type`, `vehicleClass` and
+ * locomotion: the type words the schema itself names ("Walker", "Skimmer",
+ * "Flyer", "Tank", "Bike"), a ground vehicle, and a spacecraft (an aircraft
+ * of the space class).
+ */
+const PRINTED_TYPES: readonly {
+    pattern: RegExp;
+    type: string;
+    vehicleClass: string;
+    locomotion?: string;
+    flies?: true;
+}[] = [
+    { pattern: /^\s*walker\b/iu, type: "walker", vehicleClass: "walker", locomotion: "walker" },
+    { pattern: /^\s*skimmer\b/iu, type: "skimmer", vehicleClass: "ground", locomotion: "skimmer" },
+    { pattern: /^\s*flyer\b/iu, type: "flyer", vehicleClass: "air", locomotion: "flyer", flies: true },
+    {
+        pattern: /^\s*space\s*craft\b/iu,
+        type: "flyer",
+        vehicleClass: "space",
+        locomotion: "flyer",
+        flies: true,
+    },
+    { pattern: /^\s*tank\b/iu, type: "tank", vehicleClass: "ground" },
+    { pattern: /^\s*bike\b/iu, type: "bike", vehicleClass: "ground" },
+    { pattern: /^\s*ground\s+vehicle\b/iu, type: "vehicle", vehicleClass: "ground" },
+];
 
 /** Alternative spellings of size-scale names. */
 const SIZE_SPELLINGS: Readonly<Record<string, string>> = { minuscule: "miniscule" };
@@ -193,8 +222,19 @@ export function parseVehicle(pairs: ReadonlyMap<string, string>): ParsedVehicle 
             system["locomotion"] = locomotion;
         }
     }
-    const flies = traits !== undefined && splitList(traits).some((t) => t.toLowerCase() === "flyer");
-    if (flies) {
+    // The printed type, in the schema's own words: its type, class and drive.
+    const printed = PRINTED_TYPES.find((t) => t.pattern.test(pairs.get("type") ?? ""));
+    if (printed !== undefined) {
+        system["type"] = printed.type;
+        system["vehicleClass"] = printed.vehicleClass;
+        if (printed.locomotion !== undefined && system["locomotion"] === undefined) {
+            system["locomotion"] = printed.locomotion;
+        }
+    }
+    const flies =
+        (traits !== undefined && splitList(traits).some((t) => t.toLowerCase() === "flyer")) ||
+        printed?.flies === true;
+    if (flies && printed === undefined) {
         system["vehicleClass"] = "air";
     }
     return { kind: flies ? "aircraft" : "terracraft", system, unparsed };

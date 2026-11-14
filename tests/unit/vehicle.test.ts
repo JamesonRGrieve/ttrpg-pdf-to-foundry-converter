@@ -77,4 +77,33 @@ describe("vehicle profiles", () => {
         expect(system).not.toHaveProperty("size");
         expect(unparsed).toEqual(["size: VAST"]);
     });
+
+    it("reads the printed type into the schema's type, class and drive; a spacecraft or flyer is an aircraft", () => {
+        const of = (type: string, traits = "Enclosed") =>
+            parseVehicle(
+                panelPairs(
+                    `Type: ${type}\nFront 10, Side 10, Rear 10\nIntegrity: 20\nVehicle Traits: ${traits}`,
+                ),
+            );
+        expect(of("Walker").system).toMatchObject({
+            type: "walker",
+            vehicleClass: "walker",
+            locomotion: "walker",
+        });
+        expect(of("Skimmer").system).toMatchObject({
+            type: "skimmer",
+            vehicleClass: "ground",
+            locomotion: "skimmer",
+        });
+        const craft = of("Spacecraft");
+        expect(craft.kind).toBe("aircraft");
+        expect(craft.system).toMatchObject({ type: "flyer", vehicleClass: "space", locomotion: "flyer" });
+        expect(of("Flyer").kind).toBe("aircraft");
+        // A drive the vehicle traits name stands.
+        expect(of("Ground Vehicle", "Tracked").system).toMatchObject({
+            type: "vehicle",
+            vehicleClass: "ground",
+            locomotion: "tracked",
+        });
+    });
 });
