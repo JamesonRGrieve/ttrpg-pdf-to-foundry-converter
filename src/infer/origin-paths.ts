@@ -1348,6 +1348,9 @@ export function withCitedOrigins(
     return [...kept, ...cited];
 }
 
+/** Fewest letters a name needs to be found inside another heading (a stray pair of letters is in many). */
+const MIN_HELD_NAME = 4;
+
 /** Fewest headings beneath an origin's own that repeat its name for it to be read by them. */
 const MIN_NAMED_RULES = 2;
 
@@ -1383,7 +1386,14 @@ export function readHeadedOrigins(
             ) {
                 break;
             }
-            if (e.sections.includes(origin.heading.text) && wordPrefix(own, e.heading.text) !== null) {
+            // A heading beneath it that starts with its name, or holds it, singular
+            // or plural ("Creating a <Name> Character").
+            const stem = letters(own).replace(/s$/u, "");
+            if (
+                e.sections.includes(origin.heading.text) &&
+                (wordPrefix(own, e.heading.text) !== null ||
+                    (stem.length >= MIN_HELD_NAME && letters(e.heading.text).includes(stem)))
+            ) {
                 named.add(letters(e.heading.text));
             }
         }

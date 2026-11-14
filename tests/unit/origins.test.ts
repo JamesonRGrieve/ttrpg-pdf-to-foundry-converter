@@ -886,6 +886,18 @@ describe("origins each under a heading of their own", () => {
         ).toEqual([["Lamp Wardens", "background", 7, "Keepers of the long wicks."]]);
     });
 
+    it("counts a heading that holds the origin's name, singular or plural, but not a stray pair of letters", () => {
+        const entries: Entry[] = [
+            display("Lamp Wardens", 7, part),
+            entry("CREATING A LAMP WARDEN CHARACTER", 8, [...part, "Lamp Wardens"]),
+            entry("LAMP WARDENS ADVENTURE SEED", 8, [...part, "Lamp Wardens"]),
+            display("E a", 9, part),
+            entry("READING A LAMP", 9, [...part, "E a"]),
+            entry("REACHING AN EAVE", 9, [...part, "E a"]),
+        ];
+        expect(readHeadedOrigins(entries, STEPS).map((o) => o.name)).toEqual(["Lamp Wardens"]);
+    });
+
     it("reads none where the step's name does not close the section", () => {
         const wargear = ["Background Wargear"];
         const entries: Entry[] = [

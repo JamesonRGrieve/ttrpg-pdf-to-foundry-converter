@@ -139,7 +139,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
         line: "dw",
         actorTypes: actorTypes("dw"),
         originSteps: [
-            step("chapter", 1, ["chapter"], "origins-chapters"),
+            step("chapter", 1, ["chapter", "successor"], "origins-chapters"),
             step("speciality", 2, ["speciality", "specialty"], "origins-specialities"),
         ],
         careerStep: "speciality",
