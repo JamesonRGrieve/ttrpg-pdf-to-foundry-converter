@@ -95,4 +95,24 @@ describe("inlineWeapons", () => {
             ["Spark Choppa", "melee", undefined],
         ]);
     });
+
+    it("reads a craft's profile set off by commas, its facings first and its class after them", () => {
+        const [gun] = inlineWeapons(
+            "Turret-mounted twin-linked Lamp Guns (Front/Side, Range 150m, Heavy, –/–/10, 2d10+10 X, Pen 6, Clip 400, Tearing)",
+            true,
+        );
+        expect(gun).toEqual({
+            name: "Twin-linked Lamp Guns",
+            cells: {
+                name: "twin-linked Lamp Guns",
+                class: "Heavy",
+                range: "150m",
+                rof: "–/–/10",
+                damage: "2d10+10 X",
+                penetration: "6",
+                clip: "400",
+                special: "Tearing",
+            },
+        });
+    });
 });

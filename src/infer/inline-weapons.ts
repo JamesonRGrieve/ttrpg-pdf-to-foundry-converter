@@ -25,6 +25,8 @@ const PROFILE =
     /(?<=^|[,;:\n•†]\s*|\b(?:or|and)\s+)(?<name>\p{L}[\p{L}\p{N}'’ -]{0,40}?)\s*\((?<profile>[^()]*(?:\([^()]*\)[^()]*)*)\)/gu;
 /** Words that join a name to what comes before it rather than belonging to it. */
 const LEADING_JOIN = /^(?:(?:or|and|a|an|the|with|plus)\s+)+/iu;
+/** A range part that prints its label ("Range 150m"). */
+const RANGE_LABEL = /^range\s*:?\s*(?=\d)/iu;
 const LABELLED = /^(?<label>pen(?:etration)?|clip|reload|rld)\s*:?\s*(?<value>.+)$/iu;
 /** Fewest profile parts a weapon profile carries (a class and a damage at least). */
 const MIN_PARTS = 2;
@@ -46,7 +48,8 @@ const MOUNTED_PROFILE =
 /** The mounting a craft's weapon list names before a weapon: "Turret-mounted", "Co-Axial mounted", "Fixed". */
 const MOUNTING = /^(?:(?:[\p{L}]+(?:[- ][\p{L}]+)?[- ])?mounted|fixed)\s+/iu;
 /** A profile part naming the weapon's facing ("Front Facing", "Front-Facing"). */
-const FACING = /\bfacing\b/iu;
+const FACING =
+    /\bfacing\b|^(?:front|fore|aft|sides?|rear|left|right|hull|turret)(?:\s*\/\s*(?:front|fore|aft|sides?|rear|left|right))*$/iu;
 /** The schema's weapon class for weapons mounted on a craft. */
 const MOUNTED_CLASS = "vehicle";
 /** A word joining a name to another, or to a choice: "or", "with", "either". */
@@ -62,16 +65,23 @@ export function inlineWeapons(text: string, mounted = false): InlineWeapon[] {
     const out: InlineWeapon[] = [];
     for (const m of text.matchAll(mounted ? MOUNTED_PROFILE : PROFILE)) {
         const rawName = m.groups?.["name"]?.trim().replace(LEADING_JOIN, "").replace(MOUNTING, "") ?? "";
-        const printed = (m.groups?.["profile"] ?? "")
-            .split(";")
-            .map((p) => p.trim())
+        const profile = m.groups?.["profile"] ?? "";
+        // A profile is set off by semicolons; one with none, set off by commas
+        // instead, separates its parts at commas outside brackets.
+        const separator = profile.includes(";") ? /;/u : /,(?![^(]*\))/u;
+        const printed = profile
+            .split(separator)
+            .map((p) => p.trim().replace(RANGE_LABEL, ""))
             .filter((p) => !(mounted && FACING.test(p)));
-        const classed = printed[0] !== undefined && parseWeaponClass(printed[0]) !== null;
-        // A profile opens on its class; a craft's weapon is of the vehicle
-        // class; any other profile printing no class must print a damage and
-        // a labelled penetration to read as one.
-        const printedClass = classed ? printed[0] : mounted ? MOUNTED_CLASS : undefined;
-        const rest = classed ? printed.slice(1) : printed;
+        // A profile opens on its class (a craft's may set its facings first); a
+        // craft's weapon printing none is of the vehicle class; any other
+        // profile printing no class must print a damage and a labelled
+        // penetration to read as one.
+        const classAt = (mounted ? printed : printed.slice(0, 1)).findIndex(
+            (p) => parseWeaponClass(p) !== null,
+        );
+        const printedClass = classAt >= 0 ? printed[classAt] : mounted ? MOUNTED_CLASS : undefined;
+        const rest = classAt >= 0 ? printed.filter((_, i) => i !== classAt) : printed;
         const words = rawName.split(/\s+/u).filter((w) => w.length > 0).length;
         if (
             rest.length + (printedClass === undefined ? 0 : 1) < MIN_PARTS ||
