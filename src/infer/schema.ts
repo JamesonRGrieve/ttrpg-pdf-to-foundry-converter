@@ -466,6 +466,11 @@ const VARIANT_FIELDS = [
     "reroll",
 ] as const;
 
+/** Fields a type stores plain, not per line: an armour modification's `category` (which slots it takes). */
+const PLAIN_FIELDS: Readonly<Record<string, readonly string[]>> = {
+    armourModification: ["category"],
+};
+
 /** Whether a value is already keyed by line (or by book within a line). */
 function isLineKeyed(value: JsonValue): boolean {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -480,8 +485,11 @@ function isLineKeyed(value: JsonValue): boolean {
  * variant container. Readers set several of them flat and later passes read
  * them so; this is the last step before the document is emitted.
  */
-export function variantizeRulesFields(system: JsonObject, line: Line): void {
+export function variantizeRulesFields(system: JsonObject, line: Line, type?: string): void {
     for (const field of VARIANT_FIELDS) {
+        if (PLAIN_FIELDS[type ?? ""]?.includes(field) === true) {
+            continue;
+        }
         const value = system[field];
         if (value !== undefined && value !== null && !isLineKeyed(value)) {
             system[field] = variant(line, value);

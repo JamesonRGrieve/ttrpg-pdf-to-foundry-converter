@@ -7,9 +7,17 @@ import {
     characteristicCosts,
     headingAbove,
     isCharacteristicCostTable,
+    isRankTable,
     type KindOf,
+    numberRanks,
+    printedRanks,
     rankAdvances,
+    rankNamed,
     rankOf,
+    rankCharts,
+    headingBeside,
+    isAdvanceHeaderRow,
+    topLine,
 } from "../../src/infer/career-advancement.ts";
 import type { Entity } from "../../src/types/entity.ts";
 import type { IR, IRTextRun } from "../../src/types/ir.ts";
@@ -121,7 +129,7 @@ describe("a career's advancement tables", () => {
         expect(advancePrerequisites("—", kindOf)).toEqual([]);
     });
 
-    it("gives each career the tables its heading names, or that follow its entry; rank 1 advances only", () => {
+    it("gives each career the tables its heading names, or that follow its entry; every numbered rank", () => {
         const career = (name: string, pageIndex: number): Entity => ({
             blockId: "b",
             documentType: "Item",
@@ -170,9 +178,23 @@ describe("a career's advancement tables", () => {
                 characteristicCosts: {
                     agility: { simple: 100, intermediate: 250, trained: 500, expert: 750 },
                 },
-                rank1Advances: [
-                    { name: "Trimming", cost: 100, type: "skill", prerequisites: [] },
-                    { name: "Polish", cost: 100, type: "skill", prerequisites: [] },
+                rank1Advances: [],
+                ranks: [
+                    {
+                        rank: 1,
+                        title: "",
+                        minXp: null,
+                        advances: [
+                            { name: "Trimming", cost: 100, type: "skill", prerequisites: [] },
+                            { name: "Polish", cost: 100, type: "skill", prerequisites: [] },
+                        ],
+                    },
+                    {
+                        rank: 2,
+                        title: "",
+                        minXp: null,
+                        advances: [{ name: "Glazing", cost: 200, type: "skill", prerequisites: [] }],
+                    },
                 ],
             },
         });
@@ -180,8 +202,184 @@ describe("a career's advancement tables", () => {
             step: "career",
             careerAdvancement: {
                 characteristicCosts: {},
-                rank1Advances: [{ name: "Snuffing", cost: 100, type: "skill", prerequisites: [] }],
+                rank1Advances: [],
+                ranks: [
+                    {
+                        rank: 1,
+                        title: "",
+                        minXp: null,
+                        advances: [{ name: "Snuffing", cost: 100, type: "skill", prerequisites: [] }],
+                    },
+                ],
             },
         });
+    });
+
+    it("numbers a titled rank from the career's table of ranks: branches starting at one XP share a number", () => {
+        const ranks = printedRanks(
+            ["Rank", "XP Level", "Follows"],
+            [
+                ["TRIMMER", "0–499", "—"],
+                ["SNUFFER", "500–999", "Trimmer"],
+                ["CHIEF SNUFFER", "1,000–1,999", "Snuffer"],
+                ["CHIEF GLAZER", "1,000–1,999", "Snuffer"],
+                ["MASTER CHIEF GLAZER", "2,000–2,999", "Chief Glazer"],
+            ],
+        );
+        expect(ranks.map((r) => [r.title, r.minXp])).toEqual([
+            ["Trimmer", 0],
+            ["Snuffer", 500],
+            ["Chief Snuffer", 1000],
+            ["Chief Glazer", 1000],
+            ["Master Chief Glazer", 2000],
+        ]);
+        expect([...numberRanks(ranks).values()]).toEqual([1, 2, 3, 3, 4]);
+        expect(isRankTable(["Rank", "XP Level", "Follows"])).toBe(true);
+        expect(isRankTable(["Advance", "Cost", "Type"])).toBe(false);
+        // A shorter heading takes the earliest rank holding its words that no table has claimed.
+        const glazer = ranks[3];
+        expect(rankNamed("CHIEF GLAZER ADVANCES", ranks, new Set())).toBe(glazer);
+        expect(rankNamed("GLAZER ADVANCES", ranks, new Set())).toBe(glazer);
+        expect(rankNamed("GLAZER ADVANCES", ranks, new Set(glazer === undefined ? [] : [glazer]))).toBe(
+            ranks[4],
+        );
+        expect(rankNamed("CHANDLER ADVANCES", ranks, new Set())).toBeUndefined();
+    });
+
+    it("gives a titled table its rank's number, title and starting XP", () => {
+        const career: Entity = {
+            blockId: "b",
+            documentType: "Item",
+            group: "dh1",
+            pack: "p",
+            ordinal: 1,
+            fields: { name: "Lampwright", type: "originPath", system: { step: "career" } },
+            images: {},
+            provenance: { pageIndex: 3, y: 0 },
+        };
+        const at = (
+            top: number,
+            heading: string,
+            kind: AdvancementTable["kind"],
+            headers: string[],
+            rows: string[][],
+        ): AdvancementTable => ({
+            kind,
+            pageIndex: 4,
+            column: 0,
+            top,
+            heading,
+            headers,
+            rows,
+        });
+        attachCareerAdvancement(
+            [career],
+            [
+                at(
+                    900,
+                    "LAMPWRIGHT RANKS",
+                    "ranks",
+                    ["Rank", "XP Level"],
+                    [
+                        ["TRIMMER", "0–499"],
+                        ["SNUFFER", "500–999"],
+                    ],
+                ),
+                at(
+                    600,
+                    "SNUFFER ADVANCES",
+                    "advances",
+                    ["Advance", "Cost", "Type"],
+                    [["Snuffing", "200", "Talent"]],
+                ),
+                at(
+                    300,
+                    "TRIMMER ADVANCES",
+                    "advances",
+                    ["Advance", "Cost", "Type"],
+                    [["Trimming", "100", "Skill"]],
+                ),
+            ],
+            kindOf,
+        );
+        expect(career.fields["system"]).toEqual({
+            step: "career",
+            careerAdvancement: {
+                characteristicCosts: {},
+                rank1Advances: [],
+                ranks: [
+                    {
+                        rank: 1,
+                        title: "Trimmer",
+                        minXp: 0,
+                        advances: [{ name: "Trimming", cost: 100, type: "skill", prerequisites: [] }],
+                    },
+                    {
+                        rank: 2,
+                        title: "Snuffer",
+                        minXp: 500,
+                        advances: [{ name: "Snuffing", cost: 200, type: "talent", prerequisites: [] }],
+                    },
+                ],
+            },
+        });
+    });
+
+    it("reads a chart of ranks: each box's title over the XP it starts at", () => {
+        const face = (r: IRTextRun, font: string): IRTextRun => ({ ...r, font });
+        const charts = rankCharts(
+            irOf([
+                face(run("Trimmer", 110, 700, 7), "title"),
+                face(run("XP Level: 0-499", 100, 694, 5), "xp"),
+                face(run("Chief", 112, 660, 7), "title"),
+                face(run("Snuffer", 110, 652, 7), "title"),
+                face(run("XP Level: 500-999", 100, 646, 5), "xp"),
+                // A box beside it, on the same lines: its own title, not the other's.
+                face(run("Glazer", 210, 652, 7), "title"),
+                face(run("XP Level: 500-999", 200, 646, 5), "xp"),
+            ]),
+        );
+        expect(charts.map((c) => c.rows)).toEqual([
+            [
+                ["Trimmer", "0"],
+                ["Chief Snuffer", "500"],
+                ["Glazer", "500"],
+            ],
+        ]);
+    });
+
+    it("finds a rank's title set beside the table's header line, in a face the table does not use", () => {
+        const header = [run("Advance", 170, 286), run("Cost", 260, 286)];
+        const side = (text: string, y: number): IRTextRun => ({ ...run(text, 100, y, 11), font: "display" });
+        const ir = irOf([...header, side("SNUFFER", 292), side("ADVANCES", 276), run("prose", 45, 254)]);
+        expect(headingBeside(ir, header, topLine(header))).toBe("SNUFFER ADVANCES");
+        expect(isAdvanceHeaderRow(["SNUFFER", "Advance", "Cost", "Type"])).toBe(true);
+        expect(isAdvanceHeaderRow(["Advance", "100", "Skill"])).toBe(false);
+    });
+
+    it("reads a row from its cost: initials for the type, a name sharing the cost's cell, prose before the name", () => {
+        expect(
+            rankAdvances(
+                ["Advance", "Cost", "Type"],
+                [
+                    ["Trimming +10 100", "S", "", "Trimming"],
+                    ["the guild,", "hence Snuffing", "", "200", "", "T Ag 30"],
+                ],
+                kindOf,
+            ),
+        ).toEqual([
+            {
+                name: "Trimming +10",
+                cost: 100,
+                type: "skill",
+                prerequisites: [{ type: "skill", key: "Trimming" }],
+            },
+            {
+                name: "Snuffing",
+                cost: 200,
+                type: "talent",
+                prerequisites: [{ type: "characteristic", key: "agility", value: 30 }],
+            },
+        ]);
     });
 });

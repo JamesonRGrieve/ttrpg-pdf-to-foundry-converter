@@ -1088,6 +1088,24 @@ export function armourModificationSection(sections: readonly string[]): string |
 }
 
 /**
+ * The schema's armour-modification category the sections over an entry name:
+ * a suit's sub-systems, or its customisations; none for any other (an upgrade).
+ */
+export function armourModificationCategory(
+    sections: readonly string[],
+): "subsystem" | "customisation" | undefined {
+    for (const s of [...sections].reverse()) {
+        if (/\bsub-?\s*systems?\b/iu.test(s)) {
+            return "subsystem";
+        }
+        if (/\bcustomi[sz]ations?\b/iu.test(s)) {
+            return "customisation";
+        }
+    }
+    return undefined;
+}
+
+/**
  * Bulleted `• Name: rules` items in a heading's prose under (or naming) a
  * section of an armour's sub-systems are armour modifications of their own:
  * each is read out after the heading, its rules (to the paragraph's end) its

@@ -38,10 +38,11 @@ export interface TargetSchema {
     actorTypes: ActorTypes;
     originSteps: readonly OriginStepDef[];
     /**
-     * The line's careers carry their advancement tables (characteristic
-     * costs and rank 1 advances) in the schema's `careerAdvancement`.
+     * The creation step whose origins are the line's careers, which carry
+     * their advancement tables (characteristic costs and every rank's
+     * advances) in the schema's `careerAdvancement`.
      */
-    careerAdvancement?: true;
+    careerStep?: string;
 }
 
 /** The dnd5e system's rulesets (its `system.source.rules` values). */
@@ -115,6 +116,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
             step("elite", 4, ["elite advance"], "origins-elite-advances", true),
             step("divination", 5, ["divination"], "origins-divinations"),
         ],
+        careerStep: "career",
     },
     rt: {
         system: "wh40k-rpg",
@@ -130,7 +132,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
             step("lineage", 7, ["lineage"], "origins-lineages"),
             step("eliteAdvance", 8, ["elite advance"], "origins-elite-advances", true),
         ],
-        careerAdvancement: true,
+        careerStep: "career",
     },
     dw: {
         system: "wh40k-rpg",
@@ -140,6 +142,7 @@ export const TARGETS: Readonly<Record<Line, TargetSchema>> = {
             step("chapter", 1, ["chapter"], "origins-chapters"),
             step("speciality", 2, ["speciality", "specialty"], "origins-specialities"),
         ],
+        careerStep: "speciality",
     },
     ow: {
         system: "wh40k-rpg",

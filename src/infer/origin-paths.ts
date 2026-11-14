@@ -396,6 +396,25 @@ function withSpecialisations(item: string): { name: string; specialisations: str
     };
 }
 
+/**
+ * A granted trait as the schema holds it: a bracketed figure is its level
+ * ("Unnatural Toughness (2)"), a bracketed word its specialisation
+ * ("Unnatural Characteristic (Strength)").
+ */
+export function traitGrant(text: string): JsonObject {
+    const m = /^(?<name>[^(]+?)\s*\((?<inner>[^()]+)\)\s*$/u.exec(text.trim());
+    const name = m?.groups?.["name"];
+    const inner = m?.groups?.["inner"]?.trim();
+    if (name === undefined || inner === undefined) {
+        return { name: text.trim() };
+    }
+    const level = /^(\d+)$/u.exec(inner)?.[1];
+    if (level !== undefined) {
+        return { name, level: Number(level) };
+    }
+    return /^\p{L}[\p{L}\s'-]*$/u.test(inner) ? { name, specialization: inner } : { name: text.trim() };
+}
+
 /** "3 doses of stimm" → 3 × Stimm; "manacles" → 1 × Manacles. */
 export function equipmentItem(text: string): { name: string; quantity: number } {
     const m = /^(?<count>\d+)\s+(?:\p{L}+\s+of\s+)?(?<rest>.+)$/iu.exec(text.trim());
@@ -717,7 +736,7 @@ function grantsOf(
                     value,
                     "trait",
                     label,
-                    (t) => [{ name: t }],
+                    (t) => [traitGrant(t)],
                     (t) => namedOption(t),
                 );
                 traits.push(...r.granted);

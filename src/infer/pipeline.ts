@@ -12,7 +12,12 @@ import {
     attachCareerAdvancement,
     headingAbove,
     isCharacteristicCostTable,
+    headingBeside,
+    innerHeaderLines,
+    isRankTable,
     type KindOf,
+    rankCharts,
+    topLine,
 } from "./career-advancement.ts";
 import { classifyTable } from "./classify.ts";
 import {
@@ -33,6 +38,7 @@ import { detectTables } from "./detect-tables.ts";
 import { detectTitledTables } from "./detect-titled-tables.ts";
 import {
     applyFocusSkillCharacteristics,
+    armourModificationCategory,
     armourModificationSection,
     CHARACTERISTICS,
     entryItem,
@@ -556,16 +562,22 @@ function extractTables(
         // A career's advancement tables (its characteristic costs, its ranks'
         // advances) feed the career's own document, where the target holds them.
         const runs = table.runs ?? [];
-        if (out.target.careerAdvancement === true && runs.length > 0) {
+        if (out.target.careerStep !== undefined && runs.length > 0) {
             const costs = isCharacteristicCostTable(table.headers);
-            if (costs || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
+            const ranks = isRankTable(table.headers);
+            if (costs || ranks || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
                 toCareer = true;
                 advancement.push({
-                    kind: costs ? "characteristics" : "advances",
+                    kind: costs ? "characteristics" : ranks ? "ranks" : "advances",
                     pageIndex: table.pageIndex,
                     column: Math.min(...runs.map((r) => r.column)),
                     top: Math.max(...runs.map((r) => r.y)),
                     heading: headingAbove(ir, runs),
+                    sideHeading: headingBeside(ir, runs, topLine(runs)),
+                    innerHeadings: innerHeaderLines(runs).map((line) => [
+                        headingBeside(ir, runs, line),
+                        headingAbove(ir, line),
+                    ]),
                     headers: table.headers,
                     // Each row as wide as its cells reach: a merged header may stand over two of them.
                     rows: table.rows
@@ -578,10 +590,10 @@ function extractTables(
                         ),
                 });
             }
-            if (costs) {
+            if (costs || ranks) {
                 careerTables += 1;
                 log.debug(
-                    `table p${out.page(table.pageIndex)} ${JSON.stringify(table.tableTitle ?? "")} read into a career's advancement: its characteristic costs`,
+                    `table p${out.page(table.pageIndex)} ${JSON.stringify(table.tableTitle ?? "")} read into a career's advancement: its ${costs ? "characteristic costs" : "ranks"}`,
                 );
                 continue;
             }
@@ -1715,6 +1727,12 @@ function extractEntries(
         const fits = usedWith !== undefined ? usedWithArmourTypes(usedWith) : listed === null ? [] : [listed];
         if (type === "armourModification" && fits.length > 0 && item.system["restrictions"] === undefined) {
             item.system["restrictions"] = { armourTypes: fits };
+        }
+        // So does its category: a suit's sub-systems, or its customisations.
+        const category =
+            type === "armourModification" ? armourModificationCategory(entry.sections) : undefined;
+        if (category !== undefined && item.system["category"] === undefined) {
+            item.system["category"] = category;
         }
         out.add(
             "Item",
@@ -3303,9 +3321,13 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     attachCareerAdvancement(
         out.entities.filter((e) => {
             const system = e.fields["system"];
-            return isJsonObject(system) && system["step"] === "career";
+            return (
+                isJsonObject(system) &&
+                target.careerStep !== undefined &&
+                system["step"] === target.careerStep
+            );
         }),
-        advancement,
+        target.careerStep === undefined ? advancement : [...advancement, ...rankCharts(ir)],
         kindsOf(out.entities),
     );
     const entities = consolidate(out.entities, descriptions, headedProse(detected), line, log);
@@ -3327,7 +3349,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     for (const entity of entities) {
         const system = entity.fields["system"];
         if (entity.documentType === "Item" && isJsonObject(system)) {
-            variantizeRulesFields(system, line);
+            variantizeRulesFields(system, line, String(entity.fields["type"]));
         }
     }
     log.info(

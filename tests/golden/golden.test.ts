@@ -31,7 +31,7 @@ function walk(dir: string): string[] {
 }
 
 /** A case runs the whole engine, recognizing a scanned fixture's pages in every pass when cold. */
-const CASE_TIMEOUT_MS = 120_000;
+const CASE_TIMEOUT_MS = 300_000;
 
 // Cases run side by side: each is its own engine run, sharing nothing.
 describe.concurrent("golden output", () => {

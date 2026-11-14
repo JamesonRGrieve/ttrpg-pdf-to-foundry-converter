@@ -144,6 +144,11 @@ describe("parseRange", () => {
         expect(parseRange("2 km")).toEqual({ value: 2, units: "km", special: "" });
         expect(parseRange("SBx3")).toEqual({ value: 0, units: "m", special: "SBx3" });
         expect(parseRange("3xSB")).toEqual({ value: 0, units: "m", special: "SBx3" });
+        // Any characteristic's bonus, in the system's short code.
+        expect(parseRange("WPB x 5")).toEqual({ value: 0, units: "m", special: "WPBx5" });
+        expect(parseRange("2xTB")).toEqual({ value: 0, units: "m", special: "TBx2" });
+        expect(parseRange("agb x3m")).toEqual({ value: 0, units: "m", special: "AgBx3" });
+        expect(parseRange("PRx10")).toBeNull();
     });
 
     it("reads thousands grouped with commas", () => {

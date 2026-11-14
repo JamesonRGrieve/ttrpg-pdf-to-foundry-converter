@@ -98,16 +98,26 @@ export function parseDamage(raw: string): Damage | null {
 export interface Range {
     value: number;
     units: "m" | "km";
-    /** Strength-bonus multiple for thrown ranges (`SBx3`), else "". */
+    /** A characteristic-bonus multiple for thrown ranges (`SBx3`, `WPBx5`), else "". */
     special: string;
 }
 
+/** The characteristics' short codes, as the system writes a bonus range (`<code>Bx<N>`). */
+const BONUS_CODES = ["WS", "BS", "S", "T", "Ag", "Int", "Per", "WP", "Fel", "Inf"] as const;
+const BONUS_CODE = new Map<string, string>(BONUS_CODES.map((c) => [c.toLowerCase(), c]));
+const BONUS_PATTERN = BONUS_CODES.join("|");
+const BONUS_RANGE = new RegExp(
+    `^(?:(?<code>${BONUS_PATTERN})B\\s*[x×]\\s*(?<after>\\d+)|(?<before>\\d+)\\s*[x×]\\s*(?<late>${BONUS_PATTERN})B)\\s*m?$`,
+    "iu",
+);
+
 export function parseRange(raw: string): Range | null {
     const text = clean(raw);
-    const sb = /^(?:SB\s*[x×]\s*(?<after>\d+)|(?<before>\d+)\s*[x×]\s*SB)\s*m?$/iu.exec(text)?.groups;
-    const multiple = sb?.["after"] ?? sb?.["before"];
-    if (multiple !== undefined) {
-        return { value: 0, units: "m", special: `SBx${multiple}` };
+    const bonus = BONUS_RANGE.exec(text)?.groups;
+    const multiple = bonus?.["after"] ?? bonus?.["before"];
+    const code = BONUS_CODE.get((bonus?.["code"] ?? bonus?.["late"] ?? "").toLowerCase());
+    if (multiple !== undefined && code !== undefined) {
+        return { value: 0, units: "m", special: `${code}Bx${multiple}` };
     }
     // Thousands may be grouped with commas ("3,500m").
     const m = /^(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(m|km|metres?|meters?|kilometres?)?$/iu.exec(text);

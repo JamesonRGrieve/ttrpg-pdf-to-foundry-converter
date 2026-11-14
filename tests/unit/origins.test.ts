@@ -25,6 +25,7 @@ import {
     splitTopLevel,
     withCitedOrigins,
     withSkillLevelBase,
+    traitGrant,
 } from "../../src/infer/origin-paths.ts";
 import { buildOriginPath } from "../../src/infer/schema.ts";
 import { baseSkillLevel, DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
@@ -948,5 +949,17 @@ describe("origins on the pages a step's section cites", () => {
         expect(withCitedOrigins(onPage, entries, STEPS, printed, none).map((o) => o.name)).toEqual(["Stray"]);
         // A step a table read is not read again.
         expect(withCitedOrigins([], entries, STEPS, printed, new Set(["background"]))).toEqual([]);
+    });
+});
+
+describe("traitGrant", () => {
+    it("reads a bracketed figure as the trait's level and a bracketed word as its specialisation", () => {
+        expect(traitGrant("Unnatural Toughness (2)")).toEqual({ name: "Unnatural Toughness", level: 2 });
+        expect(traitGrant("Unnatural Characteristic (Strength)")).toEqual({
+            name: "Unnatural Characteristic",
+            specialization: "Strength",
+        });
+        expect(traitGrant("Dark-sight")).toEqual({ name: "Dark-sight" });
+        expect(traitGrant("Unnatural Strength (x2)")).toEqual({ name: "Unnatural Strength (x2)" });
     });
 });
