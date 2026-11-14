@@ -83,9 +83,10 @@ describe("statblock skills", () => {
     it("tells an entry that read whole from one with a rank or a number left in it", () => {
         const whole = (line: string): boolean[] => listedSkills(line).map(readsWhole);
         expect(whole("Hush (Ag) +20, Lantern Lore (Sector 13) (Int)")).toEqual([true, true]);
-        // A callout number beside the line, and a note after the rank.
+        // A callout number beside the line is none of the entry; one in brackets
+        // after the rank is a callout dropped before the entry is read.
         expect(whole("Wading (S) +10 8")).toEqual([false]);
-        expect(whole("Hush (Ag) +20 (2)")).toEqual([false]);
+        expect(whole("Hush (Ag) +20 (2)")).toEqual([true]);
     });
 
     it("keeps a modifier past the top rank as a bonus, and lists nothing for none", () => {
@@ -282,6 +283,20 @@ describe("statblock skills", () => {
             ["Hush", "fellowship", 3],
             ["Glazing", "intelligence", 2],
             ["Snuffing", "agility", 1],
+        ]);
+    });
+
+    it("reads past a note after a tag, a doubled bracket, a callout after a rank and a missing comma", () => {
+        expect(
+            listedSkills(
+                "Wading (S)) + 10, Hush (Ag) (against small foes), Glazing +10 Snuffing (Int) +20 (2),), Lore (the Wicks) (Int)",
+            ).map((k) => [k.name, k.characteristic, k.advance]),
+        ).toEqual([
+            ["Wading", "strength", 2],
+            ["Hush", "agility", 1],
+            ["Glazing", "", 2],
+            ["Snuffing", "intelligence", 3],
+            ["Lore (the Wicks)", "intelligence", 1],
         ]);
     });
 });

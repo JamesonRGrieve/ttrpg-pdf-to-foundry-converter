@@ -96,8 +96,20 @@ function printedList(line: string): string {
             .replace(/[†‡*]+/gu, "")
             .replace(/\+\s+(\d)/gu, "+$1")
             .replace(/([)\d])\.\s+(?=\p{Lu})/gu, "$1, ")
+            // A figure in brackets after a rank ("+20 (2)") is a callout, not the entry's.
+            .replace(/(\+\d+)\s*\(\d+\)/gu, "$1")
             // A rank after a closed tag, closed again ("(Fel) +20)"): the second bracket is stray.
             .replace(/(\)\s*\+\d+)\)/gu, "$1")
+            // A bracket closed twice after a tag ("(S))"), or left after a comma.
+            .replace(/(\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\))\)/gu, "$1")
+            .replace(/(\+\d+|\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\)),\s*\)/gu, "$1,")
+            // A list inside brackets closed after a comma ("(Reeds, Tides,)").
+            .replace(/,\s*\)/gu, ")")
+            // A note in brackets after the entry's tag or rank ("(Ag) (against …)")
+            // qualifies it; a specialisation comes before them.
+            .replace(/(\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\)|\+\d+)\s*\(\s*\p{Ll}[^()]*\)/gu, "$1")
+            // A rank run into the next entry with no comma ("+10 Search").
+            .replace(/(\+\d+)\s+(?=\p{Lu})/gu, "$1, ")
             .replace(/(^|,\s*)([^,()]+?)\s+(WS|BS|S|T|Ag|Int|Per|WP|Fel)\)/gu, "$1$2 ($3)")
     );
 }
