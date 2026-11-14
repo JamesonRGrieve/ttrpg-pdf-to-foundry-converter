@@ -33,6 +33,7 @@ export const IDENTIFIED_ITEM_TYPES: ReadonlySet<string> = new Set([
     "ritual",
     "shipComponent",
     "shipRole",
+    "specialAbility",
     "shipUpgrade",
     "shipWeapon",
     "skill",

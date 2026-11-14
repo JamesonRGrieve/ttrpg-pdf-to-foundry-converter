@@ -1435,6 +1435,20 @@ describe("entry typing", () => {
         body,
     });
 
+    it("types an ability priced in experience under a section of marks or distinctions, with its category and cost", () => {
+        const mark = entry("LANTERN BEARER", [["Cost", "750 xp"]], ["Marks of Note", "Command Marks"]);
+        expect(entryType(mark)).toBe("specialAbility");
+        const item = entryItem(mark, "specialAbility");
+        expect(item.system["cost"]).toBe(750);
+        expect(item.variantized["category"]).toBe("mark");
+        const honour = entry("WICK WARDEN", [["Cost", "1,000 xp"]], ["Distinctions"]);
+        expect(entryItem(honour, "specialAbility").variantized["category"]).toBe("distinction");
+        // A price in experience under no such section types nothing here.
+        expect(entryType(entry("WICK WARDEN", [["Cost", "1,000 xp"]], ["Lanterns"]))).not.toBe(
+            "specialAbility",
+        );
+    });
+
     it("types by fields first", () => {
         expect(
             entryType(

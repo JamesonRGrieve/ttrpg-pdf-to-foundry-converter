@@ -327,6 +327,27 @@ function fieldedSectionKind(sections: readonly string[]): ItemType | null {
 const ORDER_TYPE = /^\s*(?:[\p{L}-]+\s+)?order\b/iu;
 /** Text dealing a rolled amount of damage: "deals 1d10+PR Energy damage", "inflicts 2d10 damage". */
 const DEALS_DAMAGE = /\b(?:deals?|inflicts?)\s+(?:an?\s+(?:additional\s+)?)?\d*d\d+[^.]*?\bdamage\b/iu;
+/**
+ * The schema's special-ability category the nearest section naming one gives:
+ * a mark, a distinction, or an advanced speciality's ability.
+ */
+export function specialAbilityCategory(
+    sections: readonly string[],
+): "mark" | "distinction" | "advanced" | null {
+    for (const section of [...sections].reverse()) {
+        if (/\bmarks?\b/iu.test(section)) {
+            return "mark";
+        }
+        if (/\bdistinctions?\b/iu.test(section)) {
+            return "distinction";
+        }
+        if (/\badvanced\s+special(?:i)?t(?:y|ies)\b/iu.test(section)) {
+            return "advanced";
+        }
+    }
+    return null;
+}
+
 /** A price in experience: "250 xp". */
 const XP_PRICE = /^\s*(?<xp>\d[\d,]*)\s*xp\b/iu;
 /** A `Type:` field naming how an ability is used: "Passive", or the action it takes. */
@@ -351,6 +372,11 @@ export function entryType(entry: Entry): ItemType | null {
     // A pact under a section of dark pacts (the schema's kind, by its label).
     if (/\bpact\b/iu.test(entry.heading.text) && entry.sections.some((s) => DARK_PACTS.test(s))) {
         return "darkPact";
+    }
+    // An ability priced in experience under a section of the schema's
+    // special-ability categories ("… Marks", "Distinctions").
+    if (XP_PRICE.test(fields.get("cost") ?? "") && specialAbilityCategory(entry.sections) !== null) {
+        return "specialAbility";
     }
     // An oath, by its name, prints its effect under a section about oaths.
     if (
@@ -1337,6 +1363,17 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
         case "trait":
             system["benefit"] = html;
             break;
+        case "specialAbility": {
+            const category = specialAbilityCategory(entry.sections);
+            if (category !== null) {
+                variantized["category"] = category;
+            }
+            const xp = XP_PRICE.exec(text("cost") ?? "")?.groups?.["xp"];
+            if (xp !== undefined) {
+                system["cost"] = Number(xp.replace(/,/gu, ""));
+            }
+            break;
+        }
         case "oath": {
             const requirement = text("prerequisite") ?? text("prerequisites") ?? text("requirement");
             if (requirement !== undefined) {

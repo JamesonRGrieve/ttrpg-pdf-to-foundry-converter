@@ -522,6 +522,7 @@ export function mapRow(type: ItemType, cells: RowCells): RowMapping {
         case "darkPact":
         case "ritual":
         case "oath":
+        case "specialAbility":
             return effectItem(cells, "effect", PHYSICAL_EFFECT.has(type));
         case "shipComponent":
             return shipComponent(cells);

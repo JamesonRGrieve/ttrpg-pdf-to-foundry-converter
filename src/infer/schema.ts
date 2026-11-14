@@ -55,7 +55,8 @@ export type ItemType =
     | "medal"
     | "darkPact"
     | "ritual"
-    | "oath";
+    | "oath"
+    | "specialAbility";
 
 /** Pack category segment per document type (pack-authoring "Pack Naming Taxonomy"). */
 const ITEM_SEGMENT: Record<ItemType, string> = {
@@ -86,6 +87,7 @@ const ITEM_SEGMENT: Record<ItemType, string> = {
     darkPact: "items-dark-pacts",
     ritual: "items-rituals",
     oath: "items-oaths",
+    specialAbility: "items-special-abilities",
 };
 
 /** The system's ship weapon types (the ship weapon `weaponType` choices). */
