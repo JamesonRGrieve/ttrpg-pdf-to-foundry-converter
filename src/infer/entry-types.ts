@@ -57,7 +57,8 @@ export function namesGearCategory(heading: string): boolean {
 const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bmental disorders?\b|\bdisorders?\b/iu, "mentalDisorder"],
     [/\bmalignanc(?:y|ies)\b/iu, "malignancy"],
-    [/\bmutations?\b/iu, "mutation"],
+    // A section of mutations names them in the plural; "Mutation" alone titles a chapter about them.
+    [/\bmutations\b/iu, "mutation"],
     [GIFT_LABEL, "mutation"],
     [/\bconditions?\b/iu, "condition"],
     [/\bcriticals?\b/iu, "criticalInjury"],
