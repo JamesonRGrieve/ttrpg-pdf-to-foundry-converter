@@ -3011,11 +3011,19 @@ export function qualifiedBySection(table: DetectedTable, nameCol: number): Map<T
  * A roll table's row is a result the table points to, not a catalogue: it is
  * cited only when nothing else reads the entity.
  */
+/** Kinds cited by the entry that describes them in full, beside any summary table. */
+const DESCRIBED_IN_FULL: ReadonlySet<string> = new Set(["talent", "psychicPower"]);
+
 export function citeFirstPage(head: Entity, readings: readonly Entity[], line: Line): void {
     const rolled = (e: Entity): boolean => e.blockId.endsWith(ROLLED_ROW);
     const rows = readings.filter((e) => e.blockId.startsWith(TABLE_READING) && !rolled(e));
     const own = readings.filter((e) => !rolled(e));
-    const pool = rows.length > 0 ? rows : own.length > 0 ? own : readings;
+    // A talent or power printed in a summary table and again in full
+    // is cited where it is printed in full (operator decision 2026-11-15).
+    const described = DESCRIBED_IN_FULL.has(String(head.fields["type"]))
+        ? readings.filter((e) => e.blockId.startsWith(ENTRY_READING))
+        : [];
+    const pool = described.length > 0 ? described : rows.length > 0 ? rows : own.length > 0 ? own : readings;
     const first = pool.reduce((a, b) => (b.provenance.pageIndex < a.provenance.pageIndex ? b : a));
     const target = sourceOf(head, line);
     const page = sourceOf(first, line)?.["page"];

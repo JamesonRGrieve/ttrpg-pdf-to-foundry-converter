@@ -4117,6 +4117,23 @@ describe("consolidation helpers", () => {
         expect(alone.fields["system"]).toEqual({
             source: { dh2: { provenance: "raw", book: "b", page: "14" } },
         });
+
+        // A talent in a summary table and again in full is cited by its full entry.
+        const talent = (blockId: string, pageIndex: number): Entity => ({
+            ...reading(pageIndex, String(pageIndex)),
+            blockId,
+            fields: {
+                name: "Lamp",
+                type: "talent",
+                system: { source: { dh2: { provenance: "raw", book: "b", page: String(pageIndex) } } },
+            },
+        });
+        const summary = talent("table:talent", 20);
+        const full = talent("entry:talent", 24);
+        citeFirstPage(summary, [summary, full], DEFAULT_LINE);
+        expect(summary.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "24" } },
+        });
     });
 
     it("files an upgrade's table row with its entry's modification type", () => {
