@@ -1332,7 +1332,13 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
                     system[field] = value;
                 }
             }
-            Object.assign(system, powerActivation(text("action") ?? text("focus time"), text("range")));
+            Object.assign(
+                system,
+                powerActivation(
+                    text("action") ?? text("focus time") ?? text("focus power time"),
+                    text("range"),
+                ),
+            );
             const sustained = text("sustained") ?? text("sustain");
             if (sustained !== undefined) {
                 system["sustained"] = isSustained(sustained);

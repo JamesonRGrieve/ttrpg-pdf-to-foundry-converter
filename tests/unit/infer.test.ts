@@ -2732,6 +2732,21 @@ describe("power activation", () => {
         });
         expect(powerActivation(undefined, "—")).toEqual({});
     });
+
+    it("reads a power's action from a field labelled its focus power time", () => {
+        const power = {
+            heading: { text: "STEADY FLAME", size: 11, style: "h", pageIndex: 0 },
+            sections: [],
+            fields: [
+                ["Focus Power Time", "Full Action"],
+                ["Focus Power Test", "Willpower"],
+                ["Sustained", "No"],
+                ["Range", "Self"],
+            ] as [string, string][],
+            body: "The wick holds.",
+        };
+        expect(entryItem(power, "psychicPower").system["activation"]).toEqual({ type: "full-action" });
+    });
 });
 
 describe("unmarked section rows", () => {
