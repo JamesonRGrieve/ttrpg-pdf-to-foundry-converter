@@ -610,6 +610,8 @@ export function structuredPrerequisites(printed: string): {
 const POWER_CATALOGUE = /psychic (?:powers?|disciplines?)\b|\bdisciplines\b/iu;
 /** A catalogue heading qualified by what its powers are ("Minor Psychic Powers"): itself a discipline. */
 const QUALIFIED_CATALOGUE = /^\s*(?!the\b)\p{L}[\p{L}\s-]*\s+psychic\s+powers\s*$/iu;
+/** Most words a heading naming a discipline runs to. */
+const MAX_DISCIPLINE_WORDS = 4;
 /** A discipline heading closing on the kind of what it groups: "Lampcraft Powers". */
 const GROUP_NOUN = /\s+powers\s*$/iu;
 
@@ -630,6 +632,15 @@ export function printedDiscipline(sections: readonly string[], inForce?: string)
     const grouping = catalogue < 0 ? sections.findLastIndex((s) => GROUP_NOUN.test(s)) : -1;
     if (grouping >= 0 && grouping === sections.length - 1) {
         return cleanName(sections[grouping]?.replace(GROUP_NOUN, "") ?? "");
+    }
+    // Under neither, within a part about psychic powers, the heading a power
+    // sits directly beneath groups the powers printed there: a short name
+    // ("<Discipline>"), not a sentence.
+    const nearest = sections.at(-1);
+    const psychic = sections.slice(0, -1).some((section) => /\bpsychic\b/iu.test(section));
+    if (catalogue < 0 && grouping < 0 && inForce === undefined && psychic && nearest !== undefined) {
+        const words = nearest.trim().split(/\s+/u).length;
+        return words <= MAX_DISCIPLINE_WORDS ? cleanName(nearest) : "";
     }
     const anchor = Math.max(catalogue, grouping);
     const under = anchor < 0 ? [] : sections.slice(anchor + 1);

@@ -2153,6 +2153,11 @@ describe("entry typing", () => {
             "Lesser Psychic Powers",
         );
         expect(printedDiscipline(["Equipment"])).toBe("");
+        // Within a part about psychic powers, the short heading a power sits beneath groups them.
+        expect(printedDiscipline(["Introduction", "Psychic Wicks", "STEADY flame"])).toBe("Steady Flame");
+        expect(
+            printedDiscipline(["Introduction", "Psychic Wicks", "A long note on how flames are kept"]),
+        ).toBe("");
         // A section naming its discipline as such names it by the words before the word.
         expect(printedDiscipline(["Psychic Disciplines", "Lampcraft Discipline: Wick Techniques"])).toBe(
             "Lampcraft",
