@@ -15,9 +15,9 @@
  *   longer be reused (with `IR_VERSION`, on any change to normalization or to
  *   the OCR arbitration that feeds it).
  */
-export const RELEASE = "2026-11-15-01-49";
+export const RELEASE = "2026-11-15-18-27";
 export const ENGINE_VERSION = "0.2.0";
-export const IR_VERSION = 60;
+export const IR_VERSION = 63;
 
 /**
  * The Foundry package's version for a release stamp, as semver Foundry's

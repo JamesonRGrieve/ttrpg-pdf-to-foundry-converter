@@ -987,10 +987,44 @@ export function smallCapsFonts(runs: readonly RawTextRun[]): Set<string> {
 }
 
 /** Return a copy of `raw` whose text layer is corrected against `ocr`. */
+/** How much larger than the text beside it a capital set apart is. */
+const INITIAL_SCALE = 1.2;
+
+/**
+ * A word's larger initial the layer places inside the rest of the word
+ * ("HAOS" at 163–193, its larger "C" at 184) is set back before it, where it
+ * is printed, so the word reads "CHAOS": a lone capital larger than a run of
+ * capitals on its baseline, starting inside that run's span. (A value's
+ * letter, "S" of "S/3/–", is no word's initial.)
+ */
+export function withInitialsInPlace(runs: readonly RawTextRun[]): RawTextRun[] {
+    const byPage = new Map<number, RawTextRun[]>();
+    for (const run of runs) {
+        byPage.set(run.pageIndex, [...(byPage.get(run.pageIndex) ?? []), run]);
+    }
+    return runs.map((run) => {
+        if (!/^\p{Lu}$/u.test(run.text)) {
+            return run;
+        }
+        const word = (byPage.get(run.pageIndex) ?? []).find(
+            (r) =>
+                r !== run &&
+                r.pageIndex === run.pageIndex &&
+                Math.abs(r.y - run.y) < run.fontSize / 2 &&
+                run.fontSize >= INITIAL_SCALE * r.fontSize &&
+                /^\p{Lu}{2,}$/u.test(r.text) &&
+                run.x > r.x &&
+                run.x < r.x + r.width,
+        );
+        return word === undefined ? run : { ...run, x: word.x - run.width };
+    });
+}
+
 export function arbitrate(raw: RawDoc, ocr: readonly OcrPage[]): RawDoc {
     const ocrByPage = new Map(ocr.map((p) => [p.pageIndex, p] as const));
     const runsByPage = new Map<number, RawTextRun[]>();
-    const { runs: layer, copies } = readReprints(raw.textRuns);
+    const { runs: printed, copies } = readReprints(raw.textRuns);
+    const layer = withInitialsInPlace(printed);
     for (const run of layer) {
         const list = runsByPage.get(run.pageIndex) ?? [];
         list.push(run);

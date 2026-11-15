@@ -6,6 +6,7 @@ import {
     normalizedDistance,
     resolveGroup,
     smallCapsFonts,
+    withInitialsInPlace,
     withMissedPoints,
 } from "../../src/ocr/arbitrate.ts";
 import type { OcrWord } from "../../src/ocr/types.ts";
@@ -406,5 +407,17 @@ describe("arbitrate", () => {
             ["first line", 700, 10],
             ["second", 688, 10],
         ]);
+    });
+
+    it("sets a larger initial the layer places inside its word back before the word", () => {
+        const rest = run("ICK", 163, 30, { fontSize: 11 });
+        const initial = run("W", 184, 10, { fontSize: 16 });
+        const [, moved] = withInitialsInPlace([rest, initial]);
+        expect(moved?.x).toBe(153);
+        // A capital of the same size, or one outside the word, stays.
+        const same = run("W", 184, 10, { fontSize: 11 });
+        expect(withInitialsInPlace([rest, same])[1]).toBe(same);
+        const after = run("W", 200, 10, { fontSize: 16 });
+        expect(withInitialsInPlace([rest, after])[1]).toBe(after);
     });
 });
