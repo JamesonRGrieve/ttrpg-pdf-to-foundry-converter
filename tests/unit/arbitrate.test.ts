@@ -228,6 +228,24 @@ describe("arbitrate", () => {
         expect(read.textRuns.map((r) => r.text)).toEqual(["Old Lamp"]);
     });
 
+    it("reads a line whose layer stacks two different pieces at one place from OCR", () => {
+        // "Lanterns Wicks" drawn as "Lant", "er", then "n W" and "ns" both at one x, then "icks".
+        const pieces = [
+            run("Lant", 100, 14),
+            run("er", 114, 6),
+            run("n W", 120, 10),
+            run("ns", 120, 8),
+            run("icks", 133, 14),
+        ];
+        const words = [word("Lanterns", 93, [100, 698, 128, 708]), word("Wicks", 96, [130, 698, 147, 708])];
+        // OCR's words replace the stacked pieces; normalising joins the runs into the line.
+        expect(
+            arbitrate(doc(pieces), [{ pageIndex: 0, words, cells: [] }])
+                .textRuns.map((r) => r.text)
+                .join(" "),
+        ).toBe("Lanterns Wicks");
+    });
+
     it("keeps the layer of a row drawn over and over whose pieces come apart cleanly", () => {
         const pieces = [run("La", 100, 10), run("mp", 110, 10)];
         const raw = doc(pieces.flatMap((p) => [p, { ...p }, { ...p }]));

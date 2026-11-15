@@ -609,6 +609,55 @@ function overdrawn(line: Line, runs: readonly RawTextRun[], copies: readonly Raw
     });
 }
 
+/** Points apart two runs' baselines may lie and still be drawn on one baseline. */
+const SAME_BASELINE = 0.5;
+
+/**
+ * Whether a line's text layer stacks two different pieces at one place: two
+ * runs on the very same baseline start within a point of each other and
+ * differ ("e A" over "es"), so the letters they draw interleave and no
+ * longer join into the line's words: the run of touching pieces around them,
+ * or null. (Runs of two baselines a line takes in together, such as a
+ * two-line cell, start at one place too and are no such thing.)
+ */
+function stacked(line: Line, runs: readonly RawTextRun[]): number[] | null {
+    const pieces = line.runs
+        .filter((i) => at(runs, i).text.trim().length > 0)
+        .sort((a, b) => numAsc(at(runs, a).x, at(runs, b).x));
+    const pair = pieces.find((ri, k) =>
+        pieces.slice(k + 1).some((oi) => {
+            const [r, o] = [at(runs, ri), at(runs, oi)];
+            return (
+                Math.abs(o.x - r.x) < PIECE_OVERLAP &&
+                Math.abs(o.y - r.y) < SAME_BASELINE &&
+                o.text.trim() !== r.text.trim()
+            );
+        }),
+    );
+    if (pair === undefined) {
+        return null;
+    }
+    // The pieces run on from it, each touching the one before: the word or
+    // cell the stacking breaks, not the rest of the line (a table row's other cells).
+    const start = pieces.indexOf(pair);
+    let lo = start;
+    while (
+        lo > 0 &&
+        at(runs, at(pieces, lo - 1)).x + at(runs, at(pieces, lo - 1)).width >=
+            at(runs, at(pieces, lo)).x - PIECE_OVERLAP
+    ) {
+        lo -= 1;
+    }
+    let hi = start;
+    let reach = at(runs, pair).x + at(runs, pair).width;
+    while (hi + 1 < pieces.length && at(runs, at(pieces, hi + 1)).x <= reach + PIECE_OVERLAP) {
+        hi += 1;
+        const r = at(runs, at(pieces, hi));
+        reach = Math.max(reach, r.x + r.width);
+    }
+    return pieces.slice(lo, hi + 1);
+}
+
 function arbitratePage(
     runs: readonly RawTextRun[],
     page: OcrPage,
@@ -741,6 +790,42 @@ function arbitratePage(
         if (overdrawn(line, runs, copies)) {
             rewriteOverdrawn(line, confident);
             return;
+        }
+        // Stacked pieces give way to the confident OCR words printed over them
+        // alone: each word reaching into them, and the runs those words cover.
+        const cluster = stacked(line, runs);
+        if (cluster !== null) {
+            const extent = (ids: readonly number[]): [number, number] => [
+                Math.min(...ids.map((id) => at(runs, id).x)),
+                Math.max(...ids.map((id) => at(runs, id).x + at(runs, id).width)),
+            ];
+            const [x0, x1] = extent(cluster);
+            const over = confident.filter((w) => w.box[2] > x0 && w.box[0] <= x1);
+            const [w0, w1] =
+                over.length === 0
+                    ? [x0, x1]
+                    : [
+                          Math.min(x0, ...over.map((w) => w.box[0])),
+                          Math.max(x1, ...over.map((w) => w.box[2])),
+                      ];
+            const covered = line.runs.filter((id) => {
+                const r = at(runs, id);
+                const centre = r.x + r.width / 2;
+                return r.text.trim().length > 0 && centre >= w0 && centre <= w1;
+            });
+            const segments = line.tokens.flatMap((t) => t.segments).filter((sg) => covered.includes(sg.run));
+            const host = [...covered].sort((a, b) => numAsc(at(runs, a).x, at(runs, b).x) || numAsc(a, b))[0];
+            if (over.length > 0 && segments.length > 0 && host !== undefined) {
+                rewrite(
+                    segments,
+                    [...over]
+                        .sort((a, b) => numAsc(a.box[0], b.box[0]))
+                        .map((w) => w.text)
+                        .join(" "),
+                    host,
+                );
+                return;
+            }
         }
         const groups = align(
             line.tokens.map((t) => t.text),
