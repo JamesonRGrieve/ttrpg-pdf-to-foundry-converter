@@ -1608,13 +1608,37 @@ export function readVariantOrigins(
     steps: readonly OriginStepDef[],
 ): OriginPathReading[] {
     const listed = listedOrigins(entries, steps);
-    return entries.flatMap((entry): OriginPathReading[] => {
-        const m = /^(.*?\S)\s*\(([^()]+)\)\s*$/u.exec(entry.heading.text.trim());
-        const of =
-            m?.[2] === undefined
-                ? undefined
-                : (listed.get(letters(m[2])) ?? listed.get(letters(m[2]).replace(/s$/u, "")));
-        const name = m?.[1];
+    const listedIn = (text: string): { name: string; step: OriginStepDef } | undefined => {
+        const key = letters(text);
+        return listed.get(key) ?? listed.get(key.replace(/s$/u, ""));
+    };
+    const read = entries.flatMap((entry, i): OriginPathReading[] => {
+        const heading = entry.heading.text.trim();
+        const m = /^(.*?\S)\s*\(([^()]+)\)\s*$/u.exec(heading);
+        let name = m?.[1];
+        let of = m?.[2] === undefined ? undefined : listedIn(m[2]);
+        if (of === undefined) {
+            // A heading set twice over may lose its parenthesis to the prose:
+            // the body then opens with it ("(Imperial World)").
+            const opening = /^\s*\(([^\n]*)/u.exec(entry.body)?.[1] ?? "";
+            const found = [...listed.values()].find((l) => letters(opening).includes(letters(l.name)));
+            if (found === undefined || letters(heading).length === 0 || heading.startsWith("(")) {
+                return [];
+            }
+            of = found;
+            // Its clean copy is a heading just before it whose letters it holds, or that holds its letters.
+            const copy = entries
+                .slice(Math.max(0, i - VARIANT_COPY_REACH), i)
+                .reverse()
+                .find(
+                    (e) =>
+                        e.heading.pageIndex === entry.heading.pageIndex &&
+                        !e.heading.text.trim().startsWith("(") &&
+                        (inOrder(letters(e.heading.text), letters(heading)) ||
+                            inOrder(letters(heading), letters(e.heading.text))),
+                );
+            name = undoubled(copy?.heading.text.trim() ?? heading);
+        }
         if (
             of === undefined ||
             name === undefined ||
@@ -1631,12 +1655,52 @@ export function readVariantOrigins(
                         : properName(name),
                 step: of.step,
                 pageIndex: entry.heading.pageIndex,
-                description: entry.body,
+                description: entry.body.replace(/^\s*\([^\n]*\n*/u, ""),
                 grants: {},
                 modifiers: {},
             },
         ];
     });
+    // A variant set twice over is read once, from the copy that carries its prose.
+    const kept = new Map<string, OriginPathReading>();
+    for (const r of read) {
+        const key = `${r.step.key}:${letters(r.name)}`;
+        const held = kept.get(key);
+        if (held === undefined || r.description.length > held.description.length) {
+            kept.set(key, held === undefined ? r : { ...r, pageIndex: held.pageIndex });
+        }
+    }
+    return [...kept.values()];
+}
+
+/** Headings back a set-twice heading's clean copy may stand. */
+const VARIANT_COPY_REACH = 3;
+
+/** Whether every letter of `short` appears in `long`, in order. */
+function inOrder(short: string, long: string): boolean {
+    let at = 0;
+    for (const c of long) {
+        if (c === short[at]) {
+            at += 1;
+        }
+    }
+    return short.length > 0 && at === short.length;
+}
+
+/** A word whose ending the text layer set twice ("QuintusTus") once. */
+function undoubled(name: string): string {
+    return name
+        .split(/\s+/u)
+        .map((w) => {
+            for (let k = Math.floor(w.length / 2); k >= 2; k--) {
+                const head = w.slice(0, w.length - k);
+                if (head.toLowerCase().endsWith(w.slice(-k).toLowerCase())) {
+                    return head;
+                }
+            }
+            return w;
+        })
+        .join(" ");
 }
 
 /** A heading's name with each word capitalised where the type set it lower-case, a roman numeral in capitals. */

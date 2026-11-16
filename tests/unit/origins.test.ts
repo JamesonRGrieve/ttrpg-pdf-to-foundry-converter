@@ -1004,6 +1004,17 @@ describe("origins a step's roll table lists", () => {
             "Wick-71",
         ]);
     });
+
+    it("reads a variant whose heading is set twice, its parenthesis lost to the prose", () => {
+        const entries: Entry[] = [
+            table,
+            entry("Duskmire FenFen", 7, book, ""),
+            entry("DUSKmire FEN", 7, book, "(Reed(REED Fen)Fen)\n\nA darker fen."),
+        ];
+        expect(readVariantOrigins(entries, home).map((o) => [o.name, o.description])).toEqual([
+            ["Duskmire Fen", "A darker fen."],
+        ]);
+    });
 });
 
 describe("misread display initials", () => {
