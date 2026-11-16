@@ -333,9 +333,15 @@ export function readOriginTable(
     return out;
 }
 
+/** Most words a field label runs to; a longer heading (an index's run of terms) is no label. */
+const MAX_LABEL_WORDS = 12;
+
 const labelField = (label: string): GrantField | undefined => {
     // A text layer may join a label's words ("StartingAptitudes").
     const spaced = label.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
+    if (spaced.trim().split(/\s+/u).length > MAX_LABEL_WORDS) {
+        return undefined;
+    }
     return LABEL_FIELDS.find(([re]) => re.test(spaced))?.[1];
 };
 
@@ -1367,12 +1373,29 @@ export function readHeadedOrigins(
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
     const seen = new Set<string>();
+    // A heading that closes on a step's label after a name ("<Name> Successors")
+    // makes that name one of the step's origins wherever it heads its own section.
+    const namedBy = new Map<string, OriginStepDef>();
+    for (const e of entries) {
+        const step = stepNamedIn(e.heading.text, steps, true, true);
+        const name =
+            step === undefined
+                ? ""
+                : letters(withoutStepLabel(headingName(e.heading.text).replace(/s$/iu, ""), step.labels));
+        if (step !== undefined && name.length >= MIN_HELD_NAME && name !== letters(e.heading.text)) {
+            namedBy.set(name, step);
+        }
+    }
     entries.forEach((origin, i) => {
         const section = origin.sections.at(-1);
+        const own = origin.heading.text.trim();
         // The step closes the section's heading: a heading that names it and
         // goes on ("<Step> Wargear") is about something else.
-        const step = section === undefined ? undefined : stepNamedIn(section, steps, true, true);
-        const own = origin.heading.text.trim();
+        // A section that tells how to make one ("Creating Your Own <Step>") lists its parts, not origins.
+        const instructs = section !== undefined && /^\s*\p{L}+ing\b/iu.test(section);
+        const sectionStep =
+            section === undefined || instructs ? undefined : stepNamedIn(section, steps, true, true);
+        const step = sectionStep ?? namedBy.get(letters(own.replace(LEADING_ARTICLE, "")));
         if (step === undefined || letters(own).length === 0 || seen.has(`${step.key}:${letters(own)}`)) {
             return;
         }
@@ -1388,7 +1411,7 @@ export function readHeadedOrigins(
             }
             // A heading beneath it that starts with its name, or holds it, singular
             // or plural ("Creating a <Name> Character").
-            const stem = letters(own).replace(/s$/u, "");
+            const stem = letters(own.replace(LEADING_ARTICLE, "")).replace(/s$/u, "");
             if (
                 e.sections.includes(origin.heading.text) &&
                 (wordPrefix(own, e.heading.text) !== null ||
@@ -1401,8 +1424,14 @@ export function readHeadedOrigins(
             return;
         }
         seen.add(`${step.key}:${letters(own)}`);
+        // Named from elsewhere, the origin is its name alone, spelt as its own
+        // section's text spells it ("THE IMPE RIAL" → "Imperial").
+        const bare =
+            sectionStep === undefined
+                ? rejoinSplitWords(own.replace(LEADING_ARTICLE, ""), wordsOf(origin.body))
+                : own;
         out.push({
-            name: caseLost(own) || !/\p{Ll}/u.test(own) ? capitalizeWords(own.toLowerCase()) : own,
+            name: caseLost(bare) || !/\p{Ll}/u.test(bare) ? capitalizeWords(bare.toLowerCase()) : bare,
             step,
             pageIndex: origin.heading.pageIndex,
             description: origin.body,

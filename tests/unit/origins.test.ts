@@ -907,6 +907,45 @@ describe("origins each under a heading of their own", () => {
         ];
         expect(readHeadedOrigins(entries, STEPS)).toEqual([]);
     });
+
+    it('reads a heading another heading names with the step\'s label ("<Name> Backgrounds")', () => {
+        const book = ["Lamp Book"];
+        const entries: Entry[] = [
+            display("THE LA MP WARDENS", 7, book, "The Lamp Wardens keep the wicks."),
+            entry("LAMP WARDENS PASTS", 8, [...book, "THE LA MP WARDENS"]),
+            entry("LAMP WARDENS NAMES", 8, [...book, "THE LA MP WARDENS"]),
+            display("Reed Cutters", 9, book),
+            entry("REED CUTTERS PASTS", 9, [...book, "Reed Cutters"]),
+            entry("REED CUTTERS NAMES", 9, [...book, "Reed Cutters"]),
+            display("Lamp Wardens Backgrounds", 12, book),
+        ];
+        expect(readHeadedOrigins(entries, STEPS).map((o) => [o.name, o.step.key])).toEqual([
+            ["Lamp Wardens", "background"],
+        ]);
+    });
+
+    it('reads none in a section telling how to make one ("Creating Your Own Background")', () => {
+        const how = ["Creating Your Own Background"];
+        const entries: Entry[] = [
+            display("Oaths", 4, how),
+            entry("OATHS SWORN", 4, [...how, "Oaths"]),
+            entry("OATHS BROKEN", 5, [...how, "Oaths"]),
+        ];
+        expect(readHeadedOrigins(entries, STEPS)).toEqual([]);
+    });
+});
+
+describe("rules blocks", () => {
+    it("takes no index's run of terms for a field label", () => {
+        const index = ["Index"];
+        const terms = "Skills Talents Gear Aptitudes Wounds Fate Lamps Wicks Reeds Marshes Tides Eaves Dusk";
+        const entries: Entry[] = [
+            entry("Index", 40, ["Choose the Background"], "A"),
+            entry(`${terms} Oil`, 40, [...index], "B"),
+            entry(`Wounds ${terms}`, 40, [...index], "12 14 20"),
+        ];
+        expect(readOriginPaths(entries, STEPS, NO_HEADS)).toEqual([]);
+    });
 });
 
 describe("origins on the pages a step's section cites", () => {

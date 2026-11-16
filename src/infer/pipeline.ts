@@ -1916,8 +1916,12 @@ function extractOriginPaths(
     // Steps read no other way may print each origin as a heading with its
     // rules as fields.
     const readInline = new Set(inline.map((o) => o.step.key));
+    // A step whose origins each head their own rules is laid out that way; the
+    // fields of its other headings are not origins.
+    const headed = readHeadedOrigins(entries, out.target.originSteps);
+    const readHeaded = new Set(headed.map((o) => o.step.key));
     const effects = readEffectOrigins(entries, out.target.originSteps).filter(
-        (o) => !read.has(o.step.key) && !readInline.has(o.step.key),
+        (o) => !read.has(o.step.key) && !readInline.has(o.step.key) && !readHeaded.has(o.step.key),
     );
     const cited = withCitedOrigins(
         [...structured, ...inline, ...effects],
@@ -1930,7 +1934,7 @@ function extractOriginPaths(
     // repeat its name; one read no other way joins the rest.
     const origins = [
         ...cited,
-        ...readHeadedOrigins(entries, out.target.originSteps).filter(
+        ...headed.filter(
             (o) =>
                 !tabled.has(o.step.key) &&
                 !cited.some((c) => c.step.key === o.step.key && sameOrigin(c.name, o.name)),
