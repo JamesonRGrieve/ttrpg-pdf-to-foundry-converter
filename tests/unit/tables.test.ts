@@ -78,4 +78,61 @@ describe("detectTables", () => {
         const [table] = detectTables(irOf(rows));
         expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Glow Lamp", "Wick", "Ember"]);
     });
+
+    it("finds a table's columns beside a column of prose, and joins a cell's wrapped lines to their row", () => {
+        const bold = { weight: "bold" as const };
+        const lines: IRTextRun[] = [];
+        // Prose set one line at a time above the table outnumbers its rows.
+        for (let k = 0; k < 30; k++) {
+            lines.push(run(`Lamp lore line ${k} runs on and on`, 50, 760 - k * 4, 200));
+        }
+        lines.push(
+            run("Wick", 50, 600, 30, bold),
+            run("Cost", 150, 600, 30, bold),
+            run("Type", 250, 600, 30, bold),
+            run("Needs", 350, 600, 40, bold),
+        );
+        const rows: [string, string, string, string][] = [
+            ["Trimming", "100", "Skill", "-"],
+            ["Snuffing", "200", "Talent", "Ag 30"],
+            ["Glowing", "300", "Talent", "-"],
+            ["Shading", "400", "Talent", "-"],
+            ["Dimming", "500", "Talent", "-"],
+            ["Kindling", "600", "Talent", "-"],
+        ];
+        rows.forEach(([a, b, c, d], k) => {
+            const y = 585 - k * 15;
+            lines.push(run(a, 50, y, 40), run(b, 150, y, 20), run(c, 250, y, 30), run(d, 350, y, 30));
+        });
+        // A row set beside both lines of its wrapped cell, and one whose cell wraps below it.
+        lines.push(
+            run("Ag 40, Lamp", 350, 499, 50),
+            run("Warding", 50, 494, 40),
+            run("700", 150, 494, 20),
+            run("Talent", 250, 494, 30),
+            run("(Oil)", 350, 489, 30),
+        );
+        lines.push(
+            run("Last Light", 50, 479, 40),
+            run("800", 150, 479, 20),
+            run("Talent", 250, 479, 30),
+            run("Ag 50, Lamp", 350, 479, 50),
+        );
+        lines.push(run("(Wick)", 350, 470, 30));
+        const tables = detectTables(irOf(lines));
+        const found = tables.find((t) => t.headers.join("|") === "Wick|Cost|Type|Needs");
+        const texts = found?.rows.map((r) => r.cells.map((c) => c.text));
+        expect(texts?.find((r) => r[0] === "Warding")).toEqual([
+            "Warding",
+            "700",
+            "Talent",
+            "Ag 40, Lamp (Oil)",
+        ]);
+        expect(texts?.find((r) => r[0] === "Last Light")).toEqual([
+            "Last Light",
+            "800",
+            "Talent",
+            "Ag 50, Lamp (Wick)",
+        ]);
+    });
 });

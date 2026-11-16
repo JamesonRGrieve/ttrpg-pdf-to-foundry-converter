@@ -281,18 +281,39 @@ export function rankNamed(
 }
 
 /** A table of characteristic advance costs: a characteristic column and the schema's tier words over the rest. */
-export function isCharacteristicCostTable(headers: readonly string[]): boolean {
+export function isCharacteristicCostTable(
+    headers: readonly string[],
+    firstCells: readonly string[] = [],
+): boolean {
     const text = headers.join(" ").toLowerCase();
-    return /^characteristics?$/iu.test(headers[0]?.trim() ?? "") && TIERS.every((t) => text.includes(t));
+    if (!TIERS.every((t) => text.includes(t))) {
+        return false;
+    }
+    // The first column may be headed otherwise ("Level") when its rows are the characteristics.
+    const named = firstCells.filter((c) => CHARACTERISTICS[characteristicName(c)] !== undefined);
+    return (
+        /^characteristics?$/iu.test(headers[0]?.trim() ?? "") ||
+        (named.length > 0 && named.length >= firstCells.length / 2)
+    );
 }
+
+/** A cost row's characteristic: its first cell up to any figure, lower-cased. */
+const characteristicName = (cell: string): string => (/^[^\d]*/u.exec(cell)?.[0] ?? "").trim().toLowerCase();
 
 /** Each characteristic's cost at each tier, read from the figures of its row in tier order. */
 export function characteristicCosts(rows: readonly (readonly string[])[]): JsonObject {
     const costs: JsonObject = {};
-    for (const row of rows) {
-        const key = CHARACTERISTICS[(row[0] ?? "").trim().toLowerCase()];
-        const figures = row
-            .slice(1)
+    for (const cells of rows) {
+        // A row may open with empty cells where a column holds nothing.
+        const row = cells.slice(
+            Math.max(
+                0,
+                cells.findIndex((c) => c.trim() !== ""),
+            ),
+        );
+        const key = CHARACTERISTICS[characteristicName(row[0] ?? "")];
+        // Columns may merge, a figure sharing the characteristic's cell ("Strength 500").
+        const figures = [(row[0] ?? "").replace(/^[^\d]*/u, ""), ...row.slice(1)]
             .join(" ")
             .replace(/(\d),(\d{3})/gu, "$1$2")
             .match(/\d+/gu);
@@ -342,6 +363,12 @@ export function advancePrerequisites(printed: string, kindOf: KindOf): JsonObjec
 
 /** A cost: a whole number, thousands perhaps grouped. */
 const COST = /^\d[\d,]*$/u;
+
+/** Marks a table sets after a name to refer to a note (dagger, double dagger, asterisk, section). */
+const REFERENCE_MARKS = /[\u2020\u2021*\u00a7\u00b6]+/gu;
+
+/** The figure each skill rank above trained adds ("+10" is one rank up). */
+const SKILL_RANK_STEP = 10;
 
 /** A type cell: the type's word, or its initial ("S", "T"), then any prerequisites. */
 const TYPE = /^(skill|talent|S|T)(?=\s|$)\s*(.*)$/isu;
@@ -403,11 +430,19 @@ export function rankAdvances(
         }
         const type = /^s/iu.test(initial) ? "skill" : "talent";
         const cost = Number((row[costAt] ?? "").replace(/,/gu, ""));
+        // Reference marks set after a name are no part of it.
+        name = name.replace(REFERENCE_MARKS, "").trim();
         const advance: JsonObject = { name, cost, type };
         const times = /\s*\(\s*x\s*(\d+)\s*\)\s*$/iu.exec(name);
         if (times?.[1] !== undefined) {
             advance["multiplier"] = Number(times[1]);
             name = name.slice(0, times.index).trim();
+        }
+        // A skill's printed rank ("+10", "+20") is the level it buys: one above trained per +10.
+        const rank = /\s*\+\s*(\d+)\s*$/u.exec(name);
+        if (rank?.[1] !== undefined) {
+            advance["level"] = Number(rank[1]) / SKILL_RANK_STEP + 1;
+            name = name.slice(0, rank.index).trim();
         }
         const special = /^(.*?)\s*\(([^()]+)\)\s*$/u.exec(name);
         if (special?.[1] !== undefined && special[2] !== undefined) {
@@ -486,8 +521,27 @@ export function attachCareerAdvancement(
     const claimed = new Set<PrintedRank>();
     const found = new Map<Entity, { costs: JsonObject; ranks: RankEntry[] }>();
     let previous = null as { career: Entity; entry: RankEntry } | null;
+    // A table of ranks printed as numbers ("1", "2", …) gives where each numbered rank starts, for every career.
+    const numberedXp = new Map<number, number>();
     for (const table of ordered) {
         if (table.kind === "ranks") {
+            const xpCol = table.headers.findIndex((h, i) => i > 0 && /\bxp\b/iu.test(h));
+            const numbered = table.rows.flatMap((row) => {
+                const rank = /^\s*(\d+)\s*$/u.exec(row[0] ?? "")?.[1];
+                const xp = /\d[\d,]*/u.exec(row[xpCol] ?? "")?.[0];
+                return rank === undefined || xp === undefined
+                    ? []
+                    : [[Number(rank), Number(xp.replace(/,/gu, ""))]];
+            });
+            if (
+                numbered.length > 0 &&
+                numbered.length === table.rows.filter((r) => r.some((c) => c.trim() !== "")).length
+            ) {
+                for (const [rank, xp] of numbered) {
+                    numberedXp.set(rank as number, xp as number);
+                }
+                continue;
+            }
             // A chart its heading names a career for is that career's; any
             // other waits for the next career named (only the nearest is its own).
             const chartOf = named(table.heading);
@@ -610,7 +664,10 @@ export function attachCareerAdvancement(
         if (system === null || typeof system !== "object" || Array.isArray(system)) {
             continue;
         }
-        const kept = ranks.filter((r) => r.advances.length > 0).sort((a, b) => a.rank - b.rank);
+        const kept = ranks
+            .filter((r) => r.advances.length > 0)
+            .map((r) => (r.minXp === null ? { ...r, minXp: numberedXp.get(r.rank) ?? null } : r))
+            .sort((a, b) => a.rank - b.rank);
         if (Object.keys(costs).length === 0 && kept.length === 0) {
             continue;
         }

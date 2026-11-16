@@ -16,6 +16,7 @@ import {
     readFieldedOrigins,
     readInlineOrigins,
     withoutStepLabel,
+    wordPrefix,
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
@@ -932,6 +933,15 @@ describe("origins each under a heading of their own", () => {
             entry("OATHS BROKEN", 5, [...how, "Oaths"]),
         ];
         expect(readHeadedOrigins(entries, STEPS)).toEqual([]);
+    });
+});
+
+describe("misread display initials", () => {
+    it("matches a heading word the text layer misread by the ending it shares with the clean spelling", () => {
+        expect(wordPrefix("Lamp Warden [TIASTER", "Lamp Warden Master Characteristic Advances")).toBe(
+            "Lamp Warden Master",
+        );
+        expect(wordPrefix("Lamp Warden Glow", "Lamp Warden Master Characteristic Advances")).toBeNull();
     });
 });
 

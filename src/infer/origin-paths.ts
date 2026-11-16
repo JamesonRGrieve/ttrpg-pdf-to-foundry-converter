@@ -878,8 +878,55 @@ export function wordPrefix(prefix: string, text: string): string | null {
             return head;
         }
     }
-    return null;
+    // A display face's initial the text layer misreads as marks ("[TIARINE"
+    // for a word that ends "ARINE") matches the word spelt cleanly in the
+    // same place, by its ending.
+    const own = prefix.trim().split(/\s+/u);
+    if (own.length >= words.length) {
+        return null;
+    }
+    const same = own.every((w, i) => {
+        const clean = letters(w);
+        const other = letters(words[i] ?? "");
+        if (clean === other) {
+            return true;
+        }
+        return (
+            MISREAD_MARK.test(w) &&
+            clean.length >= MIN_MISREAD_TAIL &&
+            other.endsWith(clean.slice(-MIN_MISREAD_TAIL)) &&
+            Math.abs(other.length - clean.length) <= MAX_MISREAD_SHIFT
+        );
+    });
+    return same && own.some((w) => MISREAD_MARK.test(w)) ? words.slice(0, own.length).join(" ") : null;
 }
+
+/**
+ * A heading name a display initial was misread in, spelt as a heading
+ * beneath it spells it ("<Name> Characteristic Advances"); the name as it is
+ * otherwise.
+ */
+function cleanlySpelt(name: string, heading: string, entries: readonly Entry[]): string {
+    if (!MISREAD_MARK.test(name)) {
+        return name;
+    }
+    for (const e of entries) {
+        const words = e.sections.includes(heading) ? wordPrefix(name, e.heading.text) : null;
+        if (words !== null) {
+            return words;
+        }
+    }
+    return name;
+}
+
+/** A character no word's letters hold (a bracket, a bar), standing where a display initial was misread. */
+const MISREAD_MARK = /[[\]|{}\\]/u;
+
+/** Letters a misread word's ending must share with the clean word. */
+const MIN_MISREAD_TAIL = 4;
+
+/** Letters a misread initial may add or drop. */
+const MAX_MISREAD_SHIFT = 2;
 
 /** An experience price: "100 xp", "200 XP". */
 const XP_PRICE = /\d[\d,]*\s*xp\b/iu;
@@ -1472,7 +1519,12 @@ export function readOriginPaths(
     runningHeads: ReadonlyMap<number, readonly string[]>,
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
-    entries.forEach((owner, i) => {
+    const readAt = (
+        owner: Entry,
+        i: number,
+        minLabels: number,
+        fits: (step: OriginStepDef, owner: Entry, fielded: readonly Entry[]) => boolean,
+    ): OriginPathReading | undefined => {
         const labels = childrenOf(entries, i);
         const fielded = labels.filter((l) => labelField(l.heading.text) !== undefined);
         const step =
@@ -1494,13 +1546,19 @@ export function readOriginPaths(
             .map((l) => labelField(l.heading.text))
             .filter((k) => k !== undefined && PRICE_FIELDS.has(k));
         const listing = new Set(priced).size < priced.length;
-        if (step === undefined || fielded.length < MIN_GRANT_LABELS || !grantLabels || listing) {
-            return;
+        if (
+            step === undefined ||
+            fielded.length < minLabels ||
+            !grantLabels ||
+            listing ||
+            !fits(step, owner, fielded)
+        ) {
+            return undefined;
         }
         // A step bought with experience may hold only its price and requirement.
         const read = grantsOf(fielded, (label) => childrenOf(entries, entries.indexOf(label)));
         if (!grantsAnything(read) && read.xpCost === undefined && read.requirements === undefined) {
-            return;
+            return undefined;
         }
         // The origin is named by the heading this rules block extends ("Hive
         // World" for "Hive World Rules"), whose prose introduces it — or, when
@@ -1520,14 +1578,46 @@ export function readOriginPaths(
         const intro = [...before, head]
             .reverse()
             .find((e) => e.heading.text === head.heading.text && e.body.length > 0);
-        out.push({
+        return {
             // The rules heading's own words spell the name most cleanly.
-            name: extended?.words ?? headingName(head.heading.text),
+            name: extended?.words ?? cleanlySpelt(headingName(head.heading.text), head.heading.text, entries),
             step,
             pageIndex: (intro ?? head).heading.pageIndex,
             description: intro?.body ?? "",
             ...read,
-        });
+        };
+    };
+    const read = new Map<number, OriginPathReading>();
+    // What each step's origins look like: their heading's setting and their labels.
+    const shapes = new Map<string, Set<string>>();
+    const shapeKey = (step: OriginStepDef, owner: Entry): string => `${step.key}|${owner.heading.style}`;
+    entries.forEach((owner, i) => {
+        const reading = readAt(owner, i, MIN_GRANT_LABELS, () => true);
+        if (reading === undefined) {
+            return;
+        }
+        read.set(i, reading);
+        const key = shapeKey(reading.step, owner);
+        const labels = shapes.get(key) ?? new Set<string>();
+        for (const l of childrenOf(entries, i)) {
+            labels.add(letters(l.heading.text));
+        }
+        shapes.set(key, labels);
     });
+    // An origin may print fewer of its step's labels than the rest (one with no
+    // skills to give): set as they are, with labels they all use, it is one too.
+    entries.forEach((owner, i) => {
+        if (read.has(i)) {
+            return;
+        }
+        const reading = readAt(owner, i, 1, (step, o, fielded) => {
+            const labels = shapes.get(shapeKey(step, o));
+            return labels !== undefined && fielded.every((l) => labels.has(letters(l.heading.text)));
+        });
+        if (reading !== undefined) {
+            read.set(i, reading);
+        }
+    });
+    out.push(...[...read.entries()].sort(([a], [b]) => a - b).map(([, r]) => r));
     return out;
 }

@@ -23,6 +23,20 @@ describe("table classification", () => {
         );
     });
 
+    it("reads one price among columns no item field holds as a rules table, unless its caption names the price", () => {
+        expect(
+            classifyTable(table(["Lantern Guild", "Oil Point Cost", "Wick Status", "Lamps Arrive"]))
+                .contentType,
+        ).not.toBe("gear");
+        expect(
+            classifyTable({
+                ...table(["Wick", "Cost", "in", "Thrones", "Examples"]),
+                tableTitle: "Wick Costs",
+            }).contentType,
+        ).toBe("gear");
+        expect(classifyTable(table(["Name", "Cost", "Notes"])).contentType).toBe("gear");
+    });
+
     it("recognises catalogues of protection and of acquirable goods", () => {
         expect(classifyTable(table(["Name", "Protection Rating", "Weight"])).contentType).toBe("force-field");
         expect(classifyTable(table(["Name", "AP", "Weight"])).contentType).toBe("armour");

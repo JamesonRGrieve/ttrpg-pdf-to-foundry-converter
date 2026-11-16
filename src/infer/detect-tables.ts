@@ -17,6 +17,12 @@ const Y_TOLERANCE = 4;
 const X_TOLERANCE = 8;
 const MIN_COLUMNS = 3;
 const MIN_ROWS = 3;
+/** Share of a page's lines of several cells a column's left edge must start. */
+const EDGE_SHARE = 0.3;
+/** Fewest wide lines (several cells each) set one under another that make a table's body. */
+const MIN_WIDE_BLOCK = 2 * MIN_ROWS;
+/** Lines below a table's row a wrapped cell's next line may sit (a row's text is centred between its lines). */
+const WRAP_LINES = 2;
 
 interface RawRow {
     pageIndex: number;
@@ -86,22 +92,47 @@ interface ColumnEdge {
 }
 
 function detectColumnEdges(rows: RawRow[]): ColumnEdge[] {
-    const xCounts = new Map<number, number>();
-    for (const row of rows) {
-        const seenBuckets = new Set<number>();
-        for (const run of row.runs) {
-            const bucket = Math.round(run.x / X_TOLERANCE) * X_TOLERANCE;
-            if (!seenBuckets.has(bucket)) {
-                xCounts.set(bucket, (xCounts.get(bucket) ?? 0) + 1);
-                seenBuckets.add(bucket);
+    const edges = (counted: readonly RawRow[], minCount: number): Map<number, number> => {
+        const xCounts = new Map<number, number>();
+        for (const row of counted) {
+            const seenBuckets = new Set<number>();
+            for (const run of row.runs) {
+                const bucket = Math.round(run.x / X_TOLERANCE) * X_TOLERANCE;
+                if (!seenBuckets.has(bucket)) {
+                    xCounts.set(bucket, (xCounts.get(bucket) ?? 0) + 1);
+                    seenBuckets.add(bucket);
+                }
             }
         }
+        return new Map([...xCounts].filter(([, count]) => count >= minCount));
+    };
+    const found = edges(rows, Math.max(MIN_ROWS, Math.floor(rows.length * EDGE_SHARE)));
+    // Lines of prose beside a picture outnumber a table's lines without
+    // holding a column; an edge that recurs among the lines of a table's
+    // width (several cells each) is a column however much prose the page has.
+    // Only a block of such lines set one under another is a table's body; a
+    // few wide lines among prose (a stat line beside a paragraph) are not.
+    const wide: RawRow[] = [];
+    let block: RawRow[] = [];
+    for (const row of [...rows].sort((a, b) => b.y - a.y)) {
+        if (row.runs.length >= MIN_COLUMNS) {
+            block.push(row);
+            continue;
+        }
+        if (block.length >= MIN_WIDE_BLOCK) {
+            wide.push(...block);
+        }
+        block = [];
     }
-    const minCount = Math.max(MIN_ROWS, Math.floor(rows.length * 0.3));
-    return [...xCounts.entries()]
-        .filter(([, count]) => count >= minCount)
-        .map(([x, count]) => ({ x, count }))
-        .sort((a, b) => a.x - b.x);
+    if (block.length >= MIN_WIDE_BLOCK) {
+        wide.push(...block);
+    }
+    for (const [x, count] of edges(wide, Math.max(MIN_ROWS, Math.floor(wide.length * EDGE_SHARE)))) {
+        if (!found.has(x)) {
+            found.set(x, count);
+        }
+    }
+    return [...found.entries()].map(([x, count]) => ({ x, count })).sort((a, b) => a.x - b.x);
 }
 
 function assignRunsToColumns(runs: IRTextRun[], columns: ColumnEdge[]): TableCell[] {
@@ -190,8 +221,62 @@ export function detectTables(ir: IR): DetectedTable[] {
         /** The runs of the table being read: its header and records. */
         const tableRuns: IRTextRun[] = [];
 
+        /** Lines of a cell that wrapped, waiting for the row they belong to. */
+        let wrapped: { y: number; cell: TableCell }[] = [];
+        let lastRow: { y: number; row: TableRow } | null = null;
+        /** Where the table's last line (its header, or a row) stands. */
+        let lastY: number | null = null;
+        const joinWrapped = (into: TableRow | null): void => {
+            for (const w of wrapped) {
+                // A line wrapped from a cell its row leaves empty is that row's
+                // (a row set beside its cell's lines); any other continues the row above.
+                const empty = into !== null && !into.cells.some((c) => c.colIndex === w.cell.colIndex);
+                const target = empty ? into : (lastRow?.row ?? null);
+                if (target === null) {
+                    continue;
+                }
+                const cell = target.cells.find((c) => c.colIndex === w.cell.colIndex);
+                if (cell === undefined) {
+                    target.cells.push({ ...w.cell });
+                    target.cells.sort((a, b) => a.colIndex - b.colIndex);
+                } else {
+                    cell.text = `${cell.text} ${w.cell.text}`;
+                }
+            }
+            wrapped = [];
+        };
         for (const [i, row] of sorted.entries()) {
             const cells = assignRunsToColumns(row.runs, columns);
+            // A cell's text wrapped onto a line of its own: one cell, set on a
+            // column's edge in the face of the table's cells, within a line or
+            // two of the table's last row (or its header).
+            const only = cells[0];
+            const run = row.runs[0];
+            const bodyFonts = new Set(tableRuns.filter((r) => r.weight !== "bold").map((r) => r.font));
+            if (
+                tableStart !== -1 &&
+                // Lines of noise on a page read from its picture can pass for
+                // wrapped cells; there only a table with a header row has them.
+                (headerRow !== null || !measured) &&
+                lastY !== null &&
+                cells.length === 1 &&
+                only !== undefined &&
+                run !== undefined &&
+                // Before any row, a line no larger than the header's and not set as it is.
+                (bodyFonts.size > 0
+                    ? row.runs.every((r) => bodyFonts.has(r.font))
+                    : row.runs.every(
+                          (r) => r.weight !== "bold" && tableRuns.every((h) => r.size <= h.size),
+                      )) &&
+                row.runs.every(
+                    (r) => Math.abs(r.x - (columns[only.colIndex]?.x ?? Number.NaN)) <= X_TOLERANCE,
+                ) &&
+                lastY - row.y <= WRAP_LINES * run.size
+            ) {
+                wrapped.push({ y: row.y, cell: only });
+                tableRuns.push(...row.runs);
+                continue;
+            }
 
             if (cells.length >= MIN_COLUMNS - 1) {
                 if (tableStart === -1) {
@@ -213,6 +298,7 @@ export function detectTables(ir: IR): DetectedTable[] {
                         sectionName,
                     });
                 } else if (isHeader) {
+                    lastY = row.y;
                     headerRow = {
                         cells,
                         isHeaderRow: true,
@@ -220,14 +306,23 @@ export function detectTables(ir: IR): DetectedTable[] {
                         sectionName: null,
                     };
                 } else {
-                    tableRows.push({
+                    const record: TableRow = {
                         cells,
                         isHeaderRow: false,
                         isSectionHeader: false,
                         sectionName: null,
-                    });
+                    };
+                    tableRows.push(record);
+                    joinWrapped(record);
+                    lastRow = { y: row.y, row: record };
+                    lastY = row.y;
                 }
-            } else if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
+                continue;
+            }
+            joinWrapped(null);
+            lastRow = null;
+            lastY = null;
+            if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
                 pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
                 tableStart = -1;
                 headerRow = null;
@@ -240,6 +335,7 @@ export function detectTables(ir: IR): DetectedTable[] {
                 tableRuns.length = 0;
             }
         }
+        joinWrapped(null);
         if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
             pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
         }

@@ -563,7 +563,17 @@ function extractTables(
         // advances) feed the career's own document, where the target holds them.
         const runs = table.runs ?? [];
         if (out.target.careerStep !== undefined && runs.length > 0) {
-            const costs = isCharacteristicCostTable(table.headers);
+            const costs = isCharacteristicCostTable(
+                table.headers,
+                table.rows
+                    .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
+                    .map(
+                        (r) =>
+                            [...r.cells]
+                                .sort((a, b) => a.colIndex - b.colIndex)
+                                .find((c) => c.text.trim() !== "")?.text ?? "",
+                    ),
+            );
             const ranks = isRankTable(table.headers);
             if (costs || ranks || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
                 toCareer = true;

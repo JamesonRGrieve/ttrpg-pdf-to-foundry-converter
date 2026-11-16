@@ -29,6 +29,9 @@ const ARMOUR_HEADERS = ["ap", "armour points", "armor points", "locations covere
 const TALENT_HEADERS = ["aptitude", "prerequisite", "benefit"];
 const PSYCHIC_HEADERS = ["focus time", "focus power", "sustained", "threshold", "overbleed"];
 const SKILL_HEADERS = ["skill use", "skill group", "aptitude"];
+/** Columns no item field holds that a table with a single gear signal may carry and still be a catalogue. */
+const MAX_UNHELD_BESIDE_ONE_SIGNAL = 2;
+
 const GEAR_SIGNALS = ["availability", "avail", "avl", "wt", "weight", "kg", "cost", "req", "requisition"];
 
 /** Share of `pattern` terms that appear within some header. */
@@ -103,7 +106,21 @@ export function classifyTable(table: DetectedTable): Classification {
     const gearSignals = GEAR_SIGNALS.filter((s) =>
         headers.some((h) => h.split(/[^a-z]+/u).includes(s)),
     ).length;
-    if (gearSignals > 0) {
+    // One gear signal among columns no item field holds (a price beside a
+    // territory's status and a roll to arrive) is a rules table, not a catalogue.
+    const unheld = headers
+        .slice(1)
+        .filter(
+            (h) => headerRole(h) === null && !GEAR_SIGNALS.some((s) => h.split(/[^a-z]+/u).includes(s)),
+        ).length;
+    // A caption that names the price ("Material Costs") says the table is a price list.
+    const pricedCaption = GEAR_SIGNALS.some((s) =>
+        (table.tableTitle ?? "")
+            .toLowerCase()
+            .split(/[^a-z]+/u)
+            .some((w) => w === s || w === `${s}s`),
+    );
+    if (gearSignals > 0 && (gearSignals >= 2 || pricedCaption || unheld < MAX_UNHELD_BESIDE_ONE_SIGNAL)) {
         return { contentType: "gear", confidence: gearSignals >= 2 ? 0.6 : 0.4 };
     }
     if (headers.some((h) => /^d\d+$/u.test(h) || h.includes("roll"))) {

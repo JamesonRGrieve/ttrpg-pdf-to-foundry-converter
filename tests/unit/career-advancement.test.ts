@@ -92,6 +92,24 @@ describe("a career's advancement tables", () => {
         ).toEqual({ weaponSkill: { simple: 250, intermediate: 500, trained: 750, expert: 1000 } });
     });
 
+    it("reads a cost table headed otherwise whose rows are characteristics, a figure sharing the name's cell", () => {
+        expect(
+            isCharacteristicCostTable(
+                ["Level Simple", "Intermediate Trained Expert"],
+                ["Agility 200", "Fellowship 500"],
+            ),
+        ).toBe(true);
+        expect(
+            isCharacteristicCostTable(
+                ["Level Simple", "Intermediate Trained Expert"],
+                ["Lamps 1", "Wicks 2"],
+            ),
+        ).toBe(false);
+        expect(characteristicCosts([["", "Agility 200", "500 1,000 1,500"]])).toEqual({
+            agility: { simple: 200, intermediate: 500, trained: 1000, expert: 1500 },
+        });
+    });
+
     it("reads a rank's advances: specialisation, multiplier, type and typed prerequisites", () => {
         const headers = ["Advance", "Cost", "Type Prerequisites"];
         expect(
@@ -246,6 +264,50 @@ describe("a career's advancement tables", () => {
         expect(rankNamed("CHANDLER ADVANCES", ranks, new Set())).toBeUndefined();
     });
 
+    it("gives a numbered rank the XP a table of numbered ranks starts it at", () => {
+        const career: Entity = {
+            blockId: "b",
+            documentType: "Item",
+            group: "dw",
+            pack: "p",
+            ordinal: 1,
+            fields: { name: "Lampwright", type: "originPath", system: { step: "career" } },
+            images: {},
+            provenance: { pageIndex: 3, y: 0 },
+        };
+        attachCareerAdvancement(
+            [career],
+            [
+                {
+                    kind: "ranks",
+                    pageIndex: 1,
+                    column: 0,
+                    top: 500,
+                    heading: "",
+                    headers: ["Rank", "XP Level"],
+                    rows: [
+                        ["1", "1,000–1,999"],
+                        ["2", "2,000–2,999"],
+                    ],
+                },
+                {
+                    kind: "advances",
+                    pageIndex: 4,
+                    column: 0,
+                    top: 500,
+                    heading: "RANK 2 LAMPWRIGHT ADVANCES",
+                    headers: ["Advance", "Cost", "Type"],
+                    rows: [["Glazing", "200", "Skill"]],
+                },
+            ],
+            kindOf,
+        );
+        const advancement = (
+            career.fields["system"] as { careerAdvancement: { ranks: { rank: number; minXp: number }[] } }
+        ).careerAdvancement;
+        expect(advancement.ranks.map((r) => [r.rank, r.minXp])).toEqual([[2, 2000]]);
+    });
+
     it("gives a titled table its rank's number, title and starting XP", () => {
         const career: Entity = {
             blockId: "b",
@@ -357,7 +419,7 @@ describe("a career's advancement tables", () => {
         expect(isAdvanceHeaderRow(["Advance", "100", "Skill"])).toBe(false);
     });
 
-    it("reads a row from its cost: initials for the type, a name sharing the cost's cell, prose before the name", () => {
+    it("reads a row from its cost: initials for the type, a name sharing the cost's cell, prose before the name, a +10 as level 2", () => {
         expect(
             rankAdvances(
                 ["Advance", "Cost", "Type"],
@@ -370,9 +432,10 @@ describe("a career's advancement tables", () => {
             ),
         ).toEqual([
             {
-                name: "Trimming +10",
+                name: "Trimming",
                 cost: 100,
                 type: "skill",
+                level: 2,
                 prerequisites: [{ type: "skill", key: "Trimming" }],
             },
             {
@@ -383,5 +446,8 @@ describe("a career's advancement tables", () => {
             },
             { name: "Wick Ward", cost: 300, type: "talent", prerequisites: [] },
         ]);
+        expect(
+            rankAdvances(["Advance", "Cost", "Type"], [["Steady Glow\u2021", "300", "Talent"]], kindOf),
+        ).toEqual([{ name: "Steady Glow", cost: 300, type: "talent", prerequisites: [] }]);
     });
 });
