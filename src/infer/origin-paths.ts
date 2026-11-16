@@ -616,6 +616,7 @@ function grantsOf(
     let modifiers: Record<string, number> = {};
     let woundsFormula = "";
     let fateThreshold = 0;
+    let fateFormula: string | undefined;
     const resources: Record<string, number> = {};
     let psyker = false;
     for (const entry of labels) {
@@ -645,6 +646,13 @@ function grantsOf(
                 modifiers = characteristicModifiers(value);
                 break;
             case "fate": {
+                // A roll's bands ("on a 1–5 … 1 Fate Point; on a 6–9 … 2") are the
+                // formula the system rolls, "(lo-hi|=n)" each.
+                const bands = fateBands(value);
+                if (bands !== null) {
+                    fateFormula = bands;
+                    break;
+                }
                 // A signed value ("+1") changes the character's Fate; a bare one is the threshold.
                 const bonus = signedBonus(value);
                 if (bonus === null) {
@@ -781,7 +789,7 @@ function grantsOf(
         ...(requirements === undefined ? {} : { requirements }),
         grants: {
             woundsFormula,
-            fateFormula: fateThreshold > 0 ? String(fateThreshold) : "",
+            fateFormula: fateFormula ?? (fateThreshold > 0 ? String(fateThreshold) : ""),
             fateThreshold,
             blessedByEmperor: false,
             skills,
@@ -917,6 +925,54 @@ function cleanlySpelt(name: string, heading: string, entries: readonly Entry[]):
         }
     }
     return name;
+}
+
+/**
+ * A die roll's bands of a resource ("On a 1–5, you begin with 1 Fate Point;
+ * on a 6–9, … 2; on a 10, … 3") as the system's banded formula,
+ * "(1-5|=1),(6-9|=2),(10-10|=3)"; null unless at least two bands are printed.
+ */
+export function fateBands(text: string): string | null {
+    const bands: string[] = [];
+    for (const clause of text.split(/[;.]/u)) {
+        const m = /\bon an?\s+(\d+)(?:\s*[-–—]\s*(\d+))?\b\D*?(\d+)/iu.exec(clause);
+        if (m?.[1] !== undefined && m[3] !== undefined) {
+            bands.push(`(${m[1]}-${m[2] ?? m[1]}|=${m[3]})`);
+        }
+    }
+    return bands.length >= 2 ? bands.join(",") : null;
+}
+
+/** A roll table's row naming one option: its range, then the option's name and a colon. */
+const LISTED_ROW = /\b\d{1,3}\s*[-–]\s*\d{1,3}\s+(\p{Lu}[\p{L}'’ -]{1,40}?)\s*:/gu;
+
+/** Pages past its first named heading a listed origin's rules may run on. */
+const LISTED_PAGE_REACH = 3;
+
+/** Fewest named rows that make a roll table a list of a step's origins. */
+const MIN_LISTED = 3;
+
+/**
+ * The origins a roll table lists by name ("01–15 <Name>: <what it is>"),
+ * keyed by the name's letters: a table whose text names a creation step
+ * lists that step's origins.
+ */
+function listedOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): Map<string, { name: string; step: OriginStepDef }> {
+    const out = new Map<string, { name: string; step: OriginStepDef }>();
+    for (const entry of entries) {
+        const names = [...entry.body.matchAll(LISTED_ROW)].map((m) => (m[1] ?? "").trim());
+        const step = stepNamedIn(`${entry.heading.text} ${entry.body}`, steps, true, false);
+        if (step === undefined || names.length < MIN_LISTED) {
+            continue;
+        }
+        for (const name of names) {
+            out.set(letters(name), { name, step });
+        }
+    }
+    return out;
 }
 
 /** Whether every word of `name` is a grant label's, a connecting word or "advance(s)". */
@@ -1503,6 +1559,100 @@ export function readHeadedOrigins(
     return out;
 }
 
+/** A heading labelled as an origin ("Origin: <Name>"). */
+const ORIGIN_LABEL = /^\s*origin\s*:\s*(\S.*)$/iu;
+
+/**
+ * Origins each printed under a heading labelled as one ("Origin: <Name>"),
+ * their rules in the prose beneath. An origin so labelled is one of the
+ * creation path's first step, where a character's origin is chosen.
+ */
+export function readLabelledOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const first = [...steps].sort((a, b) => a.index - b.index)[0];
+    if (first === undefined) {
+        return [];
+    }
+    const reading = (name: string, pageIndex: number, description: string): OriginPathReading => ({
+        name: properName(name),
+        step: first,
+        pageIndex,
+        description,
+        grants: {},
+        modifiers: {},
+    });
+    return entries.flatMap((entry): OriginPathReading[] => {
+        const own = ORIGIN_LABEL.exec(entry.heading.text)?.[1]?.trim();
+        // A labelled heading the text layer ran into the entry before reads as its field.
+        const fielded = entry.fields
+            .filter(([label, value]) => /^\s*origin\s*$/iu.test(label) && letters(value).length > 0)
+            .map(([, value]) => reading(value.trim(), entry.heading.pageIndex, ""));
+        return [
+            ...(own === undefined || letters(own).length === 0
+                ? []
+                : [reading(own, entry.heading.pageIndex, entry.body)]),
+            ...fielded,
+        ];
+    });
+}
+
+/**
+ * Origins each printed as a variant of one a step's roll table lists,
+ * "<Name> (<Listed Origin>)": an origin of that step, named without the
+ * parenthesis, described by the prose beneath.
+ */
+export function readVariantOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const listed = listedOrigins(entries, steps);
+    return entries.flatMap((entry): OriginPathReading[] => {
+        const m = /^(.*?\S)\s*\(([^()]+)\)\s*$/u.exec(entry.heading.text.trim());
+        const of =
+            m?.[2] === undefined
+                ? undefined
+                : (listed.get(letters(m[2])) ?? listed.get(letters(m[2]).replace(/s$/u, "")));
+        const name = m?.[1];
+        if (
+            of === undefined ||
+            name === undefined ||
+            letters(name).length === 0 ||
+            listed.has(letters(name))
+        ) {
+            return [];
+        }
+        return [
+            {
+                name:
+                    caseLost(name) || !/\p{Ll}/u.test(name)
+                        ? capitalizeWords(name.toLowerCase())
+                        : properName(name),
+                step: of.step,
+                pageIndex: entry.heading.pageIndex,
+                description: entry.body,
+                grants: {},
+                modifiers: {},
+            },
+        ];
+    });
+}
+
+/** A heading's name with each word capitalised where the type set it lower-case, a roman numeral in capitals. */
+function properName(name: string): string {
+    return name
+        .split(/\s+/u)
+        .map((w, i) =>
+            i > 0 && /^[ivx]+$/iu.test(w)
+                ? w.toUpperCase()
+                : i > 0 && FUNCTION_WORDS.has(w.toLowerCase())
+                  ? w
+                  : w.charAt(0).toUpperCase() + w.slice(1),
+        )
+        .join(" ");
+}
+
 /**
  * The headings directly beneath `entries[index]`, read on until its section
  * closes; headings nested deeper are passed over (two columns can set a
@@ -1533,6 +1683,10 @@ export function readOriginPaths(
     runningHeads: ReadonlyMap<number, readonly string[]>,
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
+    const listed = listedOrigins(entries, steps);
+    const listedAs = (owner: Entry): { name: string; step: OriginStepDef } | undefined =>
+        listed.get(letters(headingName(owner.heading.text))) ??
+        listed.get(letters(headingName(owner.heading.text)).replace(/s$/u, ""));
     const readAt = (
         owner: Entry,
         i: number,
@@ -1547,6 +1701,8 @@ export function readOriginPaths(
                 .find((s) => s !== undefined) ??
             stepOfSections(owner.sections, steps) ??
             stepOfSections(runningHeads.get(owner.heading.pageIndex) ?? [], steps) ??
+            // A heading a table of the step's origins lists by name.
+            listedAs(owner)?.step ??
             // A rules block with an experience cost is the step bought with experience.
             (fielded.some((l) => labelField(l.heading.text) === "xpCost")
                 ? steps.find((s) => s.boughtWithXp === true)
@@ -1593,7 +1749,9 @@ export function readOriginPaths(
             .reverse()
             .find((e) => e.heading.text === head.heading.text && e.body.length > 0);
         const name =
-            extended?.words ?? cleanlySpelt(headingName(head.heading.text), head.heading.text, entries);
+            extended?.words ??
+            listedAs(head)?.name ??
+            cleanlySpelt(headingName(head.heading.text), head.heading.text, entries);
         // A heading of grant labels alone ("Skill and Talent Advances") explains them; it names no origin.
         if (labelWordsOnly(name)) {
             return undefined;
@@ -1638,6 +1796,82 @@ export function readOriginPaths(
             read.set(i, reading);
         }
     });
+    // A listed origin whose own heading went unread (a display face) is read
+    // from the headings that carry its name ("<Name> Skills", "<Name> Traits")
+    // and the bare labels among them ("Starting Wounds"), up to the next
+    // listed origin's.
+    const readNames = new Set([...read.values()].map((r) => letters(r.name)));
+    const startsWith = (name: string, heading: string): boolean =>
+        letters(heading).startsWith(letters(name)) && letters(heading) !== letters(name);
+    // A listed origin read twice (its heading set twice over) is one origin.
+    const firstOf = new Map<string, number>();
+    for (const [i, r] of [...read.entries()].sort(([a], [b]) => a - b)) {
+        const key = `${r.step.key}:${letters(r.name)}`;
+        if (listed.has(letters(r.name)) && firstOf.has(key)) {
+            read.delete(i);
+        } else {
+            firstOf.set(key, i);
+        }
+    }
+    for (const { name, step } of listed.values()) {
+        const already = firstOf.get(`${step.key}:${letters(name)}`);
+        const first = entries.findIndex((e) => startsWith(name, e.heading.text));
+        if (first < 0) {
+            continue;
+        }
+        // Its labels are set alike: those that carry its name, and bare ones
+        // ("Starting Wounds") in the same style (not a rule that happens to hold a label word).
+        const named = entries
+            .slice(first)
+            .find((e) => startsWith(name, e.heading.text) && labelField(e.heading.text) !== undefined);
+        const labels: Entry[] = [];
+        for (const e of entries.slice(first)) {
+            const other = [...listed.values()].some(
+                (l) =>
+                    letters(l.name) !== letters(name) && letters(e.heading.text).startsWith(letters(l.name)),
+            );
+            if (other || e.heading.pageIndex > (entries[first]?.heading.pageIndex ?? 0) + LISTED_PAGE_REACH) {
+                break;
+            }
+            if (
+                labelField(e.heading.text) !== undefined &&
+                (startsWith(name, e.heading.text) || e.heading.style === named?.heading.style)
+            ) {
+                labels.push(e);
+            }
+        }
+        if (
+            labels.filter((l) => !PROSE_FIELDS.has(labelField(l.heading.text) ?? "changes")).length <
+            MIN_GRANT_LABELS
+        ) {
+            continue;
+        }
+        const reading = grantsOf(labels, (label) => childrenOf(entries, entries.indexOf(label)));
+        if (!grantsAnything(reading)) {
+            continue;
+        }
+        const held = already === undefined ? undefined : read.get(already);
+        if (held !== undefined && already !== undefined) {
+            // Read already from its heading: its labels fill what that reading left empty.
+            const grants: JsonObject = { ...held.grants };
+            for (const [field, value] of Object.entries(reading.grants)) {
+                const own = grants[field];
+                if (own === undefined || own === "" || (Array.isArray(own) && own.length === 0)) {
+                    grants[field] = value;
+                }
+            }
+            read.set(already, { ...held, grants });
+            continue;
+        }
+        read.set(first, {
+            name,
+            step,
+            pageIndex: entries[first]?.heading.pageIndex ?? 0,
+            description: entries[first]?.body ?? "",
+            ...reading,
+        });
+        readNames.add(letters(name));
+    }
     out.push(...[...read.entries()].sort(([a], [b]) => a - b).map(([, r]) => r));
     return out;
 }

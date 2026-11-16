@@ -100,6 +100,8 @@ import {
     pairsSteps,
     readEffectOrigins,
     readHeadedOrigins,
+    readLabelledOrigins,
+    readVariantOrigins,
     withCitedOrigins,
     readOriginTable,
     sameOrigin,
@@ -1959,7 +1961,11 @@ function extractOriginPaths(
     // repeat its name; one read no other way joins the rest.
     const origins = [
         ...cited,
-        ...headed.filter(
+        ...[
+            ...headed,
+            ...readLabelledOrigins(entries, out.target.originSteps),
+            ...readVariantOrigins(entries, out.target.originSteps),
+        ].filter(
             (o) =>
                 !tabled.has(o.step.key) &&
                 !cited.some((c) => c.step.key === o.step.key && sameOrigin(c.name, o.name)),

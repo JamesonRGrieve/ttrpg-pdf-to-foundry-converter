@@ -153,6 +153,10 @@ describe("a career's advancement tables", () => {
             { type: "skill", key: "Trimming", value: 10 },
             { type: "talent", key: "Lamp Rating", value: 3 },
         ]);
+        expect(advancePrerequisites("Psy Rating 4, Psy Rating", kindOf)).toEqual([
+            { type: "psyRating", key: "", value: 4 },
+            { type: "psyRating", key: "", value: 1 },
+        ]);
     });
 
     it("gives each career the tables its heading names, or that follow its entry; every numbered rank", () => {

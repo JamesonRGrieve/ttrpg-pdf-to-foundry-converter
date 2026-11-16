@@ -352,6 +352,12 @@ export function advancePrerequisites(printed: string, kindOf: KindOf): JsonObjec
             out.push({ type: "characteristic", key, value: Number(characteristic.m[1]) });
             continue;
         }
+        // A psy rating is a number on the actor, not a talent: any ("Psy Rating") is at least 1.
+        const psy = PSY_RATING.exec(part);
+        if (psy !== null) {
+            out.push({ type: "psyRating", key: "", value: Number(psy[1] ?? 1) });
+            continue;
+        }
         // A skill's rank ("Pilot (Personal) +10") or a talent's number ("<Talent> 4")
         // is the prerequisite's value.
         const ranked = /^(.*?\S)\s*\+\s*(\d+)$/u.exec(part) ?? /^(.*?\S)\s+(\d+)$/u.exec(part);
@@ -369,6 +375,9 @@ export function advancePrerequisites(printed: string, kindOf: KindOf): JsonObjec
     }
     return out;
 }
+
+/** A psy rating minimum, the schema's `psyRating` prerequisite: "Psy Rating 3", or any rating. */
+const PSY_RATING = /^psy\s*rating\s*(\d+)?\s*\+?$/iu;
 
 /** A heading naming a table of advances ("<Name> Advances"): a table of its own, never a run-on. */
 const ADVANCES_HEADING = /\badvances?\s*$/iu;

@@ -12,6 +12,8 @@ import {
     pairsSteps,
     readCitedOrigins,
     readHeadedOrigins,
+    readLabelledOrigins,
+    readVariantOrigins,
     readEffectOrigins,
     readFieldedOrigins,
     readInlineOrigins,
@@ -945,6 +947,62 @@ describe("rules blocks named by labels alone", () => {
             entry("Talents", 4, [...book, "SKILL AND TALENT ADVANCES"], "Wick Ward"),
         ];
         expect(readOriginPaths(entries, STEPS, NO_HEADS)).toEqual([]);
+    });
+});
+
+describe("origins a step's roll table lists", () => {
+    const home = TARGETS.dh1.originSteps;
+    const book = ["Making a Lamplighter"];
+    const table = entry(
+        "Roll Result (D100)",
+        2,
+        book,
+        "Roll on Table 1-1: Random Home World. 01-30 Wick World: Born to wicks. 31-60 Glass Hive: Born to glass. 61-90 Reed Fen: Born to reeds. 91-00 Oil Born: Born to oil.",
+    );
+
+    it("reads a heading the table names, plural, as an origin of that step, with its banded fate", () => {
+        const entries: Entry[] = [
+            table,
+            entry("Wick Worlds", 3, book, "Worlds of wicks."),
+            entry("WICK WORLD SKILLS", 3, [...book, "Wick Worlds"], "Trimming (Int)."),
+            entry("WICK WORLD TRAITS", 3, [...book, "Wick Worlds"], "Steady hands."),
+            entry(
+                "FATE POINTS",
+                3,
+                [...book, "Wick Worlds"],
+                "Roll 1d10. On a 1–5, you begin with 1 Fate Point; on a 6–9, you begin with 2 Fate Points; on a 10 you begin with 3 Fate Points.",
+            ),
+        ];
+        const read = readOriginPaths(entries, home, NO_HEADS);
+        expect(read.map((o) => [o.name, o.step.key])).toEqual([["Wick World", "homeWorld"]]);
+        expect(read[0]?.grants["fateFormula"]).toBe("(1-5|=1),(6-9|=2),(10-10|=3)");
+    });
+
+    it("reads a listed origin whose own heading went unread from the headings that carry its name", () => {
+        const entries: Entry[] = [
+            table,
+            entry("Reed Fen PCs", 5, book, "Fen folk."),
+            entry("REED FEN SKILLS", 5, book, "Wading (Ag)."),
+            entry("REED FEN TRAITS", 5, book, "Webbed toes."),
+        ];
+        expect(readOriginPaths(entries, home, NO_HEADS).map((o) => o.name)).toEqual(["Reed Fen"]);
+    });
+
+    it('reads a variant of a listed origin, "<Name> (<Origin>)", and a heading labelled Origin', () => {
+        const entries: Entry[] = [table, entry("DUSKMIRE (REED FEN)", 7, book, "A darker fen.")];
+        expect(readVariantOrigins(entries, home).map((o) => [o.name, o.step.key])).toEqual([
+            ["Duskmire", "homeWorld"],
+        ]);
+        const labelled: Entry[] = [
+            {
+                ...entry("Origin: lamp station ii", 8, book, "A station of lamps."),
+                fields: [["Origin", "Wick-71"]],
+            },
+        ];
+        expect(readLabelledOrigins(labelled, home).map((o) => o.name)).toEqual([
+            "Lamp Station II",
+            "Wick-71",
+        ]);
     });
 });
 
