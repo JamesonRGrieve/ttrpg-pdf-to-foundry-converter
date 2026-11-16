@@ -511,6 +511,7 @@ export function attachCareerAdvancement(
     careers: readonly Entity[],
     tables: readonly AdvancementTable[],
     defined: KindOf,
+    others: readonly Entity[] = [],
 ): void {
     const ordered = [...tables].sort(
         (a, b) => a.pageIndex - b.pageIndex || a.column - b.column || b.top - a.top,
@@ -607,6 +608,30 @@ export function attachCareerAdvancement(
         }
         const number = table.kind === "advances" ? rankOf(table.heading) : null;
         const naming = table.kind === "characteristics" || number !== null ? named(table.heading) : undefined;
+        // A table naming no rank and no career but an origin of another step
+        // ("<Origin> Advances") is that origin's own advances, open from rank 1.
+        const otherOrigin =
+            number === null && naming === undefined && table.kind === "advances"
+                ? [...others]
+                      .filter((o) => {
+                          const key = nameKey(String(o.fields["name"]));
+                          return key.length > 0 && nameKey(table.heading).includes(key);
+                      })
+                      .sort((a, b) => String(b.fields["name"]).length - String(a.fields["name"]).length)[0]
+                : undefined;
+        if (otherOrigin !== undefined) {
+            const into = found.get(otherOrigin) ?? { costs: {}, ranks: [] };
+            found.set(otherOrigin, into);
+            let entry = into.ranks.find((r) => r.rank === 1 && r.title === "");
+            if (entry === undefined) {
+                entry = { rank: 1, title: "", minXp: null, advances: [] };
+                into.ranks.push(entry);
+            }
+            entry.advances.push(...rankAdvances(table.headers, table.rows, kindOf));
+            previous = null;
+            lastShared = null;
+            continue;
+        }
         const owner = naming ?? following(table.pageIndex);
         // A rank's table naming no career, read before any career is entered,
         // is offered to every career at that rank.

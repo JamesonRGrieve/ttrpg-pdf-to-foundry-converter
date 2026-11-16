@@ -3373,6 +3373,16 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
         }),
         target.careerStep === undefined ? advancement : [...advancement, ...rankCharts(ir)],
         kindsOf(out.entities),
+        // Origins of the other steps, whose own advance tables they hold.
+        out.entities.filter((e) => {
+            const system = e.fields["system"];
+            return (
+                e.fields["type"] === "originPath" &&
+                isJsonObject(system) &&
+                target.careerStep !== undefined &&
+                system["step"] !== target.careerStep
+            );
+        }),
     );
     const entities = consolidate(out.entities, descriptions, headedProse(detected), line, log);
     applyHeadedRules(entities, headedRules(detected), line);
