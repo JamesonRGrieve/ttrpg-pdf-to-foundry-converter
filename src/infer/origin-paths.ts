@@ -919,6 +919,20 @@ function cleanlySpelt(name: string, heading: string, entries: readonly Entry[]):
     return name;
 }
 
+/** Whether every word of `name` is a grant label's, a connecting word or "advance(s)". */
+function labelWordsOnly(name: string): boolean {
+    const words = name.split(/\s+/u).filter((w) => letters(w).length > 0);
+    return (
+        words.length > 0 &&
+        words.every(
+            (w) =>
+                FUNCTION_WORDS.has(letters(w)) ||
+                labelField(w) !== undefined ||
+                /^advances?$/iu.test(letters(w)),
+        )
+    );
+}
+
 /** A character no word's letters hold (a bracket, a bar), standing where a display initial was misread. */
 const MISREAD_MARK = /[[\]|{}\\]/u;
 
@@ -1578,9 +1592,15 @@ export function readOriginPaths(
         const intro = [...before, head]
             .reverse()
             .find((e) => e.heading.text === head.heading.text && e.body.length > 0);
+        const name =
+            extended?.words ?? cleanlySpelt(headingName(head.heading.text), head.heading.text, entries);
+        // A heading of grant labels alone ("Skill and Talent Advances") explains them; it names no origin.
+        if (labelWordsOnly(name)) {
+            return undefined;
+        }
         return {
             // The rules heading's own words spell the name most cleanly.
-            name: extended?.words ?? cleanlySpelt(headingName(head.heading.text), head.heading.text, entries),
+            name,
             step,
             pageIndex: (intro ?? head).heading.pageIndex,
             description: intro?.body ?? "",

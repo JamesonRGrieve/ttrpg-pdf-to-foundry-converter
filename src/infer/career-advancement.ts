@@ -4,6 +4,7 @@ import type { IR, IRTextRun } from "../types/ir.ts";
 import { groupByBaseline } from "../util/baselines.ts";
 import { CHARACTERISTICS } from "./entry-types.ts";
 import { titleCase } from "./names.ts";
+import { loreKindFirst } from "./npc-skills.ts";
 
 /**
  * A career's advancement tables, as the schema's `careerAdvancement` holds
@@ -329,9 +330,7 @@ export function characteristicCosts(rows: readonly (readonly string[])[]): JsonO
 export type KindOf = (name: string) => "talent" | "trait" | "skill" | null;
 
 /** Characteristic names a prerequisite may print, longest first. */
-const PREREQUISITE_CHARACTERISTICS = Object.keys(CHARACTERISTICS)
-    .filter((name) => name.length > 1)
-    .sort((a, b) => b.length - a.length);
+const PREREQUISITE_CHARACTERISTICS = Object.keys(CHARACTERISTICS).sort((a, b) => b.length - a.length);
 
 /**
  * A printed prerequisite as the schema's `{type, key, value?}`: a
@@ -353,13 +352,26 @@ export function advancePrerequisites(printed: string, kindOf: KindOf): JsonObjec
             out.push({ type: "characteristic", key, value: Number(characteristic.m[1]) });
             continue;
         }
-        const kind = kindOf(part);
+        // A skill's rank ("Pilot (Personal) +10") or a talent's number ("<Talent> 4")
+        // is the prerequisite's value.
+        const ranked = /^(.*?\S)\s*\+\s*(\d+)$/u.exec(part) ?? /^(.*?\S)\s+(\d+)$/u.exec(part);
+        const whole = kindOf(part);
+        const named = whole === null ? (ranked?.[1] ?? part) : part;
+        const kind = whole ?? kindOf(named);
         if (kind !== null) {
-            out.push({ type: kind, key: part });
+            const key = kind === "skill" ? loreKindFirst(named) : named;
+            out.push(
+                named !== part && ranked?.[2] !== undefined
+                    ? { type: kind, key, value: Number(ranked[2]) }
+                    : { type: kind, key },
+            );
         }
     }
     return out;
 }
+
+/** A heading naming a table of advances ("<Name> Advances"): a table of its own, never a run-on. */
+const ADVANCES_HEADING = /\badvances?\s*$/iu;
 
 /** A cost: a whole number, thousands perhaps grouped. */
 const COST = /^\d[\d,]*$/u;
@@ -449,7 +461,7 @@ export function rankAdvances(
             name = special[1].trim();
             advance["specialization"] = special[2].trim();
         }
-        advance["name"] = name;
+        advance["name"] = type === "skill" ? loreKindFirst(name) : name;
         const printed = [typed?.[2] ?? "", ...row.slice(typeAt + 1)].join(" ").trim();
         advance["prerequisites"] = advancePrerequisites(printed, kindOf);
         out.push(advance);
@@ -489,7 +501,7 @@ interface RankEntry {
 export function attachCareerAdvancement(
     careers: readonly Entity[],
     tables: readonly AdvancementTable[],
-    kindOf: KindOf,
+    defined: KindOf,
 ): void {
     const ordered = [...tables].sort(
         (a, b) => a.pageIndex - b.pageIndex || a.column - b.column || b.top - a.top,
@@ -516,11 +528,40 @@ export function attachCareerAdvancement(
             ? current.career
             : entered;
     };
+    // The advance tables say what each name is (their Type column): a
+    // prerequisite naming one is typed by it, by its name without a
+    // specialisation or rank when the document defines no document for it.
+    const listed = new Map<string, "skill" | "talent">();
+    for (const t of tables) {
+        if (t.kind !== "advances") {
+            continue;
+        }
+        for (const a of rankAdvances(t.headers, t.rows, () => null)) {
+            listed.set(nameKey(String(a["name"])), a["type"] === "skill" ? "skill" : "talent");
+        }
+    }
+    const typed: KindOf = (name) => {
+        const base = loreKindFirst(name).replace(/\s*\([^()]*\)\s*$/u, "");
+        return (
+            defined(name) ??
+            defined(base) ??
+            listed.get(nameKey(loreKindFirst(name))) ??
+            listed.get(nameKey(base)) ??
+            null
+        );
+    };
+    const kindOf = typed;
     const printed = new Map<Entity, PrintedRank[]>();
     let pendingChart = null as AdvancementTable | null;
     const claimed = new Set<PrintedRank>();
     const found = new Map<Entity, { costs: JsonObject; ranks: RankEntry[] }>();
     let previous = null as { career: Entity; entry: RankEntry } | null;
+    // Careers some table's heading names: only these have tables of their own.
+    const namedByTable = new Set(
+        tables.map((t) => named(t.heading)).filter((c): c is Entity => c !== undefined),
+    );
+    const shared = new Map<number, JsonObject[]>();
+    let lastShared = null as number | null;
     // A table of ranks printed as numbers ("1", "2", …) gives where each numbered rank starts, for every career.
     const numberedXp = new Map<number, number>();
     for (const table of ordered) {
@@ -558,6 +599,24 @@ export function attachCareerAdvancement(
         const number = table.kind === "advances" ? rankOf(table.heading) : null;
         const naming = table.kind === "characteristics" || number !== null ? named(table.heading) : undefined;
         const owner = naming ?? following(table.pageIndex);
+        // A rank's table naming no career, read before any career is entered,
+        // is offered to every career at that rank.
+        // One run on under a stray line, naming no rank, continues the shared table before it.
+        const sharedRank =
+            number ??
+            (naming === undefined && owner === undefined && !ADVANCES_HEADING.test(table.heading)
+                ? lastShared
+                : null);
+        if (sharedRank !== null && naming === undefined && owner === undefined) {
+            shared.set(sharedRank, [
+                ...(shared.get(sharedRank) ?? []),
+                ...rankAdvances(table.headers, table.rows, kindOf),
+            ]);
+            lastShared = sharedRank;
+            previous = null;
+            continue;
+        }
+        lastShared = null;
         if (owner === undefined) {
             previous = null;
             continue;
@@ -657,6 +716,19 @@ export function attachCareerAdvancement(
             }
             entry.advances.push(...advances);
             previous = { career: owner, entry };
+        }
+    }
+    for (const [career, into] of found) {
+        if (!namedByTable.has(career)) {
+            continue;
+        }
+        for (const [number, advances] of shared) {
+            let entry = into.ranks.find((r) => r.rank === number && r.title === "");
+            if (entry === undefined) {
+                entry = { rank: number, title: "", minXp: null, advances: [] };
+                into.ranks.push(entry);
+            }
+            entry.advances.push(...advances);
         }
     }
     for (const [career, { costs, ranks }] of found) {

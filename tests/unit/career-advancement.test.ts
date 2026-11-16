@@ -147,6 +147,14 @@ describe("a career's advancement tables", () => {
         expect(advancePrerequisites("—", kindOf)).toEqual([]);
     });
 
+    it("reads a single-letter characteristic, a skill's rank and a talent's number as the prerequisite's value", () => {
+        expect(advancePrerequisites("S 40, Trimming +10, Lamp Rating 3", kindOf)).toEqual([
+            { type: "characteristic", key: "strength", value: 40 },
+            { type: "skill", key: "Trimming", value: 10 },
+            { type: "talent", key: "Lamp Rating", value: 3 },
+        ]);
+    });
+
     it("gives each career the tables its heading names, or that follow its entry; every numbered rank", () => {
         const career = (name: string, pageIndex: number): Entity => ({
             blockId: "b",
@@ -262,6 +270,47 @@ describe("a career's advancement tables", () => {
             ranks[4],
         );
         expect(rankNamed("CHANDLER ADVANCES", ranks, new Set())).toBeUndefined();
+    });
+
+    it("offers a rank's table naming no career, set before every career, to each career at that rank", () => {
+        const career = (name: string, pageIndex: number): Entity => ({
+            blockId: name,
+            documentType: "Item",
+            group: "dw",
+            pack: "p",
+            ordinal: 1,
+            fields: { name, type: "originPath", system: { step: "career" } },
+            images: {},
+            provenance: { pageIndex, y: 0 },
+        });
+        const wright = career("Lampwright", 10);
+        const keeper = career("Wick-Keeper", 14);
+        const at = (pageIndex: number, top: number, heading: string, rows: string[][]): AdvancementTable => ({
+            kind: "advances",
+            pageIndex,
+            column: 0,
+            top,
+            heading,
+            headers: ["Advance", "Cost", "Type"],
+            rows,
+        });
+        attachCareerAdvancement(
+            [wright, keeper],
+            [
+                at(5, 700, "RANK 1 GUILD ADVANCES", [["Polish", "100", "Skill"]]),
+                // Run on under a stray line: still the shared rank 1.
+                at(5, 400, "a", [["Buff", "100", "Skill"]]),
+                at(11, 700, "RANK 1 LAMPWRIGHT ADVANCES", [["Trimming", "100", "Skill"]]),
+                at(15, 700, "RANK 1 WICK-KEEPER ADVANCES", [["Snuffing", "200", "Talent", "Trimming"]]),
+            ],
+            kindOf,
+        );
+        const names = (e: Entity): unknown =>
+            (
+                e.fields["system"] as { careerAdvancement: { ranks: { advances: { name: string }[] }[] } }
+            ).careerAdvancement.ranks.map((r) => r.advances.map((a) => a.name));
+        expect(names(wright)).toEqual([["Trimming", "Polish", "Buff"]]);
+        expect(names(keeper)).toEqual([["Snuffing", "Polish", "Buff"]]);
     });
 
     it("gives a numbered rank the XP a table of numbered ranks starts it at", () => {

@@ -114,6 +114,11 @@ function printedList(line: string): string {
     );
 }
 
+/** A lore printed kind-last ("Lore: Scholastic (Wards)") as the skill it is ("Scholastic Lore (Wards)"). */
+export function loreKindFirst(name: string): string {
+    return name.replace(/^Lore:?\s+(\p{L}+)\b/u, "$1 Lore");
+}
+
 export function listedSkills(line: string): ListedSkill[] {
     const out: ListedSkill[] = [];
     // A characteristic tag closes its entry: one run into the next with no
@@ -128,8 +133,7 @@ export function listedSkills(line: string): ListedSkill[] {
             .replace(/[.;\s]+$/u, "")
             // The list's closing conjunction ("…, and Tracking") is not part of the name.
             .replace(/^(?:and|or)\s+/iu, "")
-            // A lore printed kind-last ("Lore: Scholastic (Wards)") is the "Scholastic Lore" skill.
-            .replace(/^Lore:\s*(\p{L}+)\b/u, "$1 Lore")
+            .replace(/^Lore:\s*\p{L}+\b/u, loreKindFirst)
             .replace(RANK_INSIDE, "($<spec>) $<plus>")
             // A rank printed alone in brackets ("(+20)") leaves none behind.
             .replace(/\s*\(\s*\)/gu, "")

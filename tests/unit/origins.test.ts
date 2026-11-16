@@ -936,6 +936,18 @@ describe("origins each under a heading of their own", () => {
     });
 });
 
+describe("rules blocks named by labels alone", () => {
+    it('reads no origin from a heading of grant labels ("Skill and Talent Advances")', () => {
+        const book = ["Choose the Background"];
+        const entries: Entry[] = [
+            entry("SKILL AND TALENT ADVANCES", 4, book, "How advances are bought."),
+            entry("Skills", 4, [...book, "SKILL AND TALENT ADVANCES"], "Trimming"),
+            entry("Talents", 4, [...book, "SKILL AND TALENT ADVANCES"], "Wick Ward"),
+        ];
+        expect(readOriginPaths(entries, STEPS, NO_HEADS)).toEqual([]);
+    });
+});
+
 describe("misread display initials", () => {
     it("matches a heading word the text layer misread by the ending it shares with the clean spelling", () => {
         expect(wordPrefix("Lamp Warden [TIASTER", "Lamp Warden Master Characteristic Advances")).toBe(

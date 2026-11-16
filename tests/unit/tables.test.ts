@@ -135,4 +135,31 @@ describe("detectTables", () => {
             "Ag 50, Lamp (Wick)",
         ]);
     });
+
+    it("joins a row the layout splits over lines set closer than its rows", () => {
+        const bold = { weight: "bold" as const };
+        const lines: IRTextRun[] = [
+            run("Wick", 50, 700, 30, bold),
+            run("Cost", 150, 700, 30, bold),
+            run("Type", 250, 700, 30, bold),
+            run("Needs", 350, 700, 40, bold),
+        ];
+        const entries: [string, string, string, string, string, string][] = [
+            ["Lamp Lore (Old", "Ways) +10", "400", "Skill", "Lamp Lore (Old", "Ways)"],
+            ["Lamp Lore (Tides)", "+20", "800", "Skill", "Lamp Lore (Tides)", "+10"],
+            ["Lamp Lore (Reeds)", "+20", "400", "Skill", "Lamp Lore (Reeds)", "+10"],
+        ];
+        entries.forEach(([name1, name2, cost, type, need1, need2], k) => {
+            const y = 685 - k * 23;
+            lines.push(run(name1, 50, y, 60), run(need1, 350, y, 60));
+            lines.push(run(cost, 150, y - 5.4, 20), run(type, 250, y - 5.4, 30));
+            lines.push(run(name2, 50, y - 10.8, 30), run(need2, 350, y - 10.8, 30));
+        });
+        const found = detectTables(irOf(lines)).find((t) => t.headers.join("|") === "Wick|Cost|Type|Needs");
+        expect(found?.rows.map((r) => r.cells.map((c) => c.text))).toEqual([
+            ["Lamp Lore (Old Ways) +10", "400", "Skill", "Lamp Lore (Old Ways)"],
+            ["Lamp Lore (Tides) +20", "800", "Skill", "Lamp Lore (Tides) +10"],
+            ["Lamp Lore (Reeds) +20", "400", "Skill", "Lamp Lore (Reeds) +10"],
+        ]);
+    });
 });

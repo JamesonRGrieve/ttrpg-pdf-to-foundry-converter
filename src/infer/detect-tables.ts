@@ -23,6 +23,8 @@ const EDGE_SHARE = 0.3;
 const MIN_WIDE_BLOCK = 2 * MIN_ROWS;
 /** Lines below a table's row a wrapped cell's next line may sit (a row's text is centred between its lines). */
 const WRAP_LINES = 2;
+/** Gap between lines, in type sizes, under which they are one row split over lines. */
+const SPLIT_ROW_GAP = 0.8;
 
 interface RawRow {
     pageIndex: number;
@@ -224,6 +226,8 @@ export function detectTables(ir: IR): DetectedTable[] {
         /** Lines of a cell that wrapped, waiting for the row they belong to. */
         let wrapped: { y: number; cell: TableCell }[] = [];
         let lastRow: { y: number; row: TableRow } | null = null;
+        /** Where each of the table's rows stands. */
+        const rowAt = new Map<TableRow, number>();
         /** Where the table's last line (its header, or a row) stands. */
         let lastY: number | null = null;
         const joinWrapped = (into: TableRow | null): void => {
@@ -313,6 +317,7 @@ export function detectTables(ir: IR): DetectedTable[] {
                         sectionName: null,
                     };
                     tableRows.push(record);
+                    rowAt.set(record, row.y);
                     joinWrapped(record);
                     lastRow = { y: row.y, row: record };
                     lastY = row.y;
@@ -323,7 +328,16 @@ export function detectTables(ir: IR): DetectedTable[] {
             lastRow = null;
             lastY = null;
             if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
-                pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
+                pushTable(
+                    tables,
+                    buildTable(
+                        pageIndex,
+                        headerRow,
+                        joinSplitRows(tableRows, rowAt, tableRuns),
+                        tableRuns,
+                        tableRows,
+                    ),
+                );
                 tableStart = -1;
                 headerRow = null;
                 tableRows.length = 0;
@@ -337,10 +351,62 @@ export function detectTables(ir: IR): DetectedTable[] {
         }
         joinWrapped(null);
         if (tableStart !== -1 && tableRows.length >= MIN_ROWS) {
-            pushTable(tables, buildTable(pageIndex, headerRow, tableRows, tableRuns));
+            pushTable(
+                tables,
+                buildTable(
+                    pageIndex,
+                    headerRow,
+                    joinSplitRows(tableRows, rowAt, tableRuns),
+                    tableRuns,
+                    tableRows,
+                ),
+            );
         }
     }
     return tables;
+}
+
+/**
+ * A table's rows with each row the layout split over several lines put back
+ * together. A row set beside its cells' wrapped lines reads as several lines
+ * closer together than the rows are (a line of some columns, a line of the
+ * others, a line continuing the first): lines nearer each other than a line
+ * of type are one row.
+ */
+function joinSplitRows(
+    rows: readonly TableRow[],
+    rowAt: ReadonlyMap<TableRow, number>,
+    runs: readonly IRTextRun[],
+): TableRow[] {
+    const size = median(runs.map((r) => r.size));
+    const out: TableRow[] = [];
+    let lastY: number | undefined;
+    for (const row of rows) {
+        const y = rowAt.get(row);
+        const last = out.at(-1);
+        if (
+            last !== undefined &&
+            !last.isSectionHeader &&
+            !row.isSectionHeader &&
+            y !== undefined &&
+            lastY !== undefined &&
+            lastY - y < SPLIT_ROW_GAP * size
+        ) {
+            for (const cell of row.cells) {
+                const into = last.cells.find((c) => c.colIndex === cell.colIndex);
+                if (into === undefined) {
+                    last.cells.push({ ...cell });
+                } else {
+                    into.text = `${into.text} ${cell.text}`;
+                }
+            }
+            last.cells.sort((a, b) => a.colIndex - b.colIndex);
+        } else {
+            out.push({ ...row, cells: row.cells.map((c) => ({ ...c })) });
+        }
+        lastY = y;
+    }
+    return out;
 }
 
 /**
@@ -360,8 +426,10 @@ function buildTable(
     headerRow: TableRow | null,
     rows: TableRow[],
     runs: readonly IRTextRun[],
+    lines: readonly TableRow[] = rows,
 ): DetectedTable | null {
-    const cellLengths = rows.flatMap((r) => r.cells.map((c) => c.text.trim().length)).filter((n) => n > 0);
+    // Prose is judged by the lines as set, before a row split over lines is joined.
+    const cellLengths = lines.flatMap((r) => r.cells.map((c) => c.text.trim().length)).filter((n) => n > 0);
     if (median(cellLengths) > PROSE_CELL_LENGTH) {
         return null;
     }

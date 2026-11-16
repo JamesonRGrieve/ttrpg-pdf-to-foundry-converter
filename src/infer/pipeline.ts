@@ -16,6 +16,7 @@ import {
     innerHeaderLines,
     isRankTable,
     type KindOf,
+    rankAdvances,
     rankCharts,
     topLine,
 } from "./career-advancement.ts";
@@ -575,7 +576,21 @@ function extractTables(
                     ),
             );
             const ranks = isRankTable(table.headers);
-            if (costs || ranks || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
+            // A table whose header row went unread (set in the body's face) is
+            // an advance list when its rows read as advances: a cost, then a type.
+            const unheaded =
+                table.headers.length === 0 &&
+                table.rows.length > 0 &&
+                rankAdvances(
+                    [],
+                    table.rows.map((r) =>
+                        [...r.cells].sort((a, b) => a.colIndex - b.colIndex).map((c) => c.text),
+                    ),
+                    () => null,
+                ).length *
+                    2 >
+                    table.rows.length;
+            if (costs || ranks || unheaded || isAdvanceList(columnRoles(table).flatMap((r) => r ?? []))) {
                 toCareer = true;
                 advancement.push({
                     kind: costs ? "characteristics" : ranks ? "ranks" : "advances",
