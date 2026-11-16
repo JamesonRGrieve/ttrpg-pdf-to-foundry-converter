@@ -792,6 +792,12 @@ function withinHeaderSpan(header: RawRow, band: readonly IRTextRun[]): (r: IRTex
     };
 }
 
+/** Where a table read ended at a heading below it, so that heading opens no sub-table. */
+const endedAtHeading = new WeakMap<TitledTable, number>();
+
+/** Fewest records a sub-table holds. */
+const MIN_SUBTABLE_ROWS = 2;
+
 /** Most lines (a note, a section row) between a table's end and a sub-table's header. */
 const MAX_SUBTABLE_LEAD = 3;
 
@@ -810,18 +816,23 @@ function readSubTables(tableRuns: IRTextRun[], title: TitleHit, headerSize: numb
         if (table === null) {
             break;
         }
+        // A sub-table holds records; a heading below the table read as a
+        // header over a single line (a heading's words split into cells) is none.
+        if (out.length > 0 && table.rows.filter((r) => !r.isSectionHeader).length < MIN_SUBTABLE_ROWS) {
+            break;
+        }
         out.push(table);
+        const headingAt = endedAtHeading.get(table);
         const end = Math.min(...table.runs.map((r) => r.y));
         const rest = runs.filter((r) => r.y < end - Y_TOL);
         const lines = groupIntoRows(rest);
-        const opens = lines
-            .slice(0, MAX_SUBTABLE_LEAD + 1)
-            .some(
-                (line, i) =>
-                    isHeaderRow(line, cellEdges(lines.slice(i + 1))) &&
-                    Math.max(...headerLabels(line).runs.map((r) => r.size)) <=
-                        DISPLAY_SIZE_FACTOR * headerSize,
-            );
+        const opens = lines.slice(0, MAX_SUBTABLE_LEAD + 1).some(
+            (line, i) =>
+                isHeaderRow(line, cellEdges(lines.slice(i + 1))) &&
+                Math.max(...headerLabels(line).runs.map((r) => r.size)) <= DISPLAY_SIZE_FACTOR * headerSize &&
+                // The heading the table ended at opens no sub-table.
+                !(headingAt !== undefined && Math.abs(line.y - headingAt) < Y_TOL),
+        );
         if (!opens) {
             break;
         }
@@ -851,6 +862,12 @@ const TABLE_END_GAP_FACTOR = 3;
 const PROSE_RUN_LENGTH = 40;
 /** A run this many times the records' median size is a heading set below the table. */
 const DISPLAY_SIZE_FACTOR = 1.15;
+
+/** A gap this many times the table's median line gap sets a heading-faced line apart from its records. */
+const HEADING_GAP_FACTOR = 2;
+
+/** How much larger than the records a heading-faced line is set. */
+const HEADING_SIZE_FACTOR = 1.05;
 /**
  * Labels of one header differ in size by less than this ratio (a small-caps
  * label's initial is set a little larger); a run this much larger than another
@@ -877,7 +894,11 @@ function isNoteLine(line: RawRow): boolean {
 }
 
 /** Cut the lines below a header where the table visibly ends. */
-export function tableBody(lines: readonly RawRow[], colBoundaries: readonly number[]): RawRow[] {
+export function tableBody(
+    lines: readonly RawRow[],
+    colBoundaries: readonly number[],
+    onHeading: (line: RawRow) => void = () => undefined,
+): RawRow[] {
     const gaps = lines.slice(1).map((l, i) => (lines[i]?.y ?? l.y) - l.y);
     const sortedGaps = [...gaps].sort((a, b) => a - b);
     const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)] ?? 0;
@@ -942,13 +963,33 @@ export function tableBody(lines: readonly RawRow[], colBoundaries: readonly numb
         // below it belong to what the heading opens (the next table).
         const narrow = colBoundaries.length < 2 * MIN_COLUMNS;
         const heading = displayed && ((narrow && wide(gapBefore)) || !resumes(record, isProse));
+        // A bold line of one cell, larger than the records and in a face none
+        // of them is set in, set further below them than they are apart, is a
+        // heading below the table (a header row of the next table spans
+        // columns) when prose opens directly beneath it.
+        const recordFaces = new Set(body.flatMap((l) => l.runs.map((r) => r.font)));
+        const headingFace =
+            body.length > 0 &&
+            columnsOf(line) < 2 &&
+            gapBefore > HEADING_GAP_FACTOR * medianGap &&
+            lines[i + 1] !== undefined &&
+            isProse(lines[i + 1] as RawRow) &&
+            line.runs.every(
+                (r) =>
+                    r.weight === "bold" &&
+                    !recordFaces.has(r.font) &&
+                    r.size > HEADING_SIZE_FACTOR * recordSize,
+            );
         // A footnote set among the records (led by a note marker, or wholly
         // in italics) is no record, but the table goes on past it when
         // records resume below it.
         if (proseRun && isNoteLine(line) && resumes(record, never)) {
             continue;
         }
-        if (proseRun || proseKey || setApart || heading) {
+        if (headingFace) {
+            onHeading(line);
+        }
+        if (proseRun || proseKey || setApart || heading || headingFace) {
             break;
         }
         body.push(line);
@@ -1233,7 +1274,10 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
 
     const headerCells = assignToColumns(headerRow.runs, colBoundaries);
     const headers = headerCells.map((c) => c.text.replace(/\s+/g, " ").trim());
-    const read = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges));
+    let headingAt: number | undefined;
+    const read = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges), (line) => {
+        headingAt = line.y;
+    });
     // A header naming another set of columns opens the next sub-table; a
     // repeat of this table's own header carries on.
     const otherHeader = read.findIndex((line, i) => {
@@ -1281,15 +1325,20 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
             ? dataRows
             : [{ cells: [], isHeaderRow: false, isSectionHeader: true, sectionName: lead }, ...dataRows];
 
-    return dataRows.length > 0
-        ? {
-              pageIndex: title.pageIndex,
-              headers: headers.slice(0, period),
-              rows: sectioned,
-              tableTitle: title.title,
-              runs: [...lines.slice(0, headerIdx + 1), ...body].flatMap((l) => l.runs),
-          }
-        : null;
+    if (dataRows.length === 0) {
+        return null;
+    }
+    const table: TitledTable = {
+        pageIndex: title.pageIndex,
+        headers: headers.slice(0, period),
+        rows: sectioned,
+        tableTitle: title.title,
+        runs: [...lines.slice(0, headerIdx + 1), ...body].flatMap((l) => l.runs),
+    };
+    if (headingAt !== undefined) {
+        endedAtHeading.set(table, headingAt);
+    }
+    return table;
 }
 
 /** Most header sizes a section row set above the header sits above it: ordinary leading. */
