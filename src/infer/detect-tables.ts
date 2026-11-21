@@ -282,6 +282,24 @@ export function detectTables(ir: IR): DetectedTable[] {
                 continue;
             }
 
+            // A line of italic text set alone in the first column between two
+            // records (a quote down the table's margin, on baselines of its
+            // own) is beside the table: it neither joins nor ends it.
+            const next = sorted[i + 1];
+            if (
+                tableStart !== -1 &&
+                lastY !== null &&
+                cells.length === 1 &&
+                only?.colIndex === 0 &&
+                run !== undefined &&
+                row.runs.every((r) => r.italic) &&
+                lastY - row.y <= WRAP_LINES * run.size &&
+                next !== undefined &&
+                assignRunsToColumns(next.runs, columns).length >= MIN_COLUMNS - 1
+            ) {
+                continue;
+            }
+
             if (cells.length >= MIN_COLUMNS - 1) {
                 if (tableStart === -1) {
                     tableStart = i;

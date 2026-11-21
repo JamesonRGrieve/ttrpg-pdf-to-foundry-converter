@@ -79,6 +79,37 @@ describe("detectTables", () => {
         expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Glow Lamp", "Wick", "Ember"]);
     });
 
+    it("reads on past a quote set line by line down the table's margin", () => {
+        const bold = { weight: "bold" as const };
+        const italic = { italic: true };
+        const record = (side: string, name: string, y: number): IRTextRun[] => [
+            ...(side === "" ? [] : [run(side, 50, y, 60)]),
+            run(name, 150, y, 60),
+            run("100", 250, y, 14),
+            run("S", 300, y, 6),
+        ];
+        const rows = [
+            [
+                run("Advance", 150, 700, 40, bold),
+                run("Cost", 250, 700, 20, bold),
+                run("Type", 300, 700, 20, bold),
+            ],
+            record("", "Trimming", 688),
+            record("", "Wick Lore", 676),
+            [run("“Light the way", 50, 669, 60, italic)],
+            record("", "Glazing", 664),
+            [run("for others.”", 50, 657, 50, italic)],
+            record("", "Oil Mixing", 652),
+        ].flat();
+        const [table] = detectTables(irOf(rows));
+        expect(table?.rows.map((r) => r.cells.find((c) => /\p{L}{3}/u.test(c.text))?.text)).toEqual([
+            "Trimming",
+            "Wick Lore",
+            "Glazing",
+            "Oil Mixing",
+        ]);
+    });
+
     it("finds a table's columns beside a column of prose, and joins a cell's wrapped lines to their row", () => {
         const bold = { weight: "bold" as const };
         const lines: IRTextRun[] = [];
