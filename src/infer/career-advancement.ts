@@ -99,14 +99,23 @@ export function headingBeside(ir: IR, tableRuns: readonly IRTextRun[], line: rea
 }
 
 /** A header row repeated inside a table: an "Advance" cell, "Cost" after it, no figures. */
+/** A cell opening a header row's "Advance" column: the word itself, or ending a note merged into it. */
+const ADVANCE_CELL = /^\s*advances?\b|\sadvances?\s*$/iu;
+
+/** The index of a header row's "Advance" cell: one opening with the word first, else one a note ends with it. */
+function advanceCell(row: readonly string[]): number {
+    const opening = row.findIndex((c) => /^\s*advances?\b/iu.test(c));
+    return opening >= 0 ? opening : row.findIndex((c) => ADVANCE_CELL.test(c));
+}
+
 export function isAdvanceHeaderRow(row: readonly string[]): boolean {
-    const at = row.findIndex((c) => /^\s*advances?\b/iu.test(c));
+    const at = advanceCell(row);
     return at >= 0 && /\bcost\b/iu.test(row.slice(at).join(" ")) && !/\d/u.test(row.join(" "));
 }
 
 /** The text a header row holds before its "Advance" cell: a title set on its line. */
 function beforeAdvance(row: readonly string[]): string {
-    const at = row.findIndex((c) => /^\s*advances?\b/iu.test(c));
+    const at = advanceCell(row);
     return row.slice(0, Math.max(at, 0)).join(" ").replace(/\s+/gu, " ").trim();
 }
 
@@ -308,6 +317,44 @@ export function rankNamed(
     }
     const holding = ranks.filter((r) => words.every((w) => wordsOf(r).includes(w)));
     return [...holding].sort((a, b) => a.minXp - b.minXp).find((r) => !claimed.has(r)) ?? holding[0];
+}
+
+/**
+ * The printed rank a heading names loosely, for when no heading names one
+ * exactly (`rankNamed`): a display heading the text layer split inside its words
+ * ("m ech -W r I ght"), or spelt one letter off the chart's title
+ * ("Enginseer" for "Engineer"), names the one rank whose letters are its
+ * letters, or one letter away.
+ */
+export function rankNamedLoosely(heading: string, ranks: readonly PrintedRank[]): PrintedRank | undefined {
+    const letters = (t: string): string => titleWords(t).join("");
+    const own = letters(heading);
+    const near = ranks.filter(
+        (r) => editDistance(letters(r.title), own) <= (own.length >= MIN_FUZZY_TITLE ? 1 : 0),
+    );
+    return near.length === 1 ? near[0] : undefined;
+}
+
+/** Fewest letters a heading needs to be matched to a rank's title one letter off. */
+const MIN_FUZZY_TITLE = 6;
+
+/** Edits (insert, delete, replace) between two strings. */
+function editDistance(a: string, b: string): number {
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) {
+            cur.push(
+                Math.min(
+                    (prev[j] ?? 0) + 1,
+                    (cur[j - 1] ?? 0) + 1,
+                    (prev[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+                ),
+            );
+        }
+        prev = cur;
+    }
+    return prev[b.length] ?? 0;
 }
 
 /** A table of characteristic advance costs: a characteristic column and the schema's tier words over the rest. */
@@ -762,8 +809,16 @@ export function attachCareerAdvancement(
             number === null && table.kind === "advances"
                 ? [table.heading, table.sideHeading ?? "", table.headers[0] ?? "", table.rows[0]?.[0] ?? ""]
                       .filter((t) => !/^\s*advances?\s*$/iu.test(t))
-                      .map((t) => rankNamed(t, ranks, claimed))
-                      .find((r) => r !== undefined)
+                      .reduce<PrintedRank | undefined>(
+                          (found, t, _i, all) =>
+                              found ??
+                              rankNamed(t, ranks, claimed) ??
+                              // Loosely only once no candidate names a rank exactly.
+                              (all.every((c) => rankNamed(c, ranks, claimed) === undefined)
+                                  ? rankNamedLoosely(t, ranks)
+                                  : undefined),
+                          undefined,
+                      )
                 : undefined;
         // Ranks printed one under another may read as one table: a row whose
         // corner (the text before its advance, or a row of no advance) names
@@ -776,14 +831,29 @@ export function attachCareerAdvancement(
             const last = segments.at(-1);
             if (isAdvanceHeaderRow(row)) {
                 // A repeated header row opens the next rank's table, named by the heading over it.
-                const headings = [beforeAdvance(row), ...(table.innerHeadings?.[inner] ?? [])];
-                inner += 1;
-                segments.push({
-                    title: headings
+                // Only a header set as its own line is one of the table's inner
+                // header lines; one merged into a note is read by its own cells.
+                const ownLine = row.some((c) => /^\s*advances?\b/iu.test(c));
+                const headings = [
+                    beforeAdvance(row),
+                    ...(ownLine ? (table.innerHeadings?.[inner] ?? []) : []),
+                ];
+                if (ownLine) {
+                    inner += 1;
+                }
+                const title =
+                    headings
                         .map((h) => (ranks.length > 0 ? rankNamed(h, ranks, claimed) : undefined))
-                        .find((r) => r !== undefined),
-                    rows: [],
-                });
+                        .find((r) => r !== undefined) ??
+                    headings
+                        .map((h) => (ranks.length > 0 ? rankNamedLoosely(h, ranks) : undefined))
+                        .find((r) => r !== undefined);
+                // Where the career prints its ranks, a header row naming none of
+                // them (a note merged into it) opens no rank: its rows stay put.
+                if (title === undefined && ranks.length > 0) {
+                    continue;
+                }
+                segments.push({ title, rows: [] });
                 continue;
             }
             const corner = cornerText(row);

@@ -14,6 +14,7 @@ import {
     printedRanks,
     rankAdvances,
     rankNamed,
+    rankNamedLoosely,
     rankOf,
     rankCharts,
     headingBeside,
@@ -275,6 +276,18 @@ describe("a career's advancement tables", () => {
             ranks[4],
         );
         expect(rankNamed("CHANDLER ADVANCES", ranks, new Set())).toBeUndefined();
+        // Loosely, a heading split inside its words or one letter off names the one such rank.
+        const lamplighter = { title: "Lamp-Lighter", minXp: 0 };
+        const glassblower = { title: "Glassblower", minXp: 500 };
+        expect(rankNamedLoosely("l amp -L i ghter", [lamplighter, glassblower])).toBe(lamplighter);
+        expect(rankNamedLoosely("GLASBLOWER", [lamplighter, glassblower])).toBe(glassblower);
+        expect(rankNamedLoosely("GLAZIER", [lamplighter, glassblower])).toBeUndefined();
+        // A header row whose "Advance" cell follows a merged note still reads as one,
+        // but the cell that opens with "Advance" names the column.
+        expect(
+            isAdvanceHeaderRow(["outcast", "You may take this Talent at this Advance", "Rank. Cost", "Type"]),
+        ).toBe(true);
+        expect(isAdvanceHeaderRow(["Trimming", "100", "Skill"])).toBe(false);
     });
 
     it("offers a rank's table naming no career, set before every career, to each career at that rank", () => {
