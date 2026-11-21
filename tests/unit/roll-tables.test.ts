@@ -51,6 +51,14 @@ describe("roll tables", () => {
             { range: [10, 13], text: "The lamp gutters and goes out." },
             { range: [14, 120], text: "Darkness." },
         ]);
+        // An open last result starting past the die's top holds its own number.
+        expect(
+            rollResults([
+                ["01-90", "Steady."],
+                ["91-120", "Flicker."],
+                ["121+", "Darkness."],
+            ])?.results.at(-1),
+        ).toEqual({ range: [121, 121], text: "Darkness." });
         // A line without a die result between results is no note: no table.
         expect(
             rollResults([

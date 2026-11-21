@@ -26,6 +26,9 @@ describe("weapon-table load rows", () => {
         const melee = { name: "Iron Hook", range: "—", damage: "1d10+2 R", penetration: "1", weight: "3kg" };
         expect(isLoadRow(melee)).toBe(false);
         expect(rowType("weapon", melee)).toBe("weapon");
+        // Armour points past the bound for worn armour are cover or a hull's: no armour item.
+        expect(rowType("armour", { name: "Lantern Glass", armourPoints: "8" })).toBe("armour");
+        expect(rowType("armour", { name: "Lighthouse Wall", armourPoints: "32" })).toBeNull();
     });
 
     it("keeps wielded weapons and self-contained charges as weapons", () => {

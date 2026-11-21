@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
+import { joinAsGamemaster, READY_TIMEOUT_MS, stopWelcomeTour } from "./world.ts";
 
 /**
  * The Foundry package in a real Foundry v14 world on the wh40k-rpg system:
@@ -14,8 +15,6 @@ import { expect, type Page, test } from "@playwright/test";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGE_ID = "ttrpg-pdf-converter";
 const PDF = resolve(repoRoot, "fixtures/rendered/field-manual.pdf");
-/** How long Foundry may take to be ready after a load or reload. */
-const READY_TIMEOUT_MS = 120_000;
 /** A conversion in the browser: render and read every page. */
 const CONVERSION_TIMEOUT_MS = 600_000;
 
@@ -83,51 +82,6 @@ async function worldPacks(page: Page): Promise<PackState[]> {
         }
         return out.sort((a, b) => a.name.localeCompare(b.name));
     }, PACKAGE_ID);
-}
-
-async function joinAsGamemaster(page: Page): Promise<void> {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-        await page.goto("/join");
-        if ((await page.locator('input[name="username"]').count()) > 0) {
-            break;
-        }
-        await page.waitForTimeout(2_000);
-    }
-    await page.fill('input[name="username"]', "Gamemaster");
-    await page.click('button[name="join"]');
-    await page.waitForURL(/\/game/u);
-    await page.waitForFunction(
-        () => (globalThis as unknown as Partial<Fvtt>).game?.ready === true,
-        undefined,
-        {
-            timeout: READY_TIMEOUT_MS,
-        },
-    );
-}
-
-/**
- * Stop core's welcome tour: a fresh world starts it a moment after ready, and
- * its overlay swallows clicks. Its start is neutered, an active one exited
- * and its overlay removed (as the wh40k-rpg system's e2e suite does).
- */
-async function stopWelcomeTour(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        const g = globalThis as unknown as {
-            game?: { tours?: { get?: (id: string) => { start?: () => Promise<void> } | undefined } };
-            foundry?: { nue?: { Tour?: { activeTour?: { exit?: () => void } | null } } };
-            document: { querySelectorAll(selector: string): Iterable<{ remove(): void }> };
-        };
-        const welcome = g.game?.tours?.get?.("core.welcome");
-        if (welcome !== undefined) {
-            welcome.start = async (): Promise<void> => {
-                await Promise.resolve();
-            };
-        }
-        g.foundry?.nue?.Tour?.activeTour?.exit?.();
-        for (const n of g.document.querySelectorAll(".tour-overlay, .tour-fadeout, .tour-center-step")) {
-            n.remove();
-        }
-    });
 }
 
 /** Activate the package in the world (a reload applies it). */

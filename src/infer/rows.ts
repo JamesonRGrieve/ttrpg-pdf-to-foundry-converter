@@ -438,11 +438,22 @@ export function rowType(type: ItemType, cells: RowCells): ItemType | null {
             ? "gear"
             : null;
     }
+    if (type === "armour" && filled(cells.armourPoints)) {
+        // Points past the schema's bound for worn armour belong to cover or a
+        // vehicle, not to armour a character wears: no armour item.
+        const ap = parseArmourPoints(cells.armourPoints);
+        if (ap !== null && [ap.base, ...Object.values(ap.exceptions)].some((v) => v > ARMOUR_POINT_MAX)) {
+            return null;
+        }
+    }
     if (type !== "weapon") {
         return type;
     }
     return isLoadRow(cells) ? "ammunition" : "weapon";
 }
+
+/** The most armour points the system's armour model holds at one location. */
+const ARMOUR_POINT_MAX = 20;
 
 /** A load's profile, as printed: its damage, penetration and qualities become its effect. */
 function load(cells: RowCells): RowMapping {

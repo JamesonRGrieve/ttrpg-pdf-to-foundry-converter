@@ -80,7 +80,12 @@ export function rollResults(
         if (roll === undefined || outcome.trim().length === 0) {
             return null;
         }
-        results.push({ range: [roll.lo, roll.open ? die : roll.hi], text: outcome.trim() });
+        // An open band ("171+") runs to the die's top, or holds its own number
+        // where it starts past it (a roll the table adds to).
+        results.push({
+            range: [roll.lo, roll.open ? Math.max(die, roll.lo) : roll.hi],
+            text: outcome.trim(),
+        });
     }
     return { die, results };
 }
