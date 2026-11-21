@@ -22,6 +22,7 @@ import {
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
+    readLabelGrantedOrigins,
     readRankedCareers,
     resourceChanges,
     sameOrigin,
@@ -1129,5 +1130,54 @@ describe("careers their rank tables name", () => {
         expect(careers.map((c) => [c.name, c.pageIndex, c.description])).toEqual([
             ["Lampwarden", 10, "Lampwardens keep the night at bay."],
         ]);
+    });
+});
+
+describe("origins whose grants follow under a label each repeats", () => {
+    it("names each by the heading before its label, with its price, requirements and grants", () => {
+        const withFields = (e: Entry, fields: [string, string][]): Entry => ({ ...e, fields });
+        const pkg = (name: string, page: number, talent: string): Entry[] => [
+            withFields(entry(name, page, [], "Prose of the package."), [
+                ["Home World", "Hive World."],
+                ["Cost", "100 xp"],
+            ]),
+            withFields(entry("Effects", page, []), [
+                ["Talents", `You gain ${talent} and Light Sleeper at the start of the game.`],
+                ["Characteristics", "Increase Perception by +5, but reduce Toughness by –5."],
+            ]),
+        ];
+        const read = readLabelGrantedOrigins(
+            [
+                // The section's own heading, set in a style of its own.
+                {
+                    ...entry(
+                        "LAMPLIGHTERS: KEEPERS OF THE FLAME",
+                        1,
+                        [],
+                        "All of the following Background Packages are for lamplighters.",
+                    ),
+                    heading: {
+                        text: "LAMPLIGHTERS: KEEPERS OF THE FLAME",
+                        size: 14,
+                        style: "section",
+                        pageIndex: 1,
+                    },
+                },
+                ...pkg("THE WICK GUILD", 1, "Hatred (Moths)"),
+                ...pkg("Glassblowers of Murano", 2, "Peer (Glaziers)"),
+                ...pkg("The Oil Reeve", 2, "Jaded"),
+            ],
+            TARGETS.dh1.originSteps,
+        );
+        expect(read.map((o) => [o.name, o.step.key, o.xpCost, o.requirements])).toEqual([
+            ["The Wick Guild", "background", 100, "Home World: Hive World."],
+            ["Glassblowers of Murano", "background", 100, "Home World: Hive World."],
+            ["The Oil Reeve", "background", 100, "Home World: Hive World."],
+        ]);
+        expect((read[0]?.grants["talents"] as { name: string }[]).map((t) => t.name)).toEqual([
+            "Hatred",
+            "Light Sleeper",
+        ]);
+        expect(read[0]?.modifiers).toEqual({ perception: 5, toughness: -5 });
     });
 });

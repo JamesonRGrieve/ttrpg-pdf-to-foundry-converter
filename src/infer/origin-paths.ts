@@ -2005,3 +2005,159 @@ export function readRankedCareers(
     }
     return out;
 }
+
+/** Times a heading over grant fields must recur to be a label (every origin's "Effects"), not a name. */
+const MIN_LABEL_REPEATS = 3;
+
+/** Entries back from an origin a section's prose naming its step may stand. */
+const STEP_PROSE_REACH = 12;
+
+/** A sentence's opening words before what it grants: "You gain", "You begin play with the". */
+const GRANT_OPENING =
+    /^(?:you\s+)?(?:gain|begin|start)s?(?:\s+(?:the\s+game|play))?(?:\s+with)?(?:\s+the)?\s+/iu;
+/** A sentence's closing words after what it grants: "at the start of the game", "talents". */
+const GRANT_CLOSING =
+    /(?:\s+(?:as\s+starting\s+)?(?:skills?|talents?|traits?))?(?:\s+at\s+the\s+start\s+of\s+(?:the\s+game|play))?\s*\.?\s*$/iu;
+
+/** What a grant sentence grants, without the words around it. */
+function grantSentence(text: string): string {
+    const grants = text
+        .trim()
+        .replace(GRANT_OPENING, "")
+        .replace(GRANT_CLOSING, "")
+        // A skill's characteristic in brackets ("Scrutiny (Per)") names no part of it.
+        .replace(CHARACTERISTIC_TAG, "")
+        .trim();
+    // Its last two grants joined by "and" are two grants.
+    let depth = 0;
+    let out = "";
+    for (let i = 0; i < grants.length; i++) {
+        const ch = grants.charAt(i);
+        depth += ch === "(" ? 1 : ch === ")" ? -1 : 0;
+        if (depth === 0 && /^\s+and\s+/iu.test(grants.slice(i)) && !/,\s*$/u.test(out)) {
+            const m = /^\s+and\s+/iu.exec(grants.slice(i));
+            out += ", ";
+            i += (m?.[0].length ?? 1) - 1;
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
+/** A characteristic's abbreviation in brackets after a skill. */
+const CHARACTERISTIC_TAG = /\s*\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\)/gu;
+
+/** Headings over grant fields that recur through the document: labels each origin repeats. */
+export function repeatedGrantLabels(entries: readonly Entry[]): Set<string> {
+    const counts = new Map<string, number>();
+    for (const e of entries) {
+        if (e.fields.length > 0) {
+            const key = letters(e.heading.text);
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+    }
+    return new Set([...counts].filter(([, n]) => n >= MIN_LABEL_REPEATS).map(([k]) => k));
+}
+
+/**
+ * Origins each set as a heading with prose, whose grants follow under a
+ * label every origin repeats ("Effects"): the label's fields are the grants
+ * of the nearest heading before it that is not the label, which names the
+ * origin, with its price and the steps it requires ("Home World: …"). The
+ * step is the one the nearest section prose before it names ("All of the
+ * following <step> packages …").
+ */
+export function readLabelGrantedOrigins(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+): OriginPathReading[] {
+    const labels = repeatedGrantLabels(entries);
+    const out: (Omit<OriginPathReading, "step"> & {
+        step: OriginStepDef | undefined;
+        open: OriginStepDef[];
+    })[] = [];
+    entries.forEach((entry, i) => {
+        if (entry.fields.length === 0 || !labels.has(letters(entry.heading.text))) {
+            return;
+        }
+        const ownerAt = entries
+            .slice(0, i)
+            .map((e, j) => ({ e, j }))
+            .reverse()
+            .find(({ e }) => !labels.has(letters(e.heading.text)))?.j;
+        const owner = ownerAt === undefined ? undefined : entries[ownerAt];
+        if (
+            owner === undefined ||
+            ownerAt === undefined ||
+            entry.heading.pageIndex - owner.heading.pageIndex > GRANT_PAGE_REACH ||
+            stepNamedIn(owner.heading.text, steps, true, false) !== undefined
+        ) {
+            return;
+        }
+        // An origin is of no step it requires ("Career: Guardsman only").
+        const requires = new Set(
+            owner.fields
+                .map(([label]) => stepNamedIn(label, steps, false, true)?.key)
+                .filter((k) => k !== undefined),
+        );
+        const open = steps.filter((s) => !requires.has(s.key));
+        // Only a section's own heading or prose, not the origin's or a sibling's.
+        const step = entries
+            .slice(Math.max(0, ownerAt - STEP_PROSE_REACH), ownerAt)
+            .filter((e) => e.heading.style !== owner.heading.style && !labels.has(letters(e.heading.text)))
+            .reverse()
+            .map(
+                (e) =>
+                    stepNamedIn(e.body, open, true, false) ?? stepNamedIn(e.heading.text, open, true, false),
+            )
+            .find((s) => s !== undefined);
+        // An origin of such a list prints its price.
+        if (!owner.fields.some(([label]) => labelField(label) === "xpCost")) {
+            return;
+        }
+        const required = owner.fields.filter(
+            ([label]) => stepNamedIn(label, steps, false, true) !== undefined,
+        );
+        const requiredLabels = new Set(required.map(([label]) => label));
+        // Each grant set in a sentence ("You gain A and B at the start of the game.").
+        const granting = [owner, entry]
+            .flatMap(fieldEntries)
+            .filter((e) => !requiredLabels.has(e.heading.text))
+            .map((e) => ({ ...e, body: grantSentence(e.body) }));
+        const read = grantsOf(granting, () => []);
+        const changes = entry.fields.map(([, value]) => value).join(PARAGRAPH_BREAK);
+        read.modifiers = {
+            ...read.modifiers,
+            ...signedCharacteristicChanges(changes),
+            ...characteristicChanges(changes),
+        };
+        if (!grantsAnything(read)) {
+            return;
+        }
+        const printed = headingName(owner.heading.text).replace(/\s+/gu, " ").trim();
+        out.push({
+            name:
+                caseLost(printed) || printed === printed.toUpperCase()
+                    ? properName(printed.toLowerCase())
+                    : printed,
+            step,
+            open,
+            pageIndex: owner.heading.pageIndex,
+            description: owner.body,
+            ...read,
+            ...(required.length === 0
+                ? {}
+                : { requirements: required.map(([label, value]) => `${label}: ${value}`).join(" ") }),
+        });
+    });
+    // One whose section's prose is not among the entries is of its nearest
+    // sibling's step (among those it does not require).
+    return out.flatMap(({ step, open, ...o }, i): OriginPathReading[] => {
+        const sibling = [...out.slice(0, i).reverse(), ...out.slice(i + 1)]
+            .map((s) => s.step)
+            .find((s): s is OriginStepDef => s !== undefined && open.includes(s));
+        const chosen = step ?? sibling;
+        return chosen === undefined ? [] : [{ ...o, step: chosen }];
+    });
+}

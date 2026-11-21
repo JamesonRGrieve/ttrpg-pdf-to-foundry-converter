@@ -973,6 +973,8 @@ export function attachCareerAdvancement(
                 if (ownLine) {
                     inner += 1;
                 }
+                // The fullest heading first: a corner cell may hold only its first word.
+                headings.sort((a, b) => b.split(/\s+/u).length - a.split(/\s+/u).length);
                 const title =
                     headings
                         .map((h) => (ranks.length > 0 ? rankNamed(h, ranks, claimed) : undefined))

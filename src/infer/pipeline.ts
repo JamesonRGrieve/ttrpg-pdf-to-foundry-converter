@@ -101,7 +101,9 @@ import {
     readEffectOrigins,
     readHeadedOrigins,
     readLabelledOrigins,
+    readLabelGrantedOrigins,
     readRankedCareers,
+    repeatedGrantLabels,
     readVariantOrigins,
     withCitedOrigins,
     readOriginTable,
@@ -129,7 +131,7 @@ import {
     type ItemType,
     type Line,
 } from "./schema.ts";
-import { baseSkillLevel, type TargetSchema } from "./targets.ts";
+import { baseSkillLevel, type OriginStepDef, type TargetSchema } from "./targets.ts";
 import { applyTwoHandedClasses, twoHandedClasses } from "./two-handed.ts";
 import type { ContentType, DetectedNumericGrid, DetectedTable, TableRow } from "./types.ts";
 import { isVehicleProfile, panelPairs, parseVehicle } from "./vehicle.ts";
@@ -2066,14 +2068,18 @@ function extractOriginPaths(
     );
     // An origin may have a heading of its own, its rules under headings that
     // repeat its name; one read no other way joins the rest.
+    // A heading every origin repeats over its grants ("Effects") names none of them.
+    const labels = repeatedGrantLabels(entries);
+    const labelKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
     const origins = [
-        ...cited,
+        ...cited.filter((o) => !labels.has(labelKey(o.name))),
         ...[
             ...headed,
             ...readLabelledOrigins(entries, out.target.originSteps),
+            ...labelGranted(entries, out.target.originSteps, cited),
             ...readVariantOrigins(entries, out.target.originSteps),
             ...rankedCareers(entries, advancement, out.target).filter(
-                // A name within other careers\' names ("Lamp" of "Lamp Warden")
+                // A name within other careers' names ("Lamp" of "Lamp Warden")
                 // names tables they share, not a career of its own.
                 (ranked) =>
                     ![...cited, ...headed].some(
@@ -2137,6 +2143,34 @@ function extractOriginPaths(
     for (const origin of origins) {
         addOrigin(out, origin);
     }
+}
+
+/** Pages apart a sibling origin another reading confirms may set an origin's step. */
+const SIBLING_STEP_PAGES = 3;
+
+/**
+ * Origins whose grants follow under a repeated label, read only where no
+ * other reading names them. Where another reading names a sibling of theirs
+ * (an origin of the same list nearby), its step is theirs.
+ */
+function labelGranted(
+    entries: readonly Entry[],
+    steps: readonly OriginStepDef[],
+    others: readonly OriginPathReading[],
+): OriginPathReading[] {
+    const read = readLabelGrantedOrigins(entries, steps);
+    const confirmed = read.flatMap((o) => {
+        const other = others.find((c) => sameOrigin(c.name, o.name));
+        return other === undefined ? [] : [{ pageIndex: o.pageIndex, step: other.step }];
+    });
+    return read
+        .filter((o) => !others.some((c) => sameOrigin(c.name, o.name)))
+        .map((o) => {
+            const sibling = confirmed
+                .filter((c) => Math.abs(c.pageIndex - o.pageIndex) <= SIBLING_STEP_PAGES)
+                .sort((a, b) => Math.abs(a.pageIndex - o.pageIndex) - Math.abs(b.pageIndex - o.pageIndex))[0];
+            return sibling === undefined ? o : { ...o, step: sibling.step };
+        });
 }
 
 /** Whether every word of one name is a word of another, in order. */
