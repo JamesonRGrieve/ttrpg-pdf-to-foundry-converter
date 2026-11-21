@@ -506,6 +506,56 @@ export function leafScore(want: Json | undefined, got: Json | undefined): number
     return normScalar(want) === normScalar(got) ? 1 : 0;
 }
 
+/**
+ * Agreement of two career rank tables, 0..1: the share of their advances
+ * (rank, name, specialisation, level, cost, type and prerequisites) and of
+ * their ranks (number, branch, title and starting XP) the two hold in
+ * common. Compared whole, one differing advance among hundreds scored a
+ * career's table 0.
+ */
+export function careerRanksScore(want: Json | undefined, got: Json | undefined): number {
+    const keys = (ranks: Json | undefined): string[] => {
+        if (!Array.isArray(ranks)) {
+            return [];
+        }
+        return ranks.flatMap((rank) => {
+            if (!isObject(rank)) {
+                return [];
+            }
+            const head = [
+                rank["rank"],
+                rank["branch"] ?? "",
+                normScalar(rank["title"] ?? ""),
+                rank["minXp"] ?? null,
+            ];
+            const advances = Array.isArray(rank["advances"]) ? rank["advances"] : [];
+            return [
+                `rank:${JSON.stringify(head)}`,
+                ...advances
+                    .filter(isObject)
+                    .map((a) =>
+                        JSON.stringify([
+                            rank["rank"],
+                            normScalar(a["name"] ?? ""),
+                            normScalar(a["specialization"] ?? ""),
+                            a["level"] ?? null,
+                            a["cost"] ?? null,
+                            a["type"] ?? null,
+                            normScalar(
+                                Array.isArray(a["prerequisites"])
+                                    ? (a["prerequisites"] as Json[]).map((p) => normScalar(p)).sort()
+                                    : [],
+                            ),
+                        ]),
+                    ),
+            ];
+        });
+    };
+    const a = keys(want);
+    const b = keys(got);
+    return a.length === 0 && b.length === 0 ? 1 : jaccard(a, b);
+}
+
 /** Fewest words a plain string needs to be scored as prose. */
 const PROSE_WORDS = 8;
 
@@ -898,7 +948,9 @@ export function scoreBook(
         for (const [path, authored] of wantLeaves) {
             const gotValue = gotLeaves.get(path) ?? SCHEMA_INITIAL[`${type}:${path}`];
             const value = path === "gameSystems" ? knowableLines(authored, gotValue, line) : authored;
-            const s = leafScore(value, gotValue);
+            const s = path.endsWith("careerAdvancement.ranks")
+                ? careerRanksScore(value, gotValue)
+                : leafScore(value, gotValue);
             scores.set(path, s);
             if (s < 1) {
                 r.mismatches.push({

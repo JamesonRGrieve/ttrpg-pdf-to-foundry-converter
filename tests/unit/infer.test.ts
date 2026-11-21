@@ -111,6 +111,7 @@ import {
     isComponent,
     characteristicClassItem,
     kindNamed,
+    applyGrenadeTypes,
     mergeInto,
     preferTableBenefit,
     modalHeadingSizes,
@@ -4774,6 +4775,32 @@ describe("section-qualified table names", () => {
         expect(kindNamed("Fire Pot", "grenade", text)).toBe("Fire Pot");
         expect(kindNamed("Ember Grenade", "grenade", text)).toBe("Ember Grenade");
         expect(kindNamed("Wick", "las", text)).toBe("Wick");
+    });
+
+    it("types a thrown weapon named for the grenade kind, and no other", () => {
+        const weapon = (name: string, system: JsonObject): Entity => ({
+            blockId: name,
+            documentType: "Item",
+            group: "dh1",
+            pack: "p",
+            ordinal: 1,
+            fields: { name, type: "weapon", system },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const entities = [
+            weapon("Wick Grenades", { class: "thrown" }),
+            weapon("Glow Grenade", { class: "thrown", type: "exotic" }),
+            weapon("Lamp Spear", { class: "thrown" }),
+            weapon("Grenade Lobber", { class: "basic" }),
+        ];
+        applyGrenadeTypes(entities);
+        expect(entities.map((e) => (e.fields["system"] as JsonObject)["type"] ?? null)).toEqual([
+            "grenade",
+            "exotic",
+            null,
+            null,
+        ]);
     });
 
     it("leaves a catalogue that repeats a name or two", () => {

@@ -4,6 +4,7 @@ import {
     type AdvancementTable,
     advancePrerequisites,
     attachCareerAdvancement,
+    branchPaths,
     characteristicCosts,
     headingAbove,
     isCharacteristicCostTable,
@@ -440,6 +441,46 @@ describe("a career's advancement tables", () => {
         });
     });
 
+    it("reads a box whose title took its XP line's \"XP\", and names each branched rank's path", () => {
+        const face = (r: IRTextRun, font: string): IRTextRun => ({ ...r, font });
+        const charts = rankCharts(
+            irOf([
+                face(run("TRIMMER XP", 110, 700, 7), "title"),
+                face(run("Level: 0-499", 110, 694, 5), "xp"),
+                face(run("Snuffer", 110, 652, 7), "title"),
+                face(run("XP Level: 500-999", 100, 646, 5), "xp"),
+            ]),
+        );
+        expect(charts.map((c) => c.rows.map((r) => r.slice(0, 2)))).toEqual([
+            [
+                ["TRIMMER", "0"],
+                ["Snuffer", "500"],
+            ],
+        ]);
+        const r = (title: string, minXp: number, x: number) => ({ title, minXp, x });
+        const ranks = [
+            r("Trimmer", 0, 150),
+            r("Wick Guard", 500, 100),
+            r("Glass Guard", 500, 200),
+            r("Wick Captain", 1000, 105),
+            r("Glass Captain", 1000, 195),
+            r("Chandler", 2000, 150),
+            r("Lamp Lord", 3000, 100),
+            r("Oil Lord", 3000, 200),
+        ];
+        const paths = branchPaths(ranks);
+        expect(ranks.map((k) => paths.get(k) ?? null)).toEqual([
+            null,
+            "wick-guard",
+            "glass-guard",
+            "wick-guard",
+            "glass-guard",
+            null,
+            "lamp-lord",
+            "oil-lord",
+        ]);
+    });
+
     it("reads a chart of ranks: each box's title over the XP it starts at", () => {
         const face = (r: IRTextRun, font: string): IRTextRun => ({ ...r, font });
         const charts = rankCharts(
@@ -454,7 +495,7 @@ describe("a career's advancement tables", () => {
                 face(run("XP Level: 500-999", 200, 646, 5), "xp"),
             ]),
         );
-        expect(charts.map((c) => c.rows)).toEqual([
+        expect(charts.map((c) => c.rows.map((r) => r.slice(0, 2)))).toEqual([
             [
                 ["Trimmer", "0"],
                 ["Chief Snuffer", "500"],

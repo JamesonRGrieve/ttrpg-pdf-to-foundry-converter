@@ -160,6 +160,8 @@ export function isRankTable(headers: readonly string[]): boolean {
 export interface PrintedRank {
     title: string;
     minXp: number;
+    /** Where a chart sets the rank's box across the page (its XP line's centre), for its branch. */
+    x?: number;
 }
 
 /** Each row of a table of ranks with a title and an XP figure: the first figure is where the rank starts. */
@@ -173,7 +175,12 @@ export function printedRanks(
         const title = titleCase((row[0] ?? "").replace(/\s+/gu, " ").trim());
         const xp = /\d[\d,]*/u.exec(row[xpCol] ?? "")?.[0];
         if (title.length > 0 && /\p{L}/u.test(title) && xp !== undefined) {
-            out.push({ title, minXp: Number(xp.replace(/,/gu, "")) });
+            const x = Number(row[CHART_X_CELL] ?? Number.NaN);
+            out.push({
+                title,
+                minXp: Number(xp.replace(/,/gu, "")),
+                ...(Number.isFinite(x) && row.length > CHART_X_CELL ? { x } : {}),
+            });
         }
     }
     return out;
@@ -181,6 +188,12 @@ export function printedRanks(
 
 /** A rank's XP line in a chart of ranks: "XP Level: 1,000–1,999", "XP: 500+". */
 const XP_LINE = /^\s*XP(?:\s+level)?\s*:?\s*(\d[\d,]*)\s*(?:[-–—]|\+|to\b)/iu;
+
+/** A chart box's title run that took the "XP" opening its XP line ("SANCTIONITE XP"). */
+const TITLE_THEN_XP = /^(.*\p{L}.*?)\s+XP\s*$/u;
+
+/** An XP line that lost its "XP" to the title above it ("Level: 0-499"). */
+const LEVEL_LINE = /^\s*level\s*:?\s*\d/iu;
 
 /** Type sizes above its XP line a rank's title may reach (a title may take two lines). */
 const TITLE_REACH = 4;
@@ -196,7 +209,23 @@ export function rankCharts(ir: IR): AdvancementTable[] {
         byPage.set(r.pageIndex, [...(byPage.get(r.pageIndex) ?? []), r]);
     }
     const charts: AdvancementTable[] = [];
-    for (const [pageIndex, runs] of byPage) {
+    for (const [pageIndex, pageRuns] of byPage) {
+        // A box whose title run swallowed the "XP" its XP line opens with
+        // ("<TITLE> XP" over "Level: 0-499") is that title over that XP line.
+        const under = (title: IRTextRun, line: IRTextRun): boolean =>
+            LEVEL_LINE.test(line.text) &&
+            line.y < title.y &&
+            title.y - line.y <= TITLE_REACH * line.size &&
+            Math.abs(line.x - title.x) <= title.width;
+        const swallowed = pageRuns.filter(
+            (r) => TITLE_THEN_XP.test(r.text) && pageRuns.some((l) => under(r, l)),
+        );
+        const runs = pageRuns.map((r): IRTextRun => {
+            if (swallowed.includes(r)) {
+                return { ...r, text: TITLE_THEN_XP.exec(r.text)?.[1] ?? r.text };
+            }
+            return swallowed.some((t) => under(t, r)) ? { ...r, text: `XP ${r.text.trim()}` } : r;
+        });
         const xpLines = runs.filter((r) => XP_LINE.test(r.text));
         if (xpLines.length === 0) {
             continue;
@@ -223,7 +252,7 @@ export function rankCharts(ir: IR): AdvancementTable[] {
                 .trim();
             const start = XP_LINE.exec(xp.text)?.[1];
             if (title.length > 0 && start !== undefined) {
-                rows.push([title, start]);
+                rows.push([title, start, String(xp.x + xp.width / 2)]);
             }
         }
         if (rows.length > 1) {
@@ -492,9 +521,56 @@ function cornerText(raw: readonly string[]): string {
 /** One rank's advances as the schema's `ranks` holds them. */
 interface RankEntry {
     rank: number;
+    /** The path a branched rank belongs to: the kebab title of its path's first branched rank. */
+    branch?: string;
     title: string;
     minXp: number | null;
     advances: JsonObject[];
+}
+
+/** The cell of a chart's row that holds where the rank's box stands across the page. */
+const CHART_X_CELL = 2;
+
+/**
+ * Each branched rank's path: a rank is branched when its chart prints
+ * several at its XP level; it follows the box at the level before it nearest
+ * across the page while that level branches too, and the path is named by
+ * the first branched rank on it ("lieutenant" for Lieutenant, Captain,
+ * Commander). A rank set apart from no chart position has none.
+ */
+export function branchPaths(ranks: readonly PrintedRank[]): Map<PrintedRank, string> {
+    const levels = [...new Set(ranks.map((r) => r.minXp))].sort((a, b) => a - b);
+    const at = (level: number | undefined): PrintedRank[] => ranks.filter((r) => r.minXp === level);
+    const out = new Map<PrintedRank, string>();
+    for (const rank of ranks) {
+        if (rank.x === undefined || at(rank.minXp).length < 2) {
+            continue;
+        }
+        let first = rank;
+        for (let i = levels.indexOf(rank.minXp) - 1; i >= 0; i--) {
+            const before = at(levels[i]);
+            if (before.length < 2) {
+                break;
+            }
+            const x = first.x ?? 0;
+            const nearest = [...before]
+                .filter((r) => r.x !== undefined)
+                .sort((a, b) => Math.abs((a.x ?? 0) - x) - Math.abs((b.x ?? 0) - x))[0];
+            if (nearest === undefined) {
+                break;
+            }
+            first = nearest;
+        }
+        out.set(
+            rank,
+            first.title
+                .toLowerCase()
+                .split(/[^\p{L}\p{N}]+/u)
+                .filter((w) => w.length > 0)
+                .join("-"),
+        );
+    }
+    return out;
 }
 
 /**
@@ -727,8 +803,10 @@ export function attachCareerAdvancement(
                 claimed.add(title);
                 entry = into.ranks.find((r) => r.title === title.title && r.minXp === title.minXp);
                 if (entry === undefined) {
+                    const branch = branchPaths(ranks).get(title);
                     entry = {
                         rank: numberRanks(ranks).get(title) ?? 1,
+                        ...(branch === undefined ? {} : { branch }),
                         title: title.title,
                         minXp: title.minXp,
                         advances: [],

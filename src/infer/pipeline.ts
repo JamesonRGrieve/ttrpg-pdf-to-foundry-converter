@@ -607,8 +607,15 @@ function extractTables(
                     ]),
                     headers: table.headers,
                     // Each row as wide as its cells reach: a merged header may stand over two of them.
+                    // A header row after the table's first record opens the next
+                    // rank's table set under it: it is kept to mark where that starts.
                     rows: table.rows
-                        .filter((r) => !r.isHeaderRow && !r.isSectionHeader)
+                        .filter(
+                            (r, i) =>
+                                !r.isSectionHeader &&
+                                (!r.isHeaderRow ||
+                                    table.rows.slice(0, i).some((p) => !p.isHeaderRow && !p.isSectionHeader)),
+                        )
                         .map((r) =>
                             rowTexts(
                                 r,
@@ -762,9 +769,19 @@ function extractTables(
             // A weapon's technology type is named by the section row it sits
             // under ("Las Weapons"), else by the table's caption.
             if (itemType === "weapon" && mapped.system["type"] === undefined) {
+                const above =
+                    table.tableTitle === null || table.tableTitle === undefined || table.tableTitle === ""
+                        ? parseWeaponType(headingAbove(ir, table.runs ?? []))
+                        : null;
                 const weaponType =
                     (section === null ? null : parseWeaponType(section)) ??
-                    parseWeaponType(table.tableTitle ?? "");
+                    parseWeaponType(table.tableTitle ?? "") ??
+                    // An uncaptioned table's heading naming a kind of object
+                    // ("Grenades and Missiles") types the rows thrown as one; a
+                    // technology in a heading may stand over a table of many.
+                    (above !== null && KIND_WEAPON_TYPES.has(above) && mapped.system["class"] === "thrown"
+                        ? above
+                        : null);
                 if (weaponType !== null) {
                     mapped.system["type"] = weaponType;
                 }
@@ -874,6 +891,31 @@ export function kindNamed(name: string, type: JsonValue | undefined, text: strin
     const escaped = name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
     const printed = new RegExp(`(?:^|[^\\p{L}])${escaped}\\s+${type}s?(?![\\p{L}])`, "u");
     return printed.test(text) ? `${name} ${type.charAt(0).toUpperCase()}${type.slice(1)}` : name;
+}
+
+/**
+ * A thrown weapon named for the schema's grenade type ("<Name> Grenade(s)")
+ * with no type of its own (read from a stat block or a profile, not under a
+ * "Grenades" section) is of that type: the system adds the wielder's
+ * Strength Bonus to every thrown weapon but a grenade.
+ */
+export function applyGrenadeTypes(entities: readonly Entity[]): void {
+    for (const e of entities) {
+        const system = e.fields["system"];
+        if (e.fields["type"] !== "weapon" || !isJsonObject(system) || system["class"] !== "thrown") {
+            continue;
+        }
+        const type = system["type"];
+        if (typeof type === "string" && type !== "") {
+            continue;
+        }
+        const words = String(e.fields["name"])
+            .toLowerCase()
+            .split(/[^\p{L}]+/u);
+        if (words.some((w) => [...KIND_WEAPON_TYPES].some((kind) => w === kind || w === `${kind}s`))) {
+            system["type"] = [...KIND_WEAPON_TYPES][0] ?? "grenade";
+        }
+    }
 }
 
 /** One table row read as an item. */
@@ -3394,6 +3436,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     applyCyberneticTypes(entities);
     applyTwoHandedClasses(entities, twoHandedClasses(ir.runs.map((r) => r.text).join(" ")));
     applyAmmunitionWeaponTypes(entities, out.usedWith);
+    applyGrenadeTypes(entities);
     applyAmmunitionEffects(entities);
     applyFocusSkillCharacteristics(entities);
     applyOriginPrerequisites(entities, target.originSteps);
