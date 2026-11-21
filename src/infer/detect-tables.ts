@@ -25,6 +25,8 @@ const MIN_WIDE_BLOCK = 2 * MIN_ROWS;
 const WRAP_LINES = 2;
 /** Gap between lines, in type sizes, under which they are one row split over lines. */
 const SPLIT_ROW_GAP = 0.8;
+/** A cell holding one figure and nothing else. */
+const FIGURE_CELL = /^\s*\d[\d,]*\s*$/u;
 
 interface RawRow {
     pageIndex: number;
@@ -305,7 +307,10 @@ export function detectTables(ir: IR): DetectedTable[] {
                     tableStart = i;
                 }
                 tableRuns.push(...row.runs);
-                const isHeader = headerSet(row, measured) && !headerRow;
+                // A career's next rank opens under a header row of its own
+                // after this rank's records: it stays a row, marking where.
+                const nextRank = tableRows.length > 0 && cells.some((c) => /^\s*advances?\b/iu.test(c.text));
+                const isHeader = headerSet(row, measured) && !headerRow && !nextRank;
                 const spanning = isSpanningHeader(row, columns, measured);
 
                 if (spanning && tableRows.length > 0) {
@@ -408,7 +413,13 @@ function joinSplitRows(
             !row.isSectionHeader &&
             y !== undefined &&
             lastY !== undefined &&
-            lastY - y < SPLIT_ROW_GAP * size
+            lastY - y < SPLIT_ROW_GAP * size &&
+            // Two lines each with a figure in the same column are two records.
+            !row.cells.some(
+                (cell) =>
+                    FIGURE_CELL.test(cell.text) &&
+                    last.cells.some((c) => c.colIndex === cell.colIndex && FIGURE_CELL.test(c.text)),
+            )
         ) {
             for (const cell of row.cells) {
                 const into = last.cells.find((c) => c.colIndex === cell.colIndex);

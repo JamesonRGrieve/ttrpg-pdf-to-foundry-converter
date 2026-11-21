@@ -79,6 +79,32 @@ describe("detectTables", () => {
         expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Glow Lamp", "Wick", "Ember"]);
     });
 
+    it("keeps two records apart when prose beside them sits between their lines", () => {
+        const bold = { weight: "bold" as const };
+        const record = (name: string, y: number): IRTextRun[] => [
+            run(name, 150, y, 60),
+            run("100", 250, y, 14),
+            run("S", 300, y, 6),
+        ];
+        const rows = [
+            [
+                run("Advance", 150, 700, 40, bold),
+                run("Cost", 250, 700, 20, bold),
+                run("Type", 300, 700, 20, bold),
+            ],
+            [run("Lamp", 50, 688, 20), ...record("Trimming", 688)],
+            [run("lore", 50, 676, 20), ...record("Wick Lore", 676)],
+            // Prose in the margin, on baselines between the records, running into the name column.
+            [run("Lamplighters", 50, 670, 60), run("keep", 150, 670, 20)],
+            record("Glazing", 664),
+            [run("the night", 50, 658, 60), run("at bay.", 150, 658, 30)],
+            record("Oil Mixing", 652),
+        ].flat();
+        const [table] = detectTables(irOf(rows));
+        expect(table?.rows.filter((r) => r.cells.some((c) => c.text.trim() === "100"))).toHaveLength(4);
+        expect(table?.rows.some((r) => r.cells.some((c) => c.text.includes("100 100")))).toBe(false);
+    });
+
     it("reads on past a quote set line by line down the table's margin", () => {
         const bold = { weight: "bold" as const };
         const italic = { italic: true };

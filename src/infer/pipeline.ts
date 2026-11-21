@@ -101,6 +101,7 @@ import {
     readEffectOrigins,
     readHeadedOrigins,
     readLabelledOrigins,
+    readRankedCareers,
     readVariantOrigins,
     withCitedOrigins,
     readOriginTable,
@@ -2034,6 +2035,7 @@ function extractOriginPaths(
     entries: readonly Entry[],
     heads: ReadonlyMap<number, readonly string[]>,
     out: EntityCollector,
+    advancement: readonly AdvancementTable[] = [],
 ): void {
     const structured = [
         ...readOriginPaths(entries, out.target.originSteps, heads),
@@ -2070,6 +2072,17 @@ function extractOriginPaths(
             ...headed,
             ...readLabelledOrigins(entries, out.target.originSteps),
             ...readVariantOrigins(entries, out.target.originSteps),
+            ...rankedCareers(entries, advancement, out.target).filter(
+                // A name within other careers\' names ("Lamp" of "Lamp Warden")
+                // names tables they share, not a career of its own.
+                (ranked) =>
+                    ![...cited, ...headed].some(
+                        (o) =>
+                            o.step.key === ranked.step.key &&
+                            !sameOrigin(o.name, ranked.name) &&
+                            wordsWithin(ranked.name, o.name),
+                    ),
+            ),
         ].filter(
             (o) =>
                 !tabled.has(o.step.key) &&
@@ -2124,6 +2137,34 @@ function extractOriginPaths(
     for (const origin of origins) {
         addOrigin(out, origin);
     }
+}
+
+/** Whether every word of one name is a word of another, in order. */
+function wordsWithin(part: string, whole: string): boolean {
+    const words = (t: string): string[] =>
+        t
+            .toLowerCase()
+            .split(/[^\p{L}]+/u)
+            .filter((w) => w.length > 0);
+    const outer = words(whole).join(" ");
+    const inner = words(part).join(" ");
+    return inner.length > 0 && ` ${outer} `.includes(` ${inner} `);
+}
+
+/** Careers their rank tables name, for a target whose careers carry rank tables. */
+function rankedCareers(
+    entries: readonly Entry[],
+    advancement: readonly AdvancementTable[],
+    target: TargetSchema,
+): OriginPathReading[] {
+    const step = target.originSteps.find((s) => s.key === target.careerStep);
+    return step === undefined
+        ? []
+        : readRankedCareers(
+              entries,
+              advancement.filter((t) => t.kind === "advances"),
+              step,
+          );
 }
 
 /** The talent category the system files an origin's own rules under. */
@@ -3463,7 +3504,7 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
     );
     const grids = extractActors(numeric, statRows, detected, out);
     dropCreatureGear(out.entities);
-    extractOriginPaths(detected, runningHeads(ir), out);
+    extractOriginPaths(detected, runningHeads(ir), out, advancement);
     const inline = extractInlineWeapons(detected, out);
     log.info(`inline weapon profiles: ${inline}`);
     fitModifications(out.entities, line, book);

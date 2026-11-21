@@ -1939,3 +1939,69 @@ export function readOriginPaths(
     out.push(...[...read.entries()].sort(([a], [b]) => a - b).map(([, r]) => r));
     return out;
 }
+
+/** Fewest rank tables a name must head for it to be a career of its own. */
+const MIN_RANK_TABLES = 2;
+
+/** A rank table's heading: "Rank <n> <Career> Advances". */
+const RANK_TABLE_HEADING = /^\s*rank\s*\d+\s+(.+?)\s+advances?\s*$/iu;
+
+/**
+ * Careers no rules block introduces, which their rank tables name ("Rank 9
+ * <Career> Advances", "Rank 10 <Career> Advances", …): each is read from the
+ * nearest heading of its name before the first of them, whose prose is its
+ * introduction. Their tables are attached as any career's are.
+ */
+export function readRankedCareers(
+    entries: readonly Entry[],
+    tables: readonly { heading: string; pageIndex: number }[],
+    step: OriginStepDef,
+): OriginPathReading[] {
+    const named = new Map<string, { pageIndex: number; count: number }>();
+    for (const table of tables) {
+        const name = RANK_TABLE_HEADING.exec(table.heading)?.[1]?.replace(/\s+/gu, " ").trim();
+        if (name === undefined || !/\p{L}/u.test(name)) {
+            continue;
+        }
+        const key = letters(name);
+        const held = named.get(key);
+        if (held === undefined) {
+            named.set(key, { pageIndex: table.pageIndex, count: 1 });
+        } else {
+            held.count += 1;
+            held.pageIndex = Math.min(held.pageIndex, table.pageIndex);
+        }
+    }
+    const out: OriginPathReading[] = [];
+    for (const [key, { pageIndex, count }] of named) {
+        if (count < MIN_RANK_TABLES) {
+            continue;
+        }
+        const heading = entries
+            .filter((e) => letters(e.heading.text) === key && e.heading.pageIndex <= pageIndex)
+            .at(-1);
+        if (heading === undefined) {
+            continue;
+        }
+        const printed = heading.heading.text.replace(/\s+/gu, " ").trim();
+        // Its starting skills, talents and gear: label fields under it before its tables.
+        const under: Entry[] = [];
+        for (const e of entries.slice(entries.indexOf(heading) + 1)) {
+            if (e.heading.style === heading.heading.style || e.heading.pageIndex > pageIndex) {
+                break;
+            }
+            under.push(e);
+        }
+        const read = grantsOf(under.flatMap(fieldEntries), () => []);
+        out.push({
+            name: properName(
+                caseLost(printed) || printed === printed.toUpperCase() ? printed.toLowerCase() : printed,
+            ),
+            step,
+            pageIndex: heading.heading.pageIndex,
+            description: heading.body,
+            ...read,
+        });
+    }
+    return out;
+}

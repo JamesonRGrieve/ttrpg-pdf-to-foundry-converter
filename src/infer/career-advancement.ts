@@ -79,20 +79,52 @@ export function headingBeside(ir: IR, tableRuns: readonly IRTextRun[], line: rea
     const size = Math.max(...line.map((r) => r.size));
     // The faces of the table's own columns: a label the table took in from its margin is not one.
     const faces = new Set(tableRuns.filter((r) => r.x >= left - size).map((r) => r.font));
-    return ir.runs
-        .filter(
+    // A table whose header row the reader left out starts a line below it.
+    const lostHeader =
+        start === undefined &&
+        ir.runs.some(
             (r) =>
                 r.pageIndex === first.pageIndex &&
-                !faces.has(r.font) &&
-                !r.italic &&
-                /\p{L}/u.test(r.text) &&
-                r.x + r.width <= left &&
-                r.x + r.width >= left - SIDE_REACH * size &&
-                // A title stacked over lines beside the table ("Scholar" /
-                // "Materium" / "Advances") reaches below the header row.
-                r.y >= first.y - SIDE_TITLE_LINES * size &&
-                r.y <= first.y + 2 * size,
-        )
+                /^\s*advances?\b/iu.test(r.text) &&
+                r.x >= left - size &&
+                r.y > first.y &&
+                r.y <= first.y + LOST_HEADER_LINES * size,
+        );
+    const label = (r: IRTextRun): boolean =>
+        r.pageIndex === first.pageIndex &&
+        !faces.has(r.font) &&
+        !r.italic &&
+        /\p{L}/u.test(r.text) &&
+        r.x + r.width <= left &&
+        // A title stacked over lines beside the table ("Scholar" /
+        // "Materium" / "Advances") reaches below the header row.
+        // Upward too where the table lost its header row.
+        r.y >= first.y - SIDE_TITLE_LINES * size &&
+        r.y <= first.y + (lostHeader ? LOST_HEADER_LINES : 2) * size;
+    const near = ir.runs.filter((r) => label(r) && r.x + r.width >= left - SIDE_REACH * size);
+    // A word set a word space before a near word, on its line and in its
+    // face, opens the same title ("Lord" of "Lord Marshal").
+    const words = [...near];
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const r of ir.runs) {
+            if (
+                !words.includes(r) &&
+                label(r) &&
+                words.some(
+                    (w) =>
+                        w.font === r.font &&
+                        Math.abs(w.y - r.y) < size / 4 &&
+                        w.x > r.x &&
+                        w.x - (r.x + r.width) < size,
+                )
+            ) {
+                words.push(r);
+                grew = true;
+            }
+        }
+    }
+    return words
         .sort((a, b) => b.y - a.y || a.x - b.x)
         .map((r) => r.text.trim())
         .join(" ")
@@ -167,6 +199,9 @@ export function rankOf(heading: string): number | null {
 
 /** Lines below a table's header row a title set beside the table may reach. */
 const SIDE_TITLE_LINES = 3;
+
+/** Lines above a table's first line its left-out header row, and the title beside it, may stand. */
+const LOST_HEADER_LINES = 4;
 
 /** A table of a career's ranks: a rank column and an XP column. */
 export function isRankTable(headers: readonly string[]): boolean {
@@ -469,10 +504,23 @@ const PSY_RATING = /^psy\s*rating\s*(\d+)?\s*\+?$/iu;
 const ADVANCES_HEADING = /\badvances?\s*$/iu;
 
 /** A cost: a whole number, thousands perhaps grouped. */
-const COST = /^\d[\d,]*$/u;
+/** A cost: a figure, perhaps a negative one (an advance that pays back, "–100"). */
+const COST = /^[-–−]?\d[\d,]*$/u;
 
 /** Marks a table sets after a name to refer to a note (dagger, double dagger, asterisk, section). */
 const REFERENCE_MARKS = /[\u2020\u2021*\u00a7\u00b6]+/gu;
+
+/**
+ * A name then a sentence of its own: a capitalised word and a lowercase one
+ * opening words that end on a full stop (a name is set in title case).
+ */
+const NAME_THEN_NOTE = /^(.*?[^\s.])\s+(\p{Lu}\p{Ll}*\s+\p{Ll}[^.()]*\.)$/u;
+
+/** A name ending in a capitalised word, a figure or a bracket, then lowercase words only. */
+const NAME_THEN_PROSE = /^(.*(?:\)|\+\s*\d+|\b\p{Lu}[\p{L}’'-]*))(?:\s+\p{Ll}[\p{L}’'-]*[!.,;:]?)+$/u;
+
+/** Fewest words a sentence after an advance's name needs to read as a note, not part of it. */
+const MIN_NOTE_WORDS = 5;
 
 /** The figure each skill rank above trained adds ("+10" is one rank up). */
 const SKILL_RANK_STEP = 10;
@@ -523,22 +571,49 @@ export function rankAdvances(
 ): JsonObject[] {
     const out: JsonObject[] = [];
     for (const raw of rows) {
-        const row = splitNameCost(raw.map((c) => c.replace(/\s+/gu, " ").trim()));
+        // A figure the text layer split ("1 00") is one figure.
+        const row = splitNameCost(
+            raw
+                .map((c) => c.replace(/\s+/gu, " ").trim())
+                .map((c) => (/^\d[\d, ]*\d$/u.test(c) ? c.replace(/ /gu, "") : c)),
+        );
         const costAt = row.findIndex(
             (c, i) => i > 0 && COST.test(c) && row.slice(0, i).some((n) => n !== ""),
         );
         const before = row.slice(0, Math.max(costAt, 0)).filter((c) => c !== "");
         const typeAt = row.findIndex((c, i) => i > costAt && c !== "");
-        const typed = TYPE.exec(row[typeAt] ?? "");
+        // A kind of skill or talent ("Paragon Talent", "Mastered Skill") is a skill or talent.
+        const typed = TYPE.exec((row[typeAt] ?? "").replace(/^\p{Lu}\p{Ll}+\s+(?=(?:skill|talent)\b)/iu, ""));
         const initial = typed?.[1];
         let name = (before.at(-1) ?? "").replace(LEADING_PROSE, "");
         if (costAt < 0 || initial === undefined || name.length === 0) {
             continue;
         }
         const type = /^s/iu.test(initial) ? "skill" : "talent";
-        const cost = Number((row[costAt] ?? "").replace(/,/gu, ""));
-        // Reference marks set after a name are no part of it.
-        name = name.replace(REFERENCE_MARKS, "").trim();
+        const cost = Number((row[costAt] ?? "").replace(/,/gu, "").replace(/^[–−]/u, "-"));
+        // A note set after a name (a sentence of its own, "Each may be
+        // taken twice at this rank.") is no part of it.
+        const note = NAME_THEN_NOTE.exec(name);
+        if (
+            note?.[1] !== undefined &&
+            note[2] !== undefined &&
+            note[2].split(/\s+/u).length >= MIN_NOTE_WORDS
+        ) {
+            name = note[1];
+        }
+        // Lowercase words of prose beside the table, run on after a name that
+        // ends in a capital word, a figure or a bracket, are no part of it.
+        // A name the document prints in its own right keeps them ("… shot").
+        const runOn = NAME_THEN_PROSE.exec(name);
+        if (runOn?.[1] !== undefined && kindOf(name) === null) {
+            name = runOn[1];
+        }
+        // Reference marks set after a name are no part of it, nor a mark the
+        // text layer misread as a currency sign hard after a letter.
+        name = name
+            .replace(REFERENCE_MARKS, "")
+            .replace(/(?<=\p{L})\p{Sc}+$/u, "")
+            .trim();
         const advance: JsonObject = { name, cost, type };
         const times = /\s*\(\s*x\s*(\d+)\s*\)\s*$/iu.exec(name);
         if (times?.[1] !== undefined) {
@@ -834,20 +909,48 @@ export function attachCareerAdvancement(
         const rows = table.kind === "characteristics" ? table.rows.slice(opening) : table.rows;
         const ranks = printed.get(owner) ?? [];
         // The title may stand over the table, or in its corner (a header cell or the first cell).
-        const titled =
+        const candidates =
             number === null && table.kind === "advances"
-                ? [table.heading, table.sideHeading ?? "", table.headers[0] ?? "", table.rows[0]?.[0] ?? ""]
-                      .filter((t) => !/^\s*advances?\s*$/iu.test(t))
-                      .reduce<PrintedRank | undefined>(
-                          (found, t, _i, all) =>
-                              found ??
-                              rankNamed(t, ranks, claimed) ??
-                              // Loosely only once no candidate names a rank exactly.
-                              (all.every((c) => rankNamed(c, ranks, claimed) === undefined)
-                                  ? rankNamedLoosely(t, ranks)
-                                  : undefined),
-                          undefined,
-                      )
+                ? [
+                      table.heading,
+                      table.sideHeading ?? "",
+                      table.headers[0] ?? "",
+                      table.rows[0]?.[0] ?? "",
+                  ].filter((t) => !/^\s*advances?\s*$/iu.test(t))
+                : [];
+        const titleWords = (t: string): string[] =>
+            t
+                .toLowerCase()
+                .split(/[^\p{L}]+/u)
+                .filter((w) => w.length > 0 && !/^advances?$/u.test(w));
+        // A table named by part of a rank's title, all of it words of the rank
+        // before it ("Loremaster" after "Loremaster Lexographer"), is that
+        // rank's table run on, not the other rank sharing the word.
+        const runsOn = (t: string, rank: PrintedRank | undefined): boolean => {
+            if (rank === undefined || previous?.career !== owner) {
+                return false;
+            }
+            const words = titleWords(t);
+            const before = new Set(titleWords(previous.entry.title));
+            return (
+                words.length > 0 &&
+                words.length < titleWords(rank.title).length &&
+                words.every((w) => before.has(w))
+            );
+        };
+        const continued = candidates.some((t) => runsOn(t, rankNamed(t, ranks, claimed)));
+        const titled =
+            number === null && table.kind === "advances" && !continued
+                ? candidates.reduce<PrintedRank | undefined>(
+                      (found, t, _i, all) =>
+                          found ??
+                          rankNamed(t, ranks, claimed) ??
+                          // Loosely only once no candidate names a rank exactly.
+                          (all.every((c) => rankNamed(c, ranks, claimed) === undefined)
+                              ? rankNamedLoosely(t, ranks)
+                              : undefined),
+                      undefined,
+                  )
                 : undefined;
         // Ranks printed one under another may read as one table: a row whose
         // corner (the text before its advance, or a row of no advance) names

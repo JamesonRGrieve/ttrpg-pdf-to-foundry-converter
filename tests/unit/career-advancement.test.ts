@@ -61,8 +61,9 @@ const irOf = (runs: IRTextRun[]): IR => ({
 
 /** The document defines these names: Lamp Rating a talent, Glass Implants a trait, Trimming a skill. */
 const kindOf: KindOf = (name) =>
-    (({ "lamp rating": "talent", "glass implants": "trait", trimming: "skill" })[name.toLowerCase()] as
-        "talent" | "trait" | "skill" | null) ?? null;
+    (({ "lamp rating": "talent", "glass implants": "trait", trimming: "skill", "steady shot": "talent" })[
+        name.toLowerCase()
+    ] as "talent" | "trait" | "skill" | null) ?? null;
 
 describe("a career's advancement tables", () => {
     it("reads the heading set over a table, not the table's own header or text further up", () => {
@@ -559,5 +560,33 @@ describe("a career's advancement tables", () => {
         expect(
             rankAdvances(["Advance", "Cost", "Type"], [["Steady Glow\u2021", "300", "Talent"]], kindOf),
         ).toEqual([{ name: "Steady Glow", cost: 300, type: "talent", prerequisites: [] }]);
+        // A note merged after the name, and a mark misread as a currency sign, are no part of it.
+        expect(
+            rankAdvances(
+                ["Advance", "Cost", "Type"],
+                [
+                    ["Steady Glow  You may take this Talent twice at this Rank.", "300", "Talent"],
+                    ["Wick Ward\u00a5", "300", "Talent"],
+                    ["Lamp Lore (Old Wicks)", "100", "Skill"],
+                    // Prose beside the table run on after a name; a name the document
+                    // prints in its own right keeps its lowercase word.
+                    ["Glazing his mind", "100", "Skill"],
+                    ["Trimming +10 of the", "100", "Skill"],
+                    ["Rite of Pure Flame", "100", "Talent"],
+                    ["Trimming +20 then", "100", "Skill"],
+                    ["Steady shot", "100", "Talent"],
+                ],
+                kindOf,
+            ).map((a) => a["name"]),
+        ).toEqual([
+            "Steady Glow",
+            "Wick Ward",
+            "Lamp Lore",
+            "Glazing",
+            "Trimming",
+            "Rite of Pure Flame",
+            "Trimming",
+            "Steady shot",
+        ]);
     });
 });

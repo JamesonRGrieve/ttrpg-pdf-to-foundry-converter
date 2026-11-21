@@ -22,6 +22,7 @@ import {
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
+    readRankedCareers,
     resourceChanges,
     sameOrigin,
     signedCharacteristicChanges,
@@ -1103,5 +1104,30 @@ describe("traitGrant", () => {
         });
         expect(traitGrant("Dark-sight")).toEqual({ name: "Dark-sight" });
         expect(traitGrant("Unnatural Strength (x2)")).toEqual({ name: "Unnatural Strength (x2)" });
+    });
+});
+
+describe("careers their rank tables name", () => {
+    it("reads a career from the heading its rank tables name, at the last such heading before them", () => {
+        const step = TARGETS.dh1.originSteps.find((s) => s.key === "career");
+        if (step === undefined) {
+            throw new Error("dh1 has a career step");
+        }
+        const careers = readRankedCareers(
+            [
+                entry("LAMPWARDEN", 3, [], "An earlier mention."),
+                entry("LAMPWARDEN", 10, [], "Lampwardens keep the night at bay."),
+                entry("GLAZIER", 20, [], "One table only."),
+            ],
+            [
+                { heading: "RANK 9 LAMPWARDEN ADVANCES", pageIndex: 11 },
+                { heading: "RANK 10 LAMPWARDEN ADVANCES", pageIndex: 12 },
+                { heading: "RANK 9 GLAZIER ADVANCES", pageIndex: 21 },
+            ],
+            step,
+        );
+        expect(careers.map((c) => [c.name, c.pageIndex, c.description])).toEqual([
+            ["Lampwarden", 10, "Lampwardens keep the night at bay."],
+        ]);
     });
 });
