@@ -3266,6 +3266,23 @@ describe("entry detection", () => {
         expect(keyed("dh2")).toEqual([["dh2", ["dh2"], ["dh2"]]]);
     });
 
+    it("joins a special ability's lead-in line, set in its face, to the heading", () => {
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 700, "h", 14),
+                run(body, 680, "b", 10),
+                run("LAMPWRIGHT SPECIAL ABILITY:", 660, "h", 12),
+                run("STEADY FLAME", 648, "h", 12),
+                run(body, 630, "b", 10),
+            ],
+        );
+        expect(detectEntries(ir, new Set()).map((e) => e.heading.text)).toEqual([
+            "GLOW SECTION",
+            "LAMPWRIGHT SPECIAL ABILITY: STEADY FLAME",
+        ]);
+    });
+
     it("keeps a table caption out of the heading chain", () => {
         const ir = irOf(
             [0],

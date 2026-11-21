@@ -255,6 +255,48 @@ function shortDisplay(text: string, size: number, bodySize: number): boolean {
  */
 const TITLE_CASED_WORD = /(?<!\p{L})\p{Lu}\p{Ll}+(?!\p{L})/u;
 
+/**
+ * A special ability's lead-in set as a line of its own ("<Speciality>
+ * Special Ability:"), in the face of the heading line just below it, joins that line
+ * ("… Ability: <Name>"): alone, a line ending in a colon reads as a field
+ * label, and a lead-in set in mixed type sizes reads as no heading at all.
+ * `lines` is in reading order and is joined in place.
+ */
+function joinLeadIns(lines: TextLine[], body: { style: string; size: number }): void {
+    for (let i = 0; i < lines.length - 1; i++) {
+        const lead = lines[i];
+        const next = lines[i + 1];
+        if (lead === undefined || next === undefined || !SPECIAL_ABILITY_LEAD_IN.test(lead.text)) {
+            continue;
+        }
+        const leadRuns = visibleRuns(lead);
+        const nextRuns = visibleRuns(next);
+        const nextFace = nextRuns[0] === undefined ? undefined : faceOf(nextRuns[0]);
+        const size = Math.max(...nextRuns.map((r) => r.size));
+        if (
+            next.pageIndex !== lead.pageIndex ||
+            next.column !== lead.column ||
+            nextFace === undefined ||
+            !leadRuns.every((r) => r.font === nextRuns[0]?.font && r.weight === nextRuns[0]?.weight) ||
+            lead.y - next.y > LEAD_IN_LINES * size ||
+            headingOf(next, body, false) === null
+        ) {
+            continue;
+        }
+        lines.splice(i, 2, {
+            ...next,
+            runs: [...lead.runs, ...next.runs],
+            text: `${lead.text.trim()} ${next.text.trim()}`,
+        });
+    }
+}
+
+/** A lead-in naming the schema's special ability ("<Speciality> Special Ability:"). */
+const SPECIAL_ABILITY_LEAD_IN = /\bspecial\s+abilit(?:y|ies)\s*:\s*$/iu;
+
+/** Line heights below its lead-in a heading's own line may stand. */
+const LEAD_IN_LINES = 2;
+
 export function headingOf(
     line: TextLine,
     body: { style: string; size: number },
@@ -834,6 +876,7 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
         }
         return buildLines({ ...ir, runs }).filter((own) => own.runs.some((r) => r.text.trim().length > 0));
     });
+    joinLeadIns(lines, body);
     const headingFaces = new Set<string>();
     for (const line of lines) {
         const first = visibleRuns(line)[0];
