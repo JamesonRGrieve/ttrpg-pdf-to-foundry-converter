@@ -88,7 +88,9 @@ export function headingBeside(ir: IR, tableRuns: readonly IRTextRun[], line: rea
                 /\p{L}/u.test(r.text) &&
                 r.x + r.width <= left &&
                 r.x + r.width >= left - SIDE_REACH * size &&
-                r.y >= first.y - size &&
+                // A title stacked over lines beside the table ("Scholar" /
+                // "Materium" / "Advances") reaches below the header row.
+                r.y >= first.y - SIDE_TITLE_LINES * size &&
                 r.y <= first.y + 2 * size,
         )
         .sort((a, b) => b.y - a.y || a.x - b.x)
@@ -159,6 +161,9 @@ export function rankOf(heading: string): number | null {
     const m = /\brank\s*(\d+)\b/iu.exec(heading);
     return m?.[1] === undefined ? null : Number(m[1]);
 }
+
+/** Lines below a table's header row a title set beside the table may reach. */
+const SIDE_TITLE_LINES = 3;
 
 /** A table of a career's ranks: a rank column and an XP column. */
 export function isRankTable(headers: readonly string[]): boolean {
@@ -258,6 +263,8 @@ export function rankCharts(ir: IR): AdvancementTable[] {
                 .map((r) => r.text.trim())
                 .join(" ")
                 .replace(/\s+/gu, " ")
+                // A word after a hyphen whose capital the text layer set apart ("Preceptor-S avant").
+                .replace(/(-\p{Lu}) (\p{Ll})/gu, "$1$2")
                 .trim();
             const start = XP_LINE.exec(xp.text)?.[1];
             if (title.length > 0 && start !== undefined) {
