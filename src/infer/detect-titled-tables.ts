@@ -197,6 +197,9 @@ export function groupByKeyAnchors(lines: readonly RawRow[], colBoundaries: reado
     return [...rows, ...own].sort((a, b) => b.y - a.y);
 }
 
+/** Fewest value columns a keyed line fills for full keyless lines to read as records beside side text. */
+const MIN_SIDE_RECORD_FILL = 3;
+
 /** Most words a value cell of a variant row holds: values, not wrapped text. */
 const VARIANT_CELL_WORDS = 4;
 
@@ -258,6 +261,31 @@ function groupAnchored(lines: readonly RawRow[], colBoundaries: readonly number[
     const isSection = (row: RawRow): boolean => !boldRecords && allBold(row) && keyRun(row) === undefined;
     const anchors = lines.filter((row) => keyRun(row) !== undefined || isSection(row));
     if (anchors.length === 0 || anchors.length === lines.length) {
+        return [...lines];
+    }
+    // Lines without a key that each fill every value column a keyed line
+    // fills, one with a figure, are records of their own: the first column is
+    // text set beside the table, not a key, and every line stands as a row.
+    const valueColumns = (row: RawRow): Set<number> =>
+        new Set(
+            row.runs
+                .filter((r) => r.text.trim().length > 0 && columnOfRun(r.x, colBoundaries) > 0)
+                .map((r) => columnOfRun(r.x, colBoundaries)),
+        );
+    const keyedFill = percentile(
+        anchors
+            .filter((a) => !isSection(a))
+            .map((a) => valueColumns(a).size)
+            .sort(numAsc),
+        0.5,
+    );
+    const keyless = lines.filter((row) => !anchors.includes(row));
+    const records = keyless.filter(
+        (row) =>
+            valueColumns(row).size >= keyedFill &&
+            row.runs.some((r) => /^\d[\d,]*$/u.test(r.text.trim()) && columnOfRun(r.x, colBoundaries) > 0),
+    );
+    if (keyedFill >= MIN_SIDE_RECORD_FILL && records.length * 2 > keyless.length) {
         return [...lines];
     }
     const lineText = (row: RawRow): string =>

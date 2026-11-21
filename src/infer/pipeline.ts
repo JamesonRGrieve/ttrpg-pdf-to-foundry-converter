@@ -509,6 +509,9 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
 /** Share of a table's text another reader took, under which the table is read on its own. */
 const PLAIN_UNCOVERED_SHARE = 0.5;
 
+/** Letters a captioned table's cell needs to mark a plain table's row as one it already holds. */
+const MIN_HELD_LETTERS = 4;
+
 /** A column header citing pages ("Page", "Pg."): its rows point to where each entry is printed. */
 const PAGE_HEADER = /^(?:pages?|pgs?\.?)$/iu;
 
@@ -521,9 +524,10 @@ function extractTables(
     const found = detectTitledTables(ir);
     const titledPages = new Set(found.map((t) => t.pageIndex));
     // On a page with captioned tables, a table of career advances the plain
-    // detector reads that is mostly text no captioned table took (one set after a captioned table
-    // whose reader stopped short) is read too, in place of a captioned table
-    // it holds most of.
+    // detector reads that is mostly text no captioned table took (one set
+    // after a captioned table whose reader stopped short) is read too. Where
+    // it holds most of a captioned table, the captioned table keeps its
+    // header and rows and takes only the plain table's rows it lacks.
     const runKey = (r: IRTextRun): string =>
         `${r.pageIndex}:${Math.round(r.x)}:${Math.round(r.y)}:${r.text.trim()}`;
     const plain = detectTables(ir);
@@ -545,12 +549,40 @@ function extractTables(
             advanceRows(t) &&
             share(t.runs ?? [], titledKeys) < PLAIN_UNCOVERED_SHARE,
     );
-    const besideKeys = new Set(beside.flatMap((t) => (t.runs ?? []).map(runKey)));
-    const titled = found.filter((t) => share(t.runs ?? [], besideKeys) < PLAIN_UNCOVERED_SHARE);
+    const taken = new Set<DetectedTable>();
+    const titled = found.map((t) => {
+        const ownKeys = new Set((t.runs ?? []).map(runKey));
+        const over = beside.find(
+            (p) =>
+                !taken.has(p) &&
+                p.pageIndex === t.pageIndex &&
+                share(t.runs ?? [], new Set((p.runs ?? []).map(runKey))) >= PLAIN_UNCOVERED_SHARE,
+        );
+        if (over === undefined) {
+            return t;
+        }
+        taken.add(over);
+        // A row is held when one of its cells is, or ends with, a cell of the captioned table.
+        const cells = new Set(
+            t.rows
+                .flatMap((r) => r.cells.map((c) => c.text.trim()))
+                .filter((c) => (c.match(/\p{L}/gu) ?? []).length >= MIN_HELD_LETTERS),
+        );
+        const held = (r: TableRow): boolean =>
+            r.cells.some((c) => {
+                const text = c.text.trim();
+                return cells.has(text) || [...cells].some((k) => text.endsWith(` ${k}`));
+            });
+        return {
+            ...t,
+            runs: [...(t.runs ?? []), ...(over.runs ?? []).filter((r) => !ownKeys.has(runKey(r)))],
+            rows: [...t.rows, ...over.rows.filter((r) => !r.isHeaderRow && !held(r))],
+        };
+    });
     const tables = continuedTables([
         ...titled,
         ...plain.filter((t) => !titledPages.has(t.pageIndex)),
-        ...beside,
+        ...beside.filter((t) => !taken.has(t)),
     ]);
     for (const t of tables) {
         log.debug(

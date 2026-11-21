@@ -2918,6 +2918,34 @@ describe("table continuations", () => {
         ]);
     });
 
+    it("keeps full lines as their own rows when the first column is text set beside the table", () => {
+        const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
+        const record = (side: string | null, advance: string, y: number) => ({
+            y,
+            runs: [
+                ...(side === null ? [] : [at(side, 20, y)]),
+                at(advance, 100, y),
+                at("100", 200, y),
+                at("S", 250, y),
+                at("-", 300, y),
+            ],
+        });
+        // A quote set down the first column beside a lamplighter's advances:
+        // lines without it are whole records, not its wrapped text.
+        const rows = groupByKeyAnchors(
+            [
+                record("ADVANCES", "Trimming", 500),
+                record(null, "Wick Lore", 488),
+                record("“Light the way", "Ladder Climbing", 476),
+                record(null, "Night Sight", 464),
+                record(null, "Oil Mixing", 452),
+                record("for others.”", "Glazing", 440),
+            ],
+            [0, 80, 180, 240, 280],
+        );
+        expect(rows).toHaveLength(6);
+    });
+
     it("reads a line of values under a keyed row, with no key of its own, as that key's variant row", () => {
         const at = (text: string, x: number, y: number): IRTextRun => ({ ...irRun(text, 0, y), x });
         // Lamps by size: the second size of the Wick Lamp prints only its own values.
