@@ -23,7 +23,7 @@ const executablePath =
 /** Foundry v14 runs on Node 24 or later. */
 const FOUNDRY_NODE = process.env["FOUNDRY_NODE"] ?? "node";
 /** A cold world boot can take a while on a loaded machine. */
-const BOOT_TIMEOUT_MS = 180_000;
+const BOOT_TIMEOUT_MS = Number(process.env["FOUNDRY_BOOT_TIMEOUT_MS"] ?? 180_000);
 /** A conversion renders and reads every page in the browser, twice in the update test. */
 const TEST_TIMEOUT_MS = 900_000;
 

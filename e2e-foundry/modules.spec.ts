@@ -11,10 +11,13 @@ import { joinAsGamemaster, stopWelcomeTour } from "./world.ts";
  * prepared as a sheet prepares it (an Actor with its embedded items).
  *
  * Runs when TPC_MODULES_DIR points at a regression's output directory
- * (`<dir>/<book>/<module>/module.json`); otherwise it is skipped.
+ * (`<dir>/<book>/<module>/module.json`); otherwise it is skipped. TPC_BOOKS
+ * limits it to some of the books.
  */
 
 const MODULES_DIR = process.env["TPC_MODULES_DIR"];
+/** Only these books (comma-separated directory names), when set: a run split into parts. */
+const ONLY_BOOKS = process.env["TPC_BOOKS"]?.split(",").map((b) => b.trim());
 /** Documents sent to the page at once. */
 const BATCH = 200;
 
@@ -28,7 +31,7 @@ function books(dir: string): Map<string, PackFile[]> {
     const out = new Map<string, PackFile[]>();
     for (const book of readdirSync(dir).sort()) {
         const bookDir = join(dir, book);
-        if (!statSync(bookDir).isDirectory()) {
+        if (!statSync(bookDir).isDirectory() || (ONLY_BOOKS !== undefined && !ONLY_BOOKS.includes(book))) {
             continue;
         }
         for (const module of readdirSync(bookDir)) {
@@ -114,4 +117,83 @@ test("every converted document validates and prepares under the current system",
         description: `${checked} documents checked, ${failures.length} failed`,
     });
     expect(failures, "documents the system refuses or cannot prepare").toEqual([]);
+});
+
+/** Documents of each pack whose sheets are opened. */
+const SHEETS_PER_PACK = 3;
+
+test("converted documents open their sheets", async ({ page }) => {
+    test.setTimeout(3_600_000);
+    const dir = resolve(MODULES_DIR ?? ".");
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    await joinAsGamemaster(page);
+    await stopWelcomeTour(page);
+    const failures: string[] = [];
+    let opened = 0;
+    for (const [book, packs] of books(dir)) {
+        for (const pack of packs) {
+            if (pack.type !== "Actor" && pack.type !== "Item") {
+                continue;
+            }
+            const sample = pack.documents.slice(0, SHEETS_PER_PACK);
+            const result = await page.evaluate(
+                async ({ type, documents }) => {
+                    const config = (
+                        globalThis as unknown as {
+                            CONFIG: Record<
+                                string,
+                                {
+                                    documentClass: {
+                                        create(data: unknown): Promise<{
+                                            sheet: {
+                                                render(options: unknown): Promise<unknown>;
+                                                close(): Promise<unknown>;
+                                            } | null;
+                                            delete(): Promise<unknown>;
+                                        } | null>;
+                                    };
+                                }
+                            >;
+                        }
+                    ).CONFIG;
+                    const cls = config[type]?.documentClass;
+                    const out: string[] = [];
+                    for (const data of documents) {
+                        // As a GM imports it: created in the world, its sheet opened, then removed.
+                        try {
+                            const { _id: _ignored, ...fields } = structuredClone(data);
+                            const doc = await (cls as NonNullable<typeof cls>).create(fields);
+                            if (doc === null) {
+                                out.push(`${String(data["name"])}: not created`);
+                                continue;
+                            }
+                            const sheet = doc.sheet;
+                            if (sheet === null) {
+                                out.push(`${String(data["name"])}: no sheet`);
+                            } else {
+                                await sheet.render({ force: true });
+                                await sheet.close();
+                            }
+                            await doc.delete();
+                        } catch (err) {
+                            out.push(
+                                `${String(data["name"])}: ${(err as Error).message.split("\n")[0] ?? ""}`,
+                            );
+                        }
+                    }
+                    return out;
+                },
+                { type: pack.type, documents: sample },
+            );
+            opened += sample.length;
+            failures.push(...result.map((e) => `${book} ${pack.type} ${e}`));
+        }
+    }
+    test.info().annotations.push({
+        type: "sheets",
+        description: `${opened} sheets opened, ${failures.length} failed`,
+    });
+    expect(failures, "sheets that fail to open").toEqual([]);
+    expect(errors, "page errors while sheets open").toEqual([]);
 });

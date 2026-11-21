@@ -389,10 +389,10 @@ export function parseNpc(grid: DetectedNumericGrid): ParsedNpc {
         system["armour"] = authoredArmour(diagramArmour(grid.armourDiagram, bonus));
     }
     if (fields.skills !== undefined) {
-        system["skills"] = tidyList(fields.skills);
+        system["skills"] = tidyList(listOnly(fields.skills));
         // A line with an entry that did not read whole (another field's text
         // run into it, a callout number beside it) is kept as printed only.
-        const skills = listedSkills(tidyList(fields.skills));
+        const skills = listedSkills(tidyList(listOnly(fields.skills)));
         if (skills.length > 0 && skills.every(readsWhole)) {
             system["trainedSkills"] = trainedSkillsOf(skills);
         }
@@ -429,6 +429,14 @@ const itemKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{
  * opening bracket after a word ("Acrobatics(Ag)") and before a bonus closing
  * on one ("(Per)+10" → "(Per) +10").
  */
+/**
+ * A list's own text: it ends at its full stop, and words after one opening
+ * lowercase are prose the layout ran on into it ("… (Int). room filled with …").
+ */
+export function listOnly(text: string): string {
+    return text.replace(/\.\s+\p{Ll}[\s\S]*$/u, ".");
+}
+
 export function tidyList(text: string): string {
     return text
         .replace(/\(\s+/gu, "(")

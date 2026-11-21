@@ -15,6 +15,7 @@
  * Usage: node scripts/e2e-foundry-world.mjs <port>
  * Env:   FOUNDRY_RELEASE_DIR (default .foundry-release)
  *        FOUNDRY_SYSTEM_DIST (default ../.foundry-system/dist)
+ *        FOUNDRY_SYSTEM_PACKS=empty: leave the system's compendiums empty
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -54,7 +55,13 @@ mkdirSync(systemDir, { recursive: true });
 for (const entry of readdirSync(SYSTEM_DIST)) {
     const source = join(SYSTEM_DIST, entry);
     if (entry === "packs") {
-        cpSync(source, join(systemDir, entry), { recursive: true });
+        // A check that reads no system compendium may skip copying them: the
+        // world then opens the system's packs empty, and boots in seconds.
+        if (process.env.FOUNDRY_SYSTEM_PACKS === "empty") {
+            mkdirSync(join(systemDir, entry), { recursive: true });
+        } else {
+            cpSync(source, join(systemDir, entry), { recursive: true });
+        }
     } else {
         symlinkSync(source, join(systemDir, entry));
     }

@@ -74,6 +74,7 @@ import {
     reinforcementTerms,
     rejoinSmallCaps,
     sizeOf,
+    listOnly,
     tidyList,
     specialAbilities,
     splitFields,
@@ -1088,6 +1089,11 @@ describe("npc statblocks", () => {
     });
 
     it("restores a statblock list's spacing around brackets", () => {
+        // A list ends at its full stop: lowercase words after it are prose run on.
+        expect(listOnly("Glow Lore (Int), Dodge (Ag). room filled with lamps (oil")).toBe(
+            "Glow Lore (Int), Dodge (Ag).",
+        );
+        expect(listOnly("Glow Lore (Int), Dodge (Ag).")).toBe("Glow Lore (Int), Dodge (Ag).");
         expect(tidyList("Glow Lore(Int)+10, Dodge (Ag ) +20,  Wick ( Lamps) (Int) -10")).toBe(
             "Glow Lore (Int) +10, Dodge (Ag) +20, Wick (Lamps) (Int) -10",
         );
