@@ -158,7 +158,10 @@ export function headingAbove(ir: IR, runs: readonly IRTextRun[]): string {
 
 /** The rank a heading names ("Rank 1 … Advances"), or null. */
 export function rankOf(heading: string): number | null {
-    const m = /\brank\s*(\d+)\b/iu.exec(heading);
+    // A heading the text layer misread one letter of ("Cank 4") still names its rank.
+    const m =
+        /\brank\s*(\d+)\b/iu.exec(heading) ??
+        /^\s*(?:\p{L}ank|r\p{L}nk|ra\p{L}k|ran\p{L})\s*(\d+)\b/iu.exec(heading);
     return m?.[1] === undefined ? null : Number(m[1]);
 }
 
@@ -702,6 +705,8 @@ export function attachCareerAdvancement(
     );
     const shared = new Map<number, JsonObject[]>();
     let lastShared = null as number | null;
+    // Careers with a table naming its rank by number.
+    const numberedOwners = new Set<Entity>();
     // A table of ranks printed as numbers ("1", "2", …) gives where each numbered rank starts, for every career.
     const numberedXp = new Map<number, number>();
     for (const table of ordered) {
@@ -781,9 +786,26 @@ export function attachCareerAdvancement(
             continue;
         }
         lastShared = null;
+        // A career whose tables each name their rank ("Rank 3 <Career>
+        // Advances") owns no table headed "<Name> Advances" naming none: that
+        // is another entry's own table (an alternate rank set after it).
+        if (
+            owner !== undefined &&
+            number === null &&
+            naming === undefined &&
+            table.kind === "advances" &&
+            ADVANCES_HEADING.test(table.heading) &&
+            numberedOwners.has(owner)
+        ) {
+            previous = null;
+            continue;
+        }
         if (owner === undefined) {
             previous = null;
             continue;
+        }
+        if (number !== null) {
+            numberedOwners.add(owner);
         }
         if (naming !== undefined && current?.career !== naming) {
             current = { career: naming, pageIndex: table.pageIndex };

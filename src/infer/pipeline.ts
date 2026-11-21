@@ -506,6 +506,9 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
     return found > 0;
 }
 
+/** Share of a table's text another reader took, under which the table is read on its own. */
+const PLAIN_UNCOVERED_SHARE = 0.5;
+
 /** A column header citing pages ("Page", "Pg."): its rows point to where each entry is printed. */
 const PAGE_HEADER = /^(?:pages?|pgs?\.?)$/iu;
 
@@ -515,11 +518,39 @@ function extractTables(
     log: Logger,
 ): { tables: number; unclassified: number; tableRuns: Set<IRTextRun>; advancement: AdvancementTable[] } {
     const advancement: AdvancementTable[] = [];
-    const titled = detectTitledTables(ir);
-    const titledPages = new Set(titled.map((t) => t.pageIndex));
+    const found = detectTitledTables(ir);
+    const titledPages = new Set(found.map((t) => t.pageIndex));
+    // On a page with captioned tables, a table of career advances the plain
+    // detector reads that is mostly text no captioned table took (one set after a captioned table
+    // whose reader stopped short) is read too, in place of a captioned table
+    // it holds most of.
+    const runKey = (r: IRTextRun): string =>
+        `${r.pageIndex}:${Math.round(r.x)}:${Math.round(r.y)}:${r.text.trim()}`;
+    const plain = detectTables(ir);
+    const titledKeys = new Set(found.flatMap((t) => (t.runs ?? []).map(runKey)));
+    const share = (runs: readonly IRTextRun[], keys: ReadonlySet<string>): number =>
+        runs.length === 0 ? 0 : runs.filter((r) => keys.has(runKey(r))).length / runs.length;
+    // Only a table of career advances (most rows a cost, then Skill or Talent).
+    const advanceRows = (t: DetectedTable): boolean =>
+        rankAdvances(
+            [],
+            t.rows.map((r) => [...r.cells].sort((a, b) => a.colIndex - b.colIndex).map((c) => c.text)),
+            () => null,
+        ).length *
+            2 >
+        t.rows.length;
+    const beside = plain.filter(
+        (t) =>
+            titledPages.has(t.pageIndex) &&
+            advanceRows(t) &&
+            share(t.runs ?? [], titledKeys) < PLAIN_UNCOVERED_SHARE,
+    );
+    const besideKeys = new Set(beside.flatMap((t) => (t.runs ?? []).map(runKey)));
+    const titled = found.filter((t) => share(t.runs ?? [], besideKeys) < PLAIN_UNCOVERED_SHARE);
     const tables = continuedTables([
         ...titled,
-        ...detectTables(ir).filter((t) => !titledPages.has(t.pageIndex)),
+        ...plain.filter((t) => !titledPages.has(t.pageIndex)),
+        ...beside,
     ]);
     for (const t of tables) {
         log.debug(

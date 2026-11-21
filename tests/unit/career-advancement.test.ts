@@ -78,6 +78,9 @@ describe("a career's advancement tables", () => {
         expect(headingAbove(ir, table)).toBe("RANK 1 LAMPWRIGHT ADVANCES");
         expect(rankOf("Rank 1 Lampwright Advances")).toBe(1);
         expect(rankOf("Lampwright Characteristic Advances")).toBeNull();
+        // A rank word misread by one letter at the heading's start still names the rank.
+        expect(rankOf("Cank 4 Lampwright 2Ugances")).toBe(4);
+        expect(rankOf("The Tank 4 Lampwright")).toBeNull();
     });
 
     it("reads each characteristic's cost at each tier", () => {
