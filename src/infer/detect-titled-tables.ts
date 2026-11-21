@@ -795,6 +795,9 @@ function withinHeaderSpan(header: RawRow, band: readonly IRTextRun[]): (r: IRTex
 /** Where a table read ended at a heading below it, so that heading opens no sub-table. */
 const endedAtHeading = new WeakMap<TitledTable, number>();
 
+/** Column labels the schema knows that a line must carry to be the next table's header. */
+const MIN_NEXT_HEADER_ROLES = 2;
+
 /** Fewest records a sub-table holds. */
 const MIN_SUBTABLE_ROWS = 2;
 
@@ -898,6 +901,7 @@ export function tableBody(
     lines: readonly RawRow[],
     colBoundaries: readonly number[],
     onHeading: (line: RawRow) => void = () => undefined,
+    ownHeader = "",
 ): RawRow[] {
     const gaps = lines.slice(1).map((l, i) => (lines[i]?.y ?? l.y) - l.y);
     const sortedGaps = [...gaps].sort((a, b) => a - b);
@@ -989,7 +993,20 @@ export function tableBody(
         if (headingFace) {
             onHeading(line);
         }
-        if (proseRun || proseKey || setApart || heading || headingFace) {
+        // Another table's header row set among the records (the next table's,
+        // printed straight after this one, naming other columns) ends this
+        // table; its own header repeated (a second column of records) does not.
+        const words = (text: string): Set<string> => new Set(text.toLowerCase().match(/\p{L}+/gu) ?? []);
+        const own = words(ownHeader);
+        const theirs = [...words(line.runs.map((r) => r.text).join(" "))];
+        const nextHeader =
+            body.length > 0 &&
+            own.size > 0 &&
+            theirs.filter((w) => own.has(w)).length * 2 < theirs.length &&
+            // A header names columns the schema knows; a bold record names a thing.
+            line.runs.filter((r) => headerRole(r.text.trim()) !== null).length >= MIN_NEXT_HEADER_ROLES &&
+            isHeaderRow(line, cellEdges(lines.slice(i + 1)));
+        if (proseRun || proseKey || setApart || heading || headingFace || nextHeader) {
             break;
         }
         body.push(line);
@@ -1275,9 +1292,14 @@ function readTable(tableRuns: IRTextRun[], title: TitleHit): TitledTable | null 
     const headerCells = assignToColumns(headerRow.runs, colBoundaries);
     const headers = headerCells.map((c) => c.text.replace(/\s+/g, " ").trim());
     let headingAt: number | undefined;
-    const read = tableBody(lines.slice(headerIdx + 1), inferColumnBoundaries(headerRow, edges), (line) => {
-        headingAt = line.y;
-    });
+    const read = tableBody(
+        lines.slice(headerIdx + 1),
+        inferColumnBoundaries(headerRow, edges),
+        (line) => {
+            headingAt = line.y;
+        },
+        headers.join(" "),
+    );
     // A header naming another set of columns opens the next sub-table; a
     // repeat of this table's own header carries on.
     const otherHeader = read.findIndex((line, i) => {
