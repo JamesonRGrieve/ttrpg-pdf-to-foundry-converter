@@ -1993,6 +1993,7 @@ export function readRankedCareers(
             under.push(e);
         }
         const read = grantsOf(under.flatMap(fieldEntries), () => []);
+        withHeadedTraits(read.grants, under);
         out.push({
             name: properName(
                 caseLost(printed) || printed === printed.toUpperCase() ? printed.toLowerCase() : printed,
@@ -2004,6 +2005,58 @@ export function readRankedCareers(
         });
     }
     return out;
+}
+
+/** A heading over an origin's traits ("… Traits"): the schema's own word. */
+const TRAITS_HEADING = /\btraits?\s*$/iu;
+
+/**
+ * Traits an origin sets as headings under a heading naming them: each one
+ * before a "choose one" heading is granted, as a rule of its own; those
+ * after it are the options of one choice, labelled by the heading naming
+ * them, singular ("… Trait").
+ */
+function withHeadedTraits(grants: JsonObject, under: readonly Entry[]): void {
+    const at = under.findIndex((e) => TRAITS_HEADING.test(e.heading.text.trim()));
+    const head = under[at];
+    if (head === undefined) {
+        return;
+    }
+    // They run to the next heading of the section's level (the largest before
+    // them, or the naming heading's own) or to a table of advances.
+    const level = Math.max(head.heading.size, ...under.slice(0, at).map((e) => e.heading.size));
+    const items: Entry[] = [];
+    for (const e of under.slice(at + 1)) {
+        if (e.heading.size >= level || /\badvances\s*$/iu.test(e.heading.text)) {
+            break;
+        }
+        // A table's header line read as a heading ("Advance Cost") is none of them.
+        if (!/\b(?:advance|cost|prerequisites?|characteristic)\b/iu.test(e.heading.text)) {
+            items.push(e);
+        }
+    }
+    const choose = items.findIndex((e) => CHOOSE_ONE.test(e.heading.text));
+    const name = (e: Entry): string => capitalizeWords(headingName(e.heading.text).toLowerCase());
+    const granted = (choose < 0 ? items : items.slice(0, choose)).filter((e) => e.body.trim().length > 0);
+    const options = choose < 0 ? [] : items.slice(choose + 1).filter((e) => e.body.trim().length > 0);
+    if (granted.length > 0) {
+        grants["specialAbilities"] = [
+            ...(Array.isArray(grants["specialAbilities"]) ? grants["specialAbilities"] : []),
+            ...granted.map((e) => ({ name: name(e), description: e.body.trim() })),
+        ];
+    }
+    if (options.length > 0) {
+        const label = capitalizeWords(head.heading.text.trim().toLowerCase().replace(/s\s*$/u, ""));
+        grants["choices"] = [
+            ...(Array.isArray(grants["choices"]) ? grants["choices"] : []),
+            {
+                type: "talent",
+                label,
+                count: 1,
+                options: options.map((e) => ({ name: name(e), label: name(e), value: name(e) })),
+            },
+        ];
+    }
 }
 
 /** Times a heading over grant fields must recur to be a label (every origin's "Effects"), not a name. */

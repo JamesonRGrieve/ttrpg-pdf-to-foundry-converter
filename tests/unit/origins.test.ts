@@ -1133,6 +1133,56 @@ describe("careers their rank tables name", () => {
     });
 });
 
+describe("traits a career sets as headings", () => {
+    it("grants those before a choose-one heading and offers those after it", () => {
+        const step = TARGETS.dh1.originSteps.find((s) => s.key === "career");
+        if (step === undefined) {
+            throw new Error("dh1 has a career step");
+        }
+        const sized = (text: string, size: number, body = ""): Entry => ({
+            heading: { text, size, style: `s${size}`, pageIndex: 10 },
+            sections: [],
+            fields: [],
+            body,
+        });
+        const [career] = readRankedCareers(
+            [
+                {
+                    ...sized("LAMPWARDEN", 30, "Lampwardens keep the night at bay."),
+                    heading: { text: "LAMPWARDEN", size: 30, style: "s30", pageIndex: 10 },
+                },
+                sized("Starting Gear", 18),
+                sized("warden TRAITS", 11),
+                sized("keeper of the flame", 12, "The warden's lamp never goes out."),
+                sized("Choose One…", 12),
+                sized("Advance Cost", 10, "Trimming 100"),
+                sized("glass eye", 12, "Sees in the dark."),
+                sized("oil hands", 12, "Never burnt."),
+                sized("WARDEN CHARACTERISTIC ADVANCES", 11),
+            ],
+            [
+                { heading: "RANK 9 LAMPWARDEN ADVANCES", pageIndex: 11 },
+                { heading: "RANK 10 LAMPWARDEN ADVANCES", pageIndex: 12 },
+            ],
+            step,
+        );
+        expect(career?.grants["specialAbilities"]).toEqual([
+            { name: "Keeper of the Flame", description: "The warden's lamp never goes out." },
+        ]);
+        expect(career?.grants["choices"]).toEqual([
+            {
+                type: "talent",
+                label: "Warden Trait",
+                count: 1,
+                options: [
+                    { name: "Glass Eye", label: "Glass Eye", value: "Glass Eye" },
+                    { name: "Oil Hands", label: "Oil Hands", value: "Oil Hands" },
+                ],
+            },
+        ]);
+    });
+});
+
 describe("origins whose grants follow under a label each repeats", () => {
     it("names each by the heading before its label, with its price, requirements and grants", () => {
         const withFields = (e: Entry, fields: [string, string][]): Entry => ({ ...e, fields });
