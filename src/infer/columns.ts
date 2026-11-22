@@ -79,7 +79,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(effect|effects)$/u, "effect"],
     [/^(type)$/u, "type"],
     [/^(protection|protection rating)$/u, "protection"],
-    [/^(overload|overload chance)$/u, "overload"],
+    [/^(overload|overload chance|overload roll)$/u, "overload"],
     [/^(focus power|focus power test|focus test)$/u, "focusPower"],
     // A power's focus time, printed "Focus" or run together.
     [/^(action|focus ?time|focus)$/u, "action"],

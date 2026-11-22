@@ -193,7 +193,12 @@ function armour(cells: RowCells): RowMapping {
 /** `01-10` / `1–5` → the inclusive d100 band. */
 function parseBand(raw: string): { min: number; max: number } | null {
     const m = /^(\d+)\s*[-–]\s*(\d+)$/u.exec(raw.trim());
-    return m === null ? null : { min: Number(m[1]), max: Number(m[2]) };
+    if (m !== null) {
+        return { min: Number(m[1]), max: Number(m[2]) };
+    }
+    // A single result ("01") is a band of one.
+    const one = /^(\d+)$/u.exec(raw.trim());
+    return one === null ? null : { min: Number(one[1]), max: Number(one[1]) };
 }
 
 function forceField(cells: RowCells): RowMapping {

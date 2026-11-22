@@ -86,6 +86,13 @@ export function classifyTable(table: DetectedTable): Classification {
         ["psychic-power", headerOverlap(headers, PSYCHIC_HEADERS)],
         ["skill", headerOverlap(headers, SKILL_HEADERS)],
     ];
+    // A field's protection rating beside its overload roll is a force field's profile.
+    if (
+        headers.some((h) => h.startsWith("overload")) &&
+        headers.some((h) => h === "rating" || h.includes("protection"))
+    ) {
+        return { contentType: "force-field", confidence: 0.8 };
+    }
     const [bestType, bestScore] = scores.reduce((best, s) => (s[1] > best[1] ? s : best));
     if (bestScore >= MATCH_THRESHOLD) {
         return { contentType: bestType, confidence: bestScore };

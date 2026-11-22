@@ -277,9 +277,11 @@ class EntityCollector {
 
 /** Resolve a table's headers to roles; merged headers ("Clip Rld") yield several. */
 function columnRoles(table: DetectedTable): (Role[] | null)[] {
+    // A bare "Rating" beside an overload roll is a force field's protection rating.
+    const overload = table.headers.some((h) => headerRole(h) === "overload");
     return shipTableRoles(
         table.headers.map((h) => {
-            const role = headerRole(h);
+            const role = headerRole(h) ?? (overload && /^\s*rating\s*$/iu.test(h) ? "protection" : null);
             return role === null ? mergedHeaderRoles(h) : [role];
         }),
         table.headers,

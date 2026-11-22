@@ -39,6 +39,10 @@ describe("table classification", () => {
 
     it("recognises catalogues of protection and of acquirable goods", () => {
         expect(classifyTable(table(["Name", "Protection Rating", "Weight"])).contentType).toBe("force-field");
+        // A bare rating beside an overload roll, among price columns, is a force field's profile.
+        expect(
+            classifyTable(table(["Name", "Rating", "Overload Roll", "Wt", "Req", "Renown"])).contentType,
+        ).toBe("force-field");
         expect(classifyTable(table(["Name", "AP", "Weight"])).contentType).toBe("armour");
         expect(classifyTable(table(["Name", "Weight", "Availability"])).contentType).toBe("gear");
     });
