@@ -511,6 +511,9 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
     return found > 0;
 }
 
+/** A name that is only one of the schema's craftsmanship choices. */
+const CRAFTSMANSHIP_NAME = /^\s*(?:poor|common|good|best)(?:\s+craftsmanship)?\s*$/iu;
+
 /** Pages after a table of ship components that a bare list of upgrades still belongs to the ship. */
 const SHIP_UPGRADE_PAGES = 3;
 
@@ -847,6 +850,11 @@ function extractTables(
             }
             const itemType = rowType(type, cells);
             if (itemType === null) {
+                continue;
+            }
+            // A row named only by a craftsmanship (the schema's choices) is a
+            // rule looked up by quality, not an item ("Good": overload 01–05).
+            if (CRAFTSMANSHIP_NAME.test(name)) {
                 continue;
             }
             if (itemType === "shipWeapon" && cells.type === undefined && section !== null) {
