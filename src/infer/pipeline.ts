@@ -1852,7 +1852,9 @@ function extractEntries(
         if (item.description.length > 0) {
             descriptions.set(nameKey(item.name), item.description);
         }
-        const usedWith = entry.fields.find(([label]) => /^used with$/iu.test(label.trim()))?.[1];
+        const usedWith = entry.fields.find(([label]) =>
+            /^(?:used with|available for)$/iu.test(label.trim()),
+        )?.[1];
         if (type === "ammunition" && usedWith !== undefined) {
             out.usedWith.set(nameKey(item.name), usedWith);
         }
@@ -3402,6 +3404,49 @@ export function keepUnparsed(entities: readonly Entity[], line: Line): void {
     }
 }
 
+/** Fields gear and ammunition both hold: what an item costs, weighs and how it is found. */
+const SHARED_PHYSICAL_FIELDS = ["cost", "weight", "availability", "craftsmanship"] as const;
+
+/**
+ * A piece of gear named as an ammunition is: one item, read as gear from a
+ * table whose caption names several kinds ("Gear, Tools and Ammunition") and
+ * as ammunition from its own entry. Its price, weight and availability join
+ * the ammunition where that lacks them, and the gear reading goes.
+ */
+function withoutMixedCaptionGear(entities: readonly Entity[], loads: ReadonlySet<string>): Entity[] {
+    const ammunition = new Map<string, Entity>();
+    // Only ammunition whose own entry says which weapons load it.
+    for (const e of entities) {
+        if (e.fields["type"] === "ammunition" && loads.has(nameKey(String(e.fields["name"])))) {
+            ammunition.set(singularKey(String(e.fields["name"])), e);
+        }
+    }
+    return entities.filter((e) => {
+        if (e.fields["type"] !== "gear") {
+            return true;
+        }
+        const ammo = ammunition.get(singularKey(String(e.fields["name"])));
+        const into = ammo?.fields["system"];
+        const from = e.fields["system"];
+        if (ammo === undefined || !isJsonObject(into) || !isJsonObject(from)) {
+            return true;
+        }
+        for (const key of SHARED_PHYSICAL_FIELDS) {
+            const have = into[key];
+            const given = from[key];
+            const empty =
+                have === undefined ||
+                have === null ||
+                have === "" ||
+                (isJsonObject(have) && JSON.stringify(have) === JSON.stringify({}));
+            if (empty && given !== undefined) {
+                into[key] = given;
+            }
+        }
+        return false;
+    });
+}
+
 /**
  * An actor's characteristics as printed, or null when it has none: two
  * statblocks of one name that print different characteristics are two
@@ -3417,13 +3462,16 @@ function characteristicSignature(e: Entity): string | null {
 }
 
 export function consolidate(
-    entities: readonly Entity[],
+    read: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
     prose: ReadonlyMap<string, string>,
     line: Line,
     log: Logger,
+    /** Ammunition whose entries say which weapons load them, by name key. */
+    loads: ReadonlySet<string> = new Set(),
 ): Entity[] {
     const richness = (e: Entity): number => JSON.stringify(e.fields).length;
+    const entities = withoutMixedCaptionGear(read, loads);
     // By pack and name, then by printed characteristics: actors of one name
     // whose statblocks differ stay apart. One read without characteristics
     // joins the statblock of its name when there is just one.
@@ -3564,7 +3612,14 @@ export function infer(read: IR, log: Logger, target: TargetSchema): InferResult 
             );
         }),
     );
-    const entities = consolidate(out.entities, descriptions, headedProse(detected), line, log);
+    const entities = consolidate(
+        out.entities,
+        descriptions,
+        headedProse(detected),
+        line,
+        log,
+        new Set(out.usedWith.keys()),
+    );
     applyHeadedRules(entities, headedRules(detected), line);
     embedNpcItems(entities);
     fillSkillCharacteristics(entities);

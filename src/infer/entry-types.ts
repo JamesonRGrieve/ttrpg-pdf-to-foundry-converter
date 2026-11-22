@@ -478,6 +478,15 @@ export function entryType(entry: Entry): ItemType | null {
     if (KIND_WORD.test(heading)) {
         return null;
     }
+    // Rounds, named as a plural ("… Rounds", "… Bolts"), say which weapons
+    // load them ("Used With: … weapons", "Available For: … weapons"); a
+    // weapon's upgrade is named in the singular.
+    const loads =
+        /\bweapons?\b/iu.test(fields.get("used with") ?? "") ||
+        /\bweapons?\b/iu.test(fields.get("available for") ?? "");
+    if (loads && /[^s]s\s*$/iu.test(heading)) {
+        return "ammunition";
+    }
     const typed = sectionType(entry.sections);
     if (typed === null) {
         return null;

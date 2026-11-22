@@ -1442,6 +1442,13 @@ describe("entry typing", () => {
         body,
     });
 
+    it("types rounds named as a plural and said to be used with weapons as ammunition", () => {
+        expect(entryType(entry("GLOWSHOT ROUNDS", [["Used with", "Lantern weapons."]]))).toBe("ammunition");
+        expect(entryType(entry("Wick Bolts", [["Available For", "Wick weapons (all)."]]))).toBe("ammunition");
+        // A weapon's upgrade is named in the singular.
+        expect(entryType(entry("GLOW SIGHT", [["Used with", "Lantern weapons."]]))).not.toBe("ammunition");
+    });
+
     it("types an ability priced in experience under a section of marks or distinctions, with its category and cost", () => {
         const mark = entry("LANTERN BEARER", [["Cost", "750 xp"]], ["Marks of Note", "Command Marks"]);
         expect(entryType(mark)).toBe("specialAbility");
