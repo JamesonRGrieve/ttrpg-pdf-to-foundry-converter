@@ -62,9 +62,10 @@ describe("vehicle profiles", () => {
         const { kind, system } = parseVehicle(panelPairs("VEHICLE TRAITS: ENCLOSED, FLYER, SKIMMER"));
         expect(kind).toBe("aircraft");
         expect(system["vehicleClass"]).toBe("air");
+        // A skimmer, by its traits or its printed type, is one the schema's aircraft model holds.
         const skimmer = parseVehicle(panelPairs("VEHICLE TRAITS: BIKE, SKIMMER"));
-        expect(skimmer.kind).toBe("terracraft");
-        // A printed Skimmer type is one the schema's aircraft model holds, though it does not fly.
+        expect(skimmer.kind).toBe("aircraft");
+        expect(skimmer.system).toMatchObject({ type: "skimmer", vehicleClass: "air", locomotion: "skimmer" });
         const printed = parseVehicle(panelPairs("TYPE: SKIMMER"));
         expect(printed.kind).toBe("aircraft");
         expect(printed.system["type"]).toBe("skimmer");
@@ -97,7 +98,7 @@ describe("vehicle profiles", () => {
         });
         expect(of("Skimmer").system).toMatchObject({
             type: "skimmer",
-            vehicleClass: "ground",
+            vehicleClass: "air",
             locomotion: "skimmer",
         });
         const craft = of("Spacecraft");

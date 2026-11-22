@@ -70,7 +70,7 @@ const PRINTED_TYPES: readonly {
     {
         pattern: /^\s*skimmer\b/iu,
         type: "skimmer",
-        vehicleClass: "ground",
+        vehicleClass: "air",
         locomotion: "skimmer",
         aircraft: true,
     },
@@ -246,5 +246,15 @@ export function parseVehicle(pairs: ReadonlyMap<string, string>): ParsedVehicle 
     if (flies && printed === undefined) {
         system["vehicleClass"] = "air";
     }
-    return { kind: flies || printed?.aircraft === true ? "aircraft" : "terracraft", system, unparsed };
+    // A craft its traits name a skimmer, with no type printed, is the skimmer type.
+    const skims = printed === undefined && system["locomotion"] === "skimmer";
+    if (skims) {
+        system["type"] = "skimmer";
+        system["vehicleClass"] = "air";
+    }
+    return {
+        kind: flies || skims || printed?.aircraft === true ? "aircraft" : "terracraft",
+        system,
+        unparsed,
+    };
 }
