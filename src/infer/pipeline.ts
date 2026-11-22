@@ -76,6 +76,7 @@ import {
     parseArmourType,
     parseGearCategory,
     parseShipComponentType,
+    parseWeaponClass,
     parseWeaponType,
     splitTrailingClass,
 } from "./notation.ts";
@@ -2049,6 +2050,10 @@ function addOrigin(out: EntityCollector, origin: OriginPathReading): void {
     );
 }
 
+/** A rule's closing profile: a class word, a colon, then semicolon-set parts with a penetration. */
+const CLOSING_PROFILE =
+    /(?:^|[.!]\s+)(?<cls>\p{Lu}\p{Ll}+)\s*:\s*(?<profile>[^.:]*;[^.:]*\bPen\b[^.:]*?)\.?\s*$/u;
+
 /** The reading that names an item from a profile printed inline (see `inline-weapons.ts`). */
 const INLINE_READING = "inline:";
 /** A parenthesized qualifier closing a name ("Hammer (heavy)"). */
@@ -2073,7 +2078,21 @@ function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): 
     );
     let count = 0;
     for (const entry of entries) {
-        const text = [entry.body, ...entry.fields.map(([label, value]) => `${label}: ${value}`)].join("\n");
+        // A rule naming a weapon may close on its profile unbracketed ("…
+        // Heavy: 100m; S/2/—; 2d10+5 R; Pen 8; …"): the profile of the weapon
+        // the rule is named for, read as a bracketed one.
+        const closing = entry.fields.flatMap(([label, value]) => {
+            const m = CLOSING_PROFILE.exec(value);
+            const cls = m?.groups?.["cls"];
+            return m === null || cls === undefined || parseWeaponClass(cls) === null
+                ? []
+                : [`${label.trim()} (${cls}; ${m.groups?.["profile"] ?? ""})`];
+        });
+        const text = [
+            entry.body,
+            ...entry.fields.map(([label, value]) => `${label}: ${value}`),
+            ...closing,
+        ].join("\n");
         for (const weapon of inlineWeapons(text)) {
             const key = nameKey(weapon.name);
             if (named.has(key)) {
