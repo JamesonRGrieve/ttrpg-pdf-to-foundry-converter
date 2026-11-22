@@ -753,8 +753,20 @@ function extractTables(
         }
         // A bare list of upgrades (a name and its rarity) read just after a
         // table of ship components upgrades the ship: supplemental components.
+        // A name column headed by a kind ("Armour") under a caption of gear,
+        // with none of that kind's own columns (armour points, damage), lists gear.
+        const headerType = nameHeaderType(table);
+        const profileRole =
+            headerType === "armour" ? "armourPoints" : headerType === "weapon" ? "damage" : null;
+        const gearAfterAll =
+            captionType === null &&
+            profileRole !== null &&
+            /\bgear\b/iu.test(table.tableTitle ?? "") &&
+            !flatRoles.includes(profileRole);
         const readType =
-            captionType ?? nameHeaderType(table) ?? TABLE_ITEM_TYPE[classifyTable(table).contentType];
+            captionType ??
+            (gearAfterAll ? "gear" : headerType) ??
+            TABLE_ITEM_TYPE[classifyTable(table).contentType];
         const shipUpgrades =
             readType === "weaponModification" &&
             table.headers.length <= 2 &&
