@@ -72,6 +72,7 @@ import {
 } from "./names.ts";
 import {
     captionWeaponClass,
+    isEmptyCell,
     parseArmourType,
     parseGearCategory,
     parseShipComponentType,
@@ -115,7 +116,7 @@ import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numb
 import { isWeaponNameLine, panelWeapons } from "./panel-weapons.ts";
 import { variantGrid } from "./profile-variants.ts";
 import { buildRollTable, rollResults } from "./roll-tables.ts";
-import { mapRow, NO_DAMAGE, type RowCells, type RowMapping, rowType } from "./rows.ts";
+import { isLoadRow, mapRow, NO_DAMAGE, type RowCells, type RowMapping, rowType } from "./rows.ts";
 import {
     ACTOR_SEGMENT,
     buildActor,
@@ -815,6 +816,9 @@ function extractTables(
         // names their weapon type ("Lances").
         let section: string | null = carried.get(table) ?? null;
         const records: TableRecord[] = [];
+        // A weapon table that lists rounds for its launchers (rows of damage
+        // with every firing column a dash).
+        const listsLoads = type === "weapon" && table.rows.some((r) => isLoadRow(rowCells(r, roles)));
         for (const row of table.rows) {
             if (row.isSectionHeader) {
                 section = row.sectionName;
@@ -860,7 +864,17 @@ function extractTables(
             if (captionClass !== null && cells.class === undefined) {
                 cells.class = captionClass;
             }
-            const itemType = rowType(type, cells);
+            // Beside them, a row of dashes that prints only its rounds' qualities
+            // ("Blast (12)") is one of those rounds too.
+            const quietLoad =
+                listsLoads &&
+                ![cells.class, cells.range, cells.rof, cells.clip].some(
+                    (c) => c !== undefined && !isEmptyCell(c),
+                ) &&
+                (cells.damage === undefined || isEmptyCell(cells.damage)) &&
+                cells.special !== undefined &&
+                !isEmptyCell(cells.special);
+            const itemType = quietLoad ? "ammunition" : rowType(type, cells);
             if (itemType === null) {
                 continue;
             }
