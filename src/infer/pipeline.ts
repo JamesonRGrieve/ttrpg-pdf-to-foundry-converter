@@ -2073,10 +2073,15 @@ export function givenNames(names: readonly string[]): Set<string> {
  * "Hammer (heavy)"): a statblock's "hammer" is one of those, not another.
  */
 function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): number {
+    // A trait of a weapon's name (a rule about it) gives no weapon.
     const named = givenNames(
-        out.entities.filter((e) => e.documentType === "Item").map((e) => String(e.fields["name"])),
+        out.entities
+            .filter((e) => e.documentType === "Item" && e.fields["type"] !== "trait")
+            .map((e) => String(e.fields["name"])),
     );
     let count = 0;
+    /** Rules that close on their weapon's profile: the weapon, not a trait of their own. */
+    const closingNames = new Set<string>();
     for (const entry of entries) {
         // A rule naming a weapon may close on its profile unbracketed ("…
         // Heavy: 100m; S/2/—; 2d10+5 R; Pen 8; …"): the profile of the weapon
@@ -2084,9 +2089,11 @@ function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): 
         const closing = entry.fields.flatMap(([label, value]) => {
             const m = CLOSING_PROFILE.exec(value);
             const cls = m?.groups?.["cls"];
-            return m === null || cls === undefined || parseWeaponClass(cls) === null
-                ? []
-                : [`${label.trim()} (${cls}; ${m.groups?.["profile"] ?? ""})`];
+            if (m === null || cls === undefined || parseWeaponClass(cls) === null) {
+                return [];
+            }
+            closingNames.add(nameKey(label));
+            return [`${label.trim()} (${cls}; ${m.groups?.["profile"] ?? ""})`];
         });
         const text = [
             entry.body,
@@ -2117,6 +2124,17 @@ function extractInlineWeapons(entries: readonly Entry[], out: EntityCollector): 
                 `${INLINE_READING}weapon`,
             );
             count += 1;
+        }
+    }
+    // Such a rule describes its weapon; read as a trait of its own name, it goes.
+    for (let i = out.entities.length - 1; i >= 0; i--) {
+        const e = out.entities[i];
+        if (
+            e !== undefined &&
+            e.fields["type"] === "trait" &&
+            closingNames.has(nameKey(String(e.fields["name"])))
+        ) {
+            out.entities.splice(i, 1);
         }
     }
     return count;
