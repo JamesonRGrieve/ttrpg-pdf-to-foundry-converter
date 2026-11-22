@@ -79,6 +79,35 @@ describe("detectTables", () => {
         expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Glow Lamp", "Wick", "Ember"]);
     });
 
+    it("reads on past a title stacked beside the first record under the header", () => {
+        const bold = { weight: "bold" as const };
+        const title = { font: "TitleFace" };
+        const record = (name: string, y: number): IRTextRun[] => [
+            run(name, 150, y, 60),
+            run("100", 250, y, 14),
+            run("S", 300, y, 6),
+        ];
+        const rows = [
+            [
+                run("Advance", 150, 700, 40, bold),
+                run("Cost", 250, 700, 20, bold),
+                run("Type", 300, 700, 20, bold),
+            ],
+            record("Trimming", 690),
+            [run("WARDEN", 50, 686, 40, title)],
+            record("Wick Lore", 680),
+            record("Glazing", 670),
+            record("Oil Mixing", 660),
+        ].flat();
+        const [table] = detectTables(irOf(rows));
+        expect(table?.rows.map((r) => r.cells.find((c) => /\p{L}{3}/u.test(c.text))?.text)).toEqual([
+            "Trimming",
+            "Wick Lore",
+            "Glazing",
+            "Oil Mixing",
+        ]);
+    });
+
     it("keeps two records apart when prose beside them sits between their lines", () => {
         const bold = { weight: "bold" as const };
         const record = (name: string, y: number): IRTextRun[] => [

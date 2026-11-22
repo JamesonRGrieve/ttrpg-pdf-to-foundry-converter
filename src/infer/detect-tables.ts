@@ -294,7 +294,13 @@ export function detectTables(ir: IR): DetectedTable[] {
                 cells.length === 1 &&
                 only?.colIndex === 0 &&
                 run !== undefined &&
-                row.runs.every((r) => r.italic) &&
+                // Italic, or, beside the first record under the table's own header,
+                // a face its records do not use (a title stacked down the margin).
+                (row.runs.every((r) => r.italic) ||
+                    (headerRow !== null &&
+                        tableRows.length <= 1 &&
+                        bodyFonts.size > 0 &&
+                        row.runs.every((r) => !bodyFonts.has(r.font)))) &&
                 lastY - row.y <= WRAP_LINES * run.size &&
                 next !== undefined &&
                 assignRunsToColumns(next.runs, columns).length >= MIN_COLUMNS - 1

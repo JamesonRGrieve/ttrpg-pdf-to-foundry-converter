@@ -608,6 +608,8 @@ export function rankAdvances(
         if (runOn?.[1] !== undefined && kindOf(name) === null) {
             name = runOn[1];
         }
+        // Nor do any words after a skill's rank ("Security +20 Saints"): the rank ends the name.
+        name = name.replace(/(\+\s*\d+)\s+[^()+]+$/u, "$1");
         // Reference marks set after a name are no part of it, nor a mark the
         // text layer misread as a currency sign hard after a letter.
         name = name
@@ -938,7 +940,16 @@ export function attachCareerAdvancement(
                 words.every((w) => before.has(w))
             );
         };
-        const continued = candidates.some((t) => runsOn(t, rankNamed(t, ranks, claimed)));
+        // Not where the title over or beside the table names a rank in full
+        // ("scholar EMPYREAN"); a header cell may name a later rank within it.
+        const namesWhole = (t: string): boolean => {
+            const rank = rankNamed(t, ranks, claimed);
+            const words = new Set(titleWords(t));
+            return rank !== undefined && titleWords(rank.title).every((w) => words.has(w));
+        };
+        const continued =
+            candidates.some((t) => runsOn(t, rankNamed(t, ranks, claimed))) &&
+            ![table.heading, table.sideHeading ?? ""].some(namesWhole);
         const titled =
             number === null && table.kind === "advances" && !continued
                 ? candidates.reduce<PrintedRank | undefined>(

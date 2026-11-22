@@ -575,6 +575,7 @@ describe("a career's advancement tables", () => {
                     ["Rite of Pure Flame", "100", "Talent"],
                     ["Trimming +20 then", "100", "Skill"],
                     ["Steady shot", "100", "Talent"],
+                    ["Glazing +20 Saints", "100", "Skill"],
                 ],
                 kindOf,
             ).map((a) => a["name"]),
@@ -587,6 +588,7 @@ describe("a career's advancement tables", () => {
             "Rite of Pure Flame",
             "Trimming",
             "Steady shot",
+            "Glazing",
         ]);
     });
 });
