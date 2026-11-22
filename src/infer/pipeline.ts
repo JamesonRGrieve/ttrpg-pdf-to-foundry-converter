@@ -113,6 +113,7 @@ import {
     withSkillLevelBase,
 } from "./origin-paths.ts";
 import { applyOriginPrerequisites } from "./origin-prerequisites.ts";
+import { withoutOverlaidCopies } from "./overlaid.ts";
 import { inferPageNumbering, printedPage, type PageNumbering } from "./page-numbers.ts";
 import { isWeaponNameLine, panelWeapons } from "./panel-weapons.ts";
 import { variantGrid } from "./profile-variants.ts";
@@ -3682,7 +3683,7 @@ export function consolidate(
  * target is the user's choice of output schema.
  */
 export function infer(read: IR, log: Logger, target: TargetSchema): InferResult {
-    const ir = withLostLettersRestored(withLigaturesJoined(read));
+    const ir = withLostLettersRestored(withLigaturesJoined(withoutOverlaidCopies(read)));
     const line = target.line;
     const book = inferBookSlug(ir);
     const numbering = inferPageNumbering(ir);

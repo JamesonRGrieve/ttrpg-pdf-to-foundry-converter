@@ -1612,11 +1612,32 @@ export function readVariantOrigins(
         const key = letters(text);
         return listed.get(key) ?? listed.get(key.replace(/s$/u, ""));
     };
+    // A heading's clean copy: a heading just before it on its page whose
+    // letters it holds, or that holds its letters.
+    const copyOf = (i: number, heading: string, bodiless: boolean): Entry | undefined =>
+        entries
+            .slice(Math.max(0, i - VARIANT_COPY_REACH), i)
+            .reverse()
+            .find(
+                (e) =>
+                    e.heading.pageIndex === entries[i]?.heading.pageIndex &&
+                    !e.heading.text.trim().startsWith("(") &&
+                    (!bodiless || (e.body.trim().length === 0 && e.fields.length === 0)) &&
+                    (inOrder(letters(e.heading.text), letters(heading)) ||
+                        inOrder(letters(heading), letters(e.heading.text))),
+            );
     const read = entries.flatMap((entry, i): OriginPathReading[] => {
         const heading = entry.heading.text.trim();
         const m = /^(.*?\S)\s*\(([^()]+)\)\s*$/u.exec(heading);
         let name = m?.[1];
         let of = m?.[2] === undefined ? undefined : listedIn(m[2]);
+        if (of !== undefined && name !== undefined) {
+            // A name the text layer set twice over is spelt by its bodiless clean copy.
+            const copy = copyOf(i, name, true);
+            if (copy !== undefined && letters(copy.heading.text).length < letters(name).length) {
+                name = undoubled(copy.heading.text.trim());
+            }
+        }
         if (of === undefined) {
             // A heading set twice over may lose its parenthesis to the prose:
             // the body then opens with it ("(Imperial World)").
@@ -1626,18 +1647,7 @@ export function readVariantOrigins(
                 return [];
             }
             of = found;
-            // Its clean copy is a heading just before it whose letters it holds, or that holds its letters.
-            const copy = entries
-                .slice(Math.max(0, i - VARIANT_COPY_REACH), i)
-                .reverse()
-                .find(
-                    (e) =>
-                        e.heading.pageIndex === entry.heading.pageIndex &&
-                        !e.heading.text.trim().startsWith("(") &&
-                        (inOrder(letters(e.heading.text), letters(heading)) ||
-                            inOrder(letters(heading), letters(e.heading.text))),
-                );
-            name = undoubled(copy?.heading.text.trim() ?? heading);
+            name = undoubled(copyOf(i, heading, false)?.heading.text.trim() ?? heading);
         }
         if (
             of === undefined ||
