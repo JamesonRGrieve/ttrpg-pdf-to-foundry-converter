@@ -141,16 +141,36 @@ function detectColumnEdges(rows: RawRow[]): ColumnEdge[] {
 
 function assignRunsToColumns(runs: IRTextRun[], columns: ColumnEdge[]): TableCell[] {
     const cells: TableCell[] = [];
-    for (const run of runs) {
+    const nearest = (run: IRTextRun, allowed: (column: ColumnEdge) => boolean): number => {
         let bestCol = 0;
         let bestDist = Number.POSITIVE_INFINITY;
         columns.forEach((column, i) => {
             const dist = Math.abs(run.x - column.x);
-            if (dist < bestDist) {
+            if (allowed(column) && dist < bestDist) {
                 bestDist = dist;
                 bestCol = i;
             }
         });
+        return bestCol;
+    };
+    const reaches = (run: IRTextRun, column: ColumnEdge | undefined): boolean =>
+        column !== undefined && column.x <= run.x + run.width + X_TOLERANCE;
+    const chosen = runs.map((run) => nearest(run, () => true));
+    for (const run of runs) {
+        let bestCol = nearest(run, () => true);
+        // A word ending before its column's edge, set at another size than the
+        // cell text that reaches that column in the row, is a word of the text
+        // beside the table set between its rows: it stays left of the edge.
+        if (
+            !reaches(run, columns[bestCol]) &&
+            runs.some(
+                (other, j) =>
+                    chosen[j] === bestCol && other.size !== run.size && reaches(other, columns[bestCol]),
+            ) &&
+            columns.some((column) => reaches(run, column))
+        ) {
+            bestCol = nearest(run, (column) => reaches(run, column));
+        }
         const existing = cells.find((c) => c.colIndex === bestCol);
         if (existing) {
             existing.text += ` ${run.text}`;

@@ -79,6 +79,42 @@ describe("detectTables", () => {
         expect(table?.rows.map((r) => r.cells[0]?.text)).toEqual(["Glow Lamp", "Wick", "Ember"]);
     });
 
+    it("keeps a word of the text beside a table, ending short of a column, out of that column", () => {
+        const bold = { weight: "bold" as const };
+        const prose = { size: 10 };
+        const rows = [
+            [
+                run("Advance", 150, 700, 40, bold),
+                run("Cost", 250, 700, 20, bold),
+                run("Type", 300, 700, 20, bold),
+            ],
+            [
+                run("lamps", 40, 688, 40, prose),
+                run("Wick Lore", 150, 688, 44),
+                run("100", 250, 688, 14),
+                run("S", 300, 688, 6),
+            ],
+            // A prose word set between rows, its end short of the Advance column.
+            [
+                run("trim the", 40, 676, 40, prose),
+                run("lantern", 105, 676, 35, prose),
+                run("Glow Sense", 150, 676, 48),
+                run("100", 250, 676, 14),
+                run("T", 300, 676, 6),
+            ],
+            [
+                run("wicks.", 40, 664, 30, prose),
+                run("Ember", 150, 664, 30),
+                run("200", 250, 664, 14),
+                run("S", 300, 664, 6),
+            ],
+        ].flat();
+        const [table] = detectTables(irOf(rows));
+        const texts = table?.rows.map((r) => r.cells.map((c) => c.text)) ?? [];
+        expect(texts[1]).toContain("Glow Sense");
+        expect(texts[1]).toContain("trim the lantern");
+    });
+
     it("reads on past a title stacked beside the first record under the header", () => {
         const bold = { weight: "bold" as const };
         const title = { font: "TitleFace" };
