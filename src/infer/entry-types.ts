@@ -61,6 +61,8 @@ const SECTION_TYPES: readonly [RegExp, ItemType][] = [
     [/\bmutations\b/iu, "mutation"],
     [GIFT_LABEL, "mutation"],
     [/\bconditions?\b/iu, "condition"],
+    // Diseases are lasting harmful conditions: an effect and its treatment.
+    [/\bdiseases\b/iu, "condition"],
     [/\bcriticals?\b/iu, "criticalInjury"],
     [/\bcybernetics?\b/iu, "cybernetic"],
     [/\bforce fields?\b/iu, "forceField"],
@@ -492,6 +494,15 @@ export function entryType(entry: Entry): ItemType | null {
         return null;
     }
     const { type, section } = typed;
+    // Under a section of diseases, a heading with neither effects nor a
+    // treatment is a rule about them ("Stage One"), not a disease.
+    if (
+        type === "condition" &&
+        /\bdiseases\b/iu.test(section) &&
+        !has(fields, "effects", "effect", "treatment")
+    ) {
+        return null;
+    }
     // A heading naming a group of actions ("Extended Actions") heads part of
     // an orders section, as one naming its own kind does — or closing on the
     // plural its section closes on ("Initial Powers" under "… Powers").
@@ -1579,6 +1590,13 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             const effect = text("effect") ?? text("effects");
             variantized["effect"] = effect === undefined ? html : toHtml(effect);
         }
+    }
+    // A condition printed with its treatment (a disease) is harmful, and the
+    // treatment is how it is removed.
+    const treatment = type === "condition" ? (text("treatment") ?? text("cure")) : undefined;
+    if (treatment !== undefined) {
+        system["removal"] = toHtml(treatment);
+        system["nature"] = "harmful";
     }
     // A "Description:" field opens the description (a medal's look).
     const printed = type === "medal" ? text("description") : undefined;
