@@ -62,9 +62,18 @@ const PRINTED_TYPES: readonly {
     vehicleClass: string;
     locomotion?: string;
     flies?: true;
+    /** A craft the schema's aircraft model holds though it does not fly. */
+    aircraft?: true;
 }[] = [
     { pattern: /^\s*walker\b/iu, type: "walker", vehicleClass: "walker", locomotion: "walker" },
-    { pattern: /^\s*skimmer\b/iu, type: "skimmer", vehicleClass: "ground", locomotion: "skimmer" },
+    // The schema's aircraft model holds flyers and skimmers alike.
+    {
+        pattern: /^\s*skimmer\b/iu,
+        type: "skimmer",
+        vehicleClass: "ground",
+        locomotion: "skimmer",
+        aircraft: true,
+    },
     { pattern: /^\s*flyer\b/iu, type: "flyer", vehicleClass: "air", locomotion: "flyer", flies: true },
     {
         pattern: /^\s*space\s*craft\b/iu,
@@ -237,5 +246,5 @@ export function parseVehicle(pairs: ReadonlyMap<string, string>): ParsedVehicle 
     if (flies && printed === undefined) {
         system["vehicleClass"] = "air";
     }
-    return { kind: flies ? "aircraft" : "terracraft", system, unparsed };
+    return { kind: flies || printed?.aircraft === true ? "aircraft" : "terracraft", system, unparsed };
 }

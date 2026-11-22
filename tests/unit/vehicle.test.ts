@@ -64,6 +64,11 @@ describe("vehicle profiles", () => {
         expect(system["vehicleClass"]).toBe("air");
         const skimmer = parseVehicle(panelPairs("VEHICLE TRAITS: BIKE, SKIMMER"));
         expect(skimmer.kind).toBe("terracraft");
+        // A printed Skimmer type is one the schema's aircraft model holds, though it does not fly.
+        const printed = parseVehicle(panelPairs("TYPE: SKIMMER"));
+        expect(printed.kind).toBe("aircraft");
+        expect(printed.system["type"]).toBe("skimmer");
+        expect(printed.system["locomotion"]).toBe("skimmer");
     });
 
     it("recognises profile labels however the text layer cased or spaced them", () => {
