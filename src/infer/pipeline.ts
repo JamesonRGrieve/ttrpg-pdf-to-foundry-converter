@@ -509,6 +509,9 @@ function extractResultTable(table: DetectedTable, type: ItemType, out: EntityCol
     return found > 0;
 }
 
+/** Pages after a table of ship components that a bare list of upgrades still belongs to the ship. */
+const SHIP_UPGRADE_PAGES = 3;
+
 /** Share of a table's text another reader took, under which the table is read on its own. */
 const PLAIN_UNCOVERED_SHARE = 0.5;
 
@@ -608,7 +611,11 @@ function extractTables(
     /** Advance tables: those read into a career's advancement, and those no schema field holds for the target. */
     let careerTables = 0;
     let advanceTables = 0;
+    /** The page of the last table of ship components read (Space and SP columns). */
+    let shipTablePage: number | null = null;
     for (const table of tables) {
+        const flatRoles = columnRoles(table).flatMap((r) => r ?? []);
+        const shipTable = flatRoles.includes("space") && flatRoles.includes("shipPoints");
         // A captioned roll table is a RollTable, whatever items its rows also define.
         const madeRollTable = addRollTable(table, out);
         if (madeRollTable) {
@@ -739,8 +746,20 @@ function extractTables(
         if (captionType !== null && extractResultTable(table, captionType, out)) {
             continue;
         }
-        const type =
+        // A bare list of upgrades (a name and its rarity) read just after a
+        // table of ship components upgrades the ship: supplemental components.
+        const readType =
             captionType ?? nameHeaderType(table) ?? TABLE_ITEM_TYPE[classifyTable(table).contentType];
+        const shipUpgrades =
+            readType === "weaponModification" &&
+            table.headers.length <= 2 &&
+            shipTablePage !== null &&
+            table.pageIndex >= shipTablePage &&
+            table.pageIndex - shipTablePage <= SHIP_UPGRADE_PAGES;
+        if (shipTable) {
+            shipTablePage = table.pageIndex;
+        }
+        const type = shipUpgrades ? "shipComponent" : readType;
         if (type === undefined) {
             skip("no caption, name header or column set names a document type");
             continue;
@@ -876,6 +895,8 @@ function extractTables(
                     parseShipComponentType(table.tableTitle ?? "");
                 if (componentType !== null) {
                     mapped.system["componentType"] = componentType;
+                } else if (shipUpgrades) {
+                    mapped.system["componentType"] = "supplemental";
                 }
             }
             // A caption naming its components essential ("Essential
