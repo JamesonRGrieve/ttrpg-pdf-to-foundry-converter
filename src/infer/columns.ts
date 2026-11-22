@@ -92,7 +92,7 @@ const HEADER_ROLES: readonly [RegExp, Role][] = [
     [/^(sp|ship points)$/u, "shipPoints"],
     [/^(appropriate )?hull types?$/u, "hullTypes"],
     // What an upgrade fits: the schema's restrictions.
-    [/^(used with|can upgrade)$/u, "usedWith"],
+    [/^(used with|can upgrade|upgrade type)$/u, "usedWith"],
 ];
 
 /**

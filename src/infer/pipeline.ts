@@ -874,7 +874,18 @@ function extractTables(
                 (cells.damage === undefined || isEmptyCell(cells.damage)) &&
                 cells.special !== undefined &&
                 !isEmptyCell(cells.special);
-            const itemType = quietLoad ? "ammunition" : rowType(type, cells);
+            const rowItemType = quietLoad ? "ammunition" : rowType(type, cells);
+            // A table of upgrades may list armour's and weapons' together: each
+            // row's Used With / Upgrade Type cell says which it fits.
+            const fits = cells.usedWith ?? "";
+            const itemType =
+                rowItemType === "weaponModification" && /\barmou?r\b/iu.test(fits)
+                    ? "armourModification"
+                    : rowItemType === "armourModification" &&
+                        /\bweapons?\b/iu.test(fits) &&
+                        !/\barmou?r\b/iu.test(fits)
+                      ? "weaponModification"
+                      : rowItemType;
             if (itemType === null) {
                 continue;
             }
@@ -3167,10 +3178,41 @@ export function fitModifications(entities: readonly Entity[], line: Line, book: 
             entryTypes.set(nameOf(e), type);
         }
     }
+    // A table row that names the armour it fits (its Upgrade Type cell) is an
+    // armour modification whatever section its entry sits under: the entry
+    // takes its type instead.
+    const fitsArmour = (e: Entity): boolean => {
+        const system = e.fields["system"];
+        const restrictions = isJsonObject(system) ? system["restrictions"] : undefined;
+        const types = isJsonObject(restrictions) ? restrictions["armourTypes"] : undefined;
+        return Array.isArray(types) && types.length > 0;
+    };
+    const armourRows = new Set(
+        entities
+            .filter(
+                (e) =>
+                    e.blockId.startsWith(TABLE_READING) &&
+                    modificationType(e) === "armourModification" &&
+                    fitsArmour(e),
+            )
+            .map(nameOf),
+    );
     for (const e of entities) {
         const own = modificationType(e);
+        if (own === null) {
+            continue;
+        }
+        if (armourRows.has(nameOf(e))) {
+            if (own !== "armourModification") {
+                const reading = e.blockId.startsWith(TABLE_READING) ? TABLE_READING : ENTRY_READING;
+                e.fields["type"] = "armourModification";
+                e.blockId = `${reading}armourModification`;
+                e.pack = packName(line, book, itemSegment("armourModification"));
+            }
+            continue;
+        }
         const type = entryTypes.get(nameOf(e));
-        if (e.blockId.startsWith(TABLE_READING) && own !== null && type !== undefined && type !== own) {
+        if (e.blockId.startsWith(TABLE_READING) && type !== undefined && type !== own) {
             e.fields["type"] = type;
             e.blockId = `${TABLE_READING}${type}`;
             e.pack = packName(line, book, itemSegment(type));
