@@ -286,6 +286,27 @@ describe("origin rules blocks", () => {
         expect(origin?.grants["specialAbilities"]).toEqual([]);
     });
 
+    it("reads a bonus whose label was read as a paragraph of another label's prose", () => {
+        const s = ["CHOOSE HOME WORLD", "REED WORLD RULES"];
+        const entries: Entry[] = [
+            entry("REED WORLD", 10, ["CHOOSE HOME WORLD"], "The damp and patient folk of the reeds."),
+            entry("REED WORLD RULES", 10, ["CHOOSE HOME WORLD"]),
+            entry(
+                "FATE THRESHOLD",
+                10,
+                s,
+                "2 (Patron’s Blessing 9+)\n\nhome world bonus Wader: A reed worlder ignores marsh terrain.",
+            ),
+            entry("HOME WORLD APTITUDE", 10, s, "Agility"),
+            entry("WOUNDS", 10, s, "A reed worlder starts with 7+1d5 wounds."),
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["fateThreshold"]).toBe(2);
+        expect(origin?.grants["specialAbilities"]).toEqual([
+            { name: "Wader", description: "A reed worlder ignores marsh terrain." },
+        ]);
+    });
+
     it("turns 'or' into choices and parenthesised specialisations into grants", () => {
         const s = ["CHOOSE BACKGROUND", "LAMPLIGHTERS RULES"];
         const entries = [
@@ -1437,6 +1458,26 @@ describe("entries that follow an origin's rules", () => {
             { name: "Quiet Waters", description: "A character from Ashreach rests easily." },
         ]);
     });
+    it("takes a follower's ability set apart from prose ending on the bare label", () => {
+        const intro = entry(
+            "ASHREACH",
+            9,
+            [],
+            "Ashreach natives follow the marsh world rules, with a home world bonus of their own:\n\nhome world bonus",
+        );
+        const asField: Entry = { ...intro, fields: [["Quiet Waters", "An Ashreach native rests easily."]] };
+        const next = entry("Quiet Waters: An Ashreach native", 9, [], "rests easily.\n\nNarrative.");
+        for (const read of [
+            readFollowingOrigins([asField], [base], TARGETS.dh2.originSteps),
+            readFollowingOrigins([intro, next], [base], TARGETS.dh2.originSteps),
+        ]) {
+            expect(read[0]?.grants["specialAbilities"]).toEqual([
+                { name: "Quiet Waters", description: "An Ashreach native rests easily." },
+            ]);
+            expect(read[0]?.description.endsWith("bonus")).toBe(false);
+        }
+    });
+
     it("skips an entry that names no origin the document holds", () => {
         const body = "Ashreach natives follow the desert world rules.";
         expect(readFollowingOrigins([entry("ashreach", 40, [], body)], [base])).toEqual([]);

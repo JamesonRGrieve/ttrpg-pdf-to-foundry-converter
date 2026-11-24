@@ -619,6 +619,8 @@ function grantsOf(
     const aptitudes: JsonValue[] = [];
     const equipment: JsonObject[] = [];
     const specialAbilities: JsonObject[] = [];
+    /** Bonuses whose label was read as a paragraph of another label's prose. */
+    const embedded: JsonObject[] = [];
     const choices: JsonObject[] = [];
     let modifiers: Record<string, number> = {};
     let woundsFormula = "";
@@ -637,6 +639,26 @@ function grantsOf(
         // is its prose.
         const field0 = entry.fields[0];
         const own = field0 === undefined ? undefined : `${field0[0]}: ${field0[1]}`.trim();
+        // A later paragraph opening on a bonus label ("… bonus Name: effect")
+        // is that label's text, its heading read as prose.
+        if (field !== "bonus" && field !== "specialAbilities") {
+            for (const para of entry.body.split(PARAGRAPH_BREAK).slice(1)) {
+                const m = /^(?<label>(?:\S+\s+){0,3}bonus(?:es)?)\s+(?<text>\S.*)$/isu.exec(para.trim());
+                const head = m?.groups?.["label"];
+                const text = m?.groups?.["text"]?.trim();
+                if (
+                    head === undefined ||
+                    text === undefined ||
+                    labelField(head) !== "bonus" ||
+                    text.length < 20
+                ) {
+                    continue;
+                }
+                embedded.push(
+                    specialAbility(text) ?? { name: capitalizeWords(head.toLowerCase()), description: text },
+                );
+            }
+        }
         const value =
             own !== undefined && (field === "bonus" || field === "specialAbilities")
                 ? /[.!?]["”’)]?$/u.test(own) || prose === ""
@@ -814,6 +836,9 @@ function grantsOf(
                 break;
             }
         }
+    }
+    if (specialAbilities.length === 0) {
+        specialAbilities.push(...embedded);
     }
     // The psyker trait granted makes the character a psyker as a psy rating does.
     psyker ||= traits.some((t) => PSYKER.test(String(t["name"] ?? "")));
@@ -1385,7 +1410,7 @@ export function readFollowingOrigins(
     steps: readonly OriginStepDef[] = [],
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
-    for (const entry of entries) {
+    for (const [index, entry] of entries.entries()) {
         const named = FOLLOWS_RULES.exec(entry.body)?.[1];
         const heading = entry.heading.text.trim();
         if (named === undefined || letters(heading).length === 0) {
@@ -1413,7 +1438,27 @@ export function readFollowingOrigins(
                     new RegExp(`(?:${labels})\\s+bonus\\s+([^:\\n]{3,60}?)[ \\t]*:[ \\t]*([^\\n]+)`, "giu"),
                 ),
             ].at(-1) ?? null;
-        const description = bonus === null ? entry.body : entry.body.slice(0, bonus.index).trim();
+        // Prose ending on the bare label: the ability is set apart from it, as
+        // a field of the entry or as the heading after it ("Name: effect…").
+        const trailing = new RegExp(`(?:${labels})\\s+bonus\\s*$`, "iu").exec(entry.body);
+        const field0 = entry.fields[0];
+        const apart =
+            bonus !== null || trailing === null
+                ? null
+                : field0 !== undefined
+                  ? specialAbility(`${field0[0]}: ${field0[1]}`)
+                  : (() => {
+                        const next = entries[index + 1];
+                        return next === undefined || next.heading.pageIndex !== entry.heading.pageIndex
+                            ? null
+                            : brokenAbility(next);
+                    })();
+        const description =
+            bonus !== null
+                ? entry.body.slice(0, bonus.index).trim()
+                : trailing !== null
+                  ? entry.body.slice(0, trailing.index).trim()
+                  : entry.body;
         out.push({
             name:
                 caseLost(heading) || !/\p{Ll}/u.test(heading) || !/\p{Lu}/u.test(heading)
@@ -1423,9 +1468,11 @@ export function readFollowingOrigins(
             pageIndex: entry.heading.pageIndex,
             description,
             grants:
-                bonus?.[1] === undefined || bonus[2] === undefined
-                    ? {}
-                    : { specialAbilities: [{ name: bonus[1].trim(), description: bonus[2].trim() }] },
+                bonus?.[1] !== undefined && bonus[2] !== undefined
+                    ? { specialAbilities: [{ name: bonus[1].trim(), description: bonus[2].trim() }] }
+                    : apart !== null
+                      ? { specialAbilities: [apart] }
+                      : {},
             modifiers: {},
         });
     }
