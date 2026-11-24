@@ -926,6 +926,40 @@ describe("origins granted by inline fields", () => {
         ]);
     });
 
+    it("reads a grant list set in a sentence opening on what it grants, without its kind or the words after it", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Flamewright"],
+                    [
+                        [
+                            "Starting Skills",
+                            "Flamewrights are well read. You begin play with Glowcraft (Int), Tongue (High Wick) (Int), and Tongue (Low Wick) (Int) as Advanced Skills. 18",
+                        ],
+                        ["Starting Talents", "You gain the Steady Hand Talent, as you were taught."],
+                        ["Starting Gear", "Lantern"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(origins[0]?.grants["talents"]).toEqual([{ name: "Steady Hand", specialization: "" }]);
+        expect(
+            (origins[0]?.grants["skills"] as { name: string; specialization: string }[]).map((s) => [
+                s.name,
+                s.specialization,
+            ]),
+        ).toEqual([
+            ["Glowcraft", ""],
+            ["Tongue", "High Wick"],
+            ["Tongue", "Low Wick"],
+        ]);
+    });
+
     it("grants a talent's listed specialisations and offers the alternatives among them", () => {
         const origins = readInlineOrigins(
             [

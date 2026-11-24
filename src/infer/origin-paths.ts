@@ -784,7 +784,7 @@ function grantsOf(
                     }
                     break;
                 }
-                const r = listGrants(value, "skill", label, skillGrants, (s) => {
+                const r = listGrants(grantList(value), "skill", label, skillGrants, (s) => {
                     const { name, specialisations } = withSpecialisations(s);
                     return namedOption(name, { specialization: specialisations.join(", ") });
                 });
@@ -793,7 +793,7 @@ function grantsOf(
                 break;
             }
             case "talents": {
-                const r = listGrants(value, "talent", label, talentGrants, (t) => {
+                const r = listGrants(grantList(value), "talent", label, talentGrants, (t) => {
                     const { name, specialisations } = withSpecialisations(t);
                     return namedOption(name, { specialization: specialisations.join(", ") });
                 });
@@ -803,7 +803,7 @@ function grantsOf(
             }
             case "traits": {
                 const r = listGrants(
-                    value,
+                    grantList(value),
                     "trait",
                     label,
                     (t) => [traitGrant(t)],
@@ -2381,9 +2381,10 @@ function grantSentence(text: string): string {
     for (let i = 0; i < grants.length; i++) {
         const ch = grants.charAt(i);
         depth += ch === "(" ? 1 : ch === ")" ? -1 : 0;
-        if (depth === 0 && /^\s+and\s+/iu.test(grants.slice(i)) && !/,\s*$/u.test(out)) {
+        if (depth === 0 && /^\s+and\s+/iu.test(grants.slice(i))) {
             const m = /^\s+and\s+/iu.exec(grants.slice(i));
-            out += ", ";
+            // After a comma ("A, B, and C") the "and" only closes the list.
+            out += /,\s*$/u.test(out) ? " " : ", ";
             i += (m?.[0].length ?? 1) - 1;
             continue;
         }
@@ -2391,6 +2392,24 @@ function grantSentence(text: string): string {
     }
     return out;
 }
+
+/**
+ * A grant list set in prose: the sentence that opens on what it grants ("You
+ * begin play with A, B, and C."), as its list alone. Prose with no such
+ * sentence is read as it stands.
+ */
+function grantList(value: string): string {
+    const sentence = value.split(/(?<=[.!?])\s+/u).find((s) => GRANT_OPENING.test(s.trim()));
+    // Each item may close on its kind ("the A Talent", "B as an Advanced Skill").
+    return sentence === undefined ? value : grantSentence(sentence).replace(GRANT_KIND, "");
+}
+
+/**
+ * An item's closing words naming its kind: " Talent", " as an Advanced Skill"
+ * (" as an Advanced" once the sentence's closing kind is gone).
+ */
+const GRANT_KIND =
+    /\s+(?:as\s+(?:an?\s+)?\p{L}+(?:\s+(?:skill|talent|trait)s?)?|(?:skill|talent|trait)s?)(?=\s*(?:,|$))/giu;
 
 /** A characteristic's abbreviation in brackets after a skill. */
 const CHARACTERISTIC_TAG = /\s*\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\)/gu;
