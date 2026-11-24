@@ -176,6 +176,7 @@ export const CHARACTERISTICS: Readonly<Record<string, string>> = {
     bs: "ballisticSkill",
     strength: "strength",
     s: "strength",
+    str: "strength",
     toughness: "toughness",
     t: "toughness",
     agility: "agility",

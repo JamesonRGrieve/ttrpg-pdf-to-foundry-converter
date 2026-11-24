@@ -940,7 +940,10 @@ describe("origins granted by inline fields", () => {
                             "Starting Skills",
                             "Flamewrights are well read. You begin play with Glowcraft (Int), Tongue (High Wick) (Int), and Tongue (Low Wick) (Int) as Advanced Skills. 18",
                         ],
-                        ["Starting Talents", "You gain the Steady Hand Talent, as you were taught."],
+                        [
+                            "Starting Talents",
+                            "The character gains the benefit of the Steady Hand Talent, as you were taught.",
+                        ],
                         ["Starting Gear", "Lantern"],
                     ],
                 ),
@@ -957,6 +960,39 @@ describe("origins granted by inline fields", () => {
             ["Glowcraft", ""],
             ["Tongue", "High Wick"],
             ["Tongue", "Low Wick"],
+        ]);
+    });
+
+    it("reads a bare list's last two items joined by 'and' after a bracket, without its kind or a page reference", () => {
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                at("Flamewright", "display", ["Lamps"], [], "Fire answers the call."),
+                at(
+                    "SKILLS, TALENTS & GEAR",
+                    "sub",
+                    ["Lamps", "Flamewright"],
+                    [
+                        ["Starting Skills", "Lamp Lore (Wicks) (Int) and Glowcraft (Str) as Basic Skills."],
+                        ["Starting Talents", "Lantern Training (Brass) and Steady Hand (see page 50)."],
+                        ["Starting Gear", "Lantern"],
+                    ],
+                ),
+            ],
+            bc,
+        );
+        expect(
+            (origins[0]?.grants["skills"] as { name: string; specialization: string }[]).map((s) => [
+                s.name,
+                s.specialization,
+            ]),
+        ).toEqual([
+            ["Lamp Lore", "Wicks"],
+            ["Glowcraft", ""],
+        ]);
+        expect(origins[0]?.grants["talents"]).toEqual([
+            { name: "Lantern Training", specialization: "Brass" },
+            { name: "Steady Hand", specialization: "" },
         ]);
     });
 
@@ -1492,7 +1528,7 @@ describe("entries that follow an origin's rules", () => {
             { name: "Quiet Waters", description: "A character from Ashreach rests easily." },
         ]);
     });
-    it("takes a follower's ability set apart from prose ending on the bare label", () => {
+    it("takes a follower's ability set apart from its bare label, closing the prose or not", () => {
         const intro = entry(
             "ASHREACH",
             9,
@@ -1501,14 +1537,19 @@ describe("entries that follow an origin's rules", () => {
         );
         const asField: Entry = { ...intro, fields: [["Quiet Waters", "An Ashreach native rests easily."]] };
         const next = entry("Quiet Waters: An Ashreach native", 9, [], "rests easily.\n\nNarrative.");
+        // The label as its own paragraph, the next section's prose after it.
+        const midway: Entry = { ...asField, body: `${intro.body}\n\nThe docks lie east of the marsh.` };
         for (const read of [
             readFollowingOrigins([asField], [base], TARGETS.dh2.originSteps),
+            readFollowingOrigins([midway], [base], TARGETS.dh2.originSteps),
             readFollowingOrigins([intro, next], [base], TARGETS.dh2.originSteps),
         ]) {
             expect(read[0]?.grants["specialAbilities"]).toEqual([
                 { name: "Quiet Waters", description: "An Ashreach native rests easily." },
             ]);
-            expect(read[0]?.description.endsWith("bonus")).toBe(false);
+            expect(read[0]?.description).toBe(
+                "Ashreach natives follow the marsh world rules, with a home world bonus of their own:",
+            );
         }
     });
 

@@ -1438,9 +1438,12 @@ export function readFollowingOrigins(
                     new RegExp(`(?:${labels})\\s+bonus\\s+([^:\\n]{3,60}?)[ \\t]*:[ \\t]*([^\\n]+)`, "giu"),
                 ),
             ].at(-1) ?? null;
-        // Prose ending on the bare label: the ability is set apart from it, as
-        // a field of the entry or as the heading after it ("Name: effect…").
-        const trailing = new RegExp(`(?:${labels})\\s+bonus\\s*$`, "iu").exec(entry.body);
+        // The bare label as a paragraph of its own (closing the prose, or with
+        // the next section's prose after it): the ability is set apart from
+        // it, as a field of the entry or as the heading after it ("Name: effect…").
+        const trailing = new RegExp(`(?:^|\\n\\n)\\s*(?:${labels})\\s+bonus\\s*(?=\\n\\n|$)`, "iu").exec(
+            entry.body,
+        );
         const field0 = entry.fields[0];
         const apart =
             bonus !== null || trailing === null
@@ -2359,9 +2362,9 @@ const MIN_LABEL_REPEATS = 3;
 /** Entries back from an origin a section's prose naming its step may stand. */
 const STEP_PROSE_REACH = 12;
 
-/** A sentence's opening words before what it grants: "You gain", "You begin play with the". */
+/** A sentence's opening words before what it grants: "You gain", "You begin play with the", "The character gains the benefit of the". */
 const GRANT_OPENING =
-    /^(?:you\s+)?(?:gain|begin|start)s?(?:\s+(?:the\s+game|play))?(?:\s+with)?(?:\s+the)?\s+/iu;
+    /^(?:(?:you|the\s+character)\s+)?(?:gain|begin|start)s?(?:\s+(?:the\s+game|play))?(?:\s+with)?(?:\s+the)?(?:\s+benefit\s+of(?:\s+the)?)?\s+/iu;
 /** A sentence's closing words after what it grants: "at the start of the game", "talents". */
 const GRANT_CLOSING =
     /(?:\s+(?:as\s+starting\s+)?(?:skills?|talents?|traits?))?(?:\s+at\s+the\s+start\s+of\s+(?:the\s+game|play))?\s*\.?\s*$/iu;
@@ -2399,20 +2402,30 @@ function grantSentence(text: string): string {
  * sentence is read as it stands.
  */
 function grantList(value: string): string {
-    const sentence = value.split(/(?<=[.!?])\s+/u).find((s) => GRANT_OPENING.test(s.trim()));
+    // A reference to another page ("(see page 50)") is no part of a grant.
+    const text = value.replace(PAGE_REFERENCE, "");
+    const sentence = text.split(/(?<=[.!?])\s+/u).find((s) => GRANT_OPENING.test(s.trim()));
     // Each item may close on its kind ("the A Talent", "B as an Advanced Skill").
-    return sentence === undefined ? value : grantSentence(sentence).replace(GRANT_KIND, "");
+    return (
+        sentence === undefined
+            ? // A bare list's last two items joined by "and" after a bracket ("A (Int) and B (Int)").
+              text.replace(/(?<=\))\s+and\s+(?=\p{Lu})/gu, ", ")
+            : grantSentence(sentence)
+    ).replace(GRANT_KIND, "");
 }
+
+/** A bracketed reference to another page: "(see page 50)", "(see pages 12–13)". */
+const PAGE_REFERENCE = /\s*\(see\s+pages?\s+[\d\s,–-]+\)/giu;
 
 /**
  * An item's closing words naming its kind: " Talent", " as an Advanced Skill"
  * (" as an Advanced" once the sentence's closing kind is gone).
  */
 const GRANT_KIND =
-    /\s+(?:as\s+(?:an?\s+)?\p{L}+(?:\s+(?:skill|talent|trait)s?)?|(?:skill|talent|trait)s?)(?=\s*(?:,|$))/giu;
+    /\s+(?:as\s+(?:an?\s+)?\p{L}+(?:\s+(?:skill|talent|trait)s?)?|(?:skill|talent|trait)s?)(?=\s*(?:,|\.?\s*$))/giu;
 
 /** A characteristic's abbreviation in brackets after a skill. */
-const CHARACTERISTIC_TAG = /\s*\((?:WS|BS|S|T|Ag|Int|Per|WP|Fel)\)/gu;
+const CHARACTERISTIC_TAG = /\s*\((?:WS|BS|S|Str|T|Ag|Int|Per|WP|Fel)\)/gu;
 
 /** Headings over grant fields that recur through the document: labels each origin repeats. */
 export function repeatedGrantLabels(entries: readonly Entry[]): Set<string> {
