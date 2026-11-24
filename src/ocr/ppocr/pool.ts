@@ -30,6 +30,13 @@ interface Pending {
     reject: (err: Error) => void;
 }
 
+interface Job {
+    request: ReadRequest;
+    pending: Pending;
+    /** Workers that have died holding this page. */
+    deaths: number;
+}
+
 /**
  * Longest a worker may take over one page before it is taken for dead. A
  * browser may end a worker (for memory) without any error event reaching the
@@ -37,23 +44,32 @@ interface Pending {
  */
 export const PAGE_TIMEOUT_MS = 5 * 60 * 1000;
 
+/**
+ * Workers a page may outlive before it fails the run. A worker that dies (most
+ * often ended by the browser for memory) is not replaced: the pool shrinks by
+ * one, so fewer readers hold memory, and its page goes to another worker.
+ */
+export const MAX_PAGE_DEATHS = 3;
+
 export class PpOcrPool implements PageReader {
     readonly id = PPOCR_READER_ID;
     readonly #spawn: () => ReaderPort;
-    readonly #size: number;
-    /** The workers, spawned on the first read: a run with no page to read starts none. */
+    /** Workers allowed at once; shrinks by one with each worker that dies. */
+    #size: number;
+    /** The live workers, spawned only as pages wait for them. */
     readonly #ports: ReaderPort[] = [];
     readonly #idle: ReaderPort[] = [];
-    readonly #queue: { request: ReadRequest; pending: Pending }[] = [];
-    readonly #pending = new Map<number, Pending>();
-    /** Each page's watchdog, cleared when its worker answers. */
-    readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
+    readonly #queue: Job[] = [];
+    /** The page each busy worker holds. */
+    readonly #busy = new Map<ReaderPort, Job>();
+    /** Each busy worker's watchdog, cleared when it answers. */
+    readonly #timers = new Map<ReaderPort, ReturnType<typeof setTimeout>>();
     readonly #timeoutMs: number;
     #nextId = 0;
-    /** Why the pool stopped (a worker died): every read after fails with it. */
+    /** Why the pool stopped (a page outlived too many workers): every read after fails with it. */
     #broken: Error | null = null;
 
-    /** A pool of `size` workers, each started by `spawn`; a page unanswered after `timeoutMs` fails the run. */
+    /** A pool of up to `size` workers, each started by `spawn`; a page unanswered after `timeoutMs` counts its worker dead. */
     constructor(spawn: () => ReaderPort, size: number, timeoutMs: number = PAGE_TIMEOUT_MS) {
         this.#spawn = spawn;
         this.#size = Math.max(1, size);
@@ -66,49 +82,50 @@ export class PpOcrPool implements PageReader {
                 reject(this.#broken);
                 return;
             }
-            this.#start();
             this.#nextId += 1;
-            this.#queue.push({ request: { id: this.#nextId, page }, pending: { resolve, reject } });
+            this.#queue.push({
+                request: { id: this.#nextId, page },
+                pending: { resolve, reject },
+                deaths: 0,
+            });
             this.#dispatch();
         });
     }
 
     async close(): Promise<void> {
-        this.#clearTimers();
-        await Promise.all(this.#ports.map((p) => p.terminate()));
-    }
-
-    #clearTimers(): void {
         for (const timer of this.#timers.values()) {
             clearTimeout(timer);
         }
         this.#timers.clear();
+        await Promise.all(this.#ports.map((p) => p.terminate()));
     }
 
-    #start(): void {
-        while (this.#ports.length < this.#size) {
+    /** A worker for each waiting page, up to the pool's size. */
+    #grow(): void {
+        while (this.#ports.length < this.#size && this.#idle.length < this.#queue.length) {
             const port = this.#spawn();
             port.onResponse((response) => this.#settle(port, response));
-            port.onFailure((err) => this.#fail(err));
+            port.onFailure((err) => this.#died(port, err));
             this.#ports.push(port);
             this.#idle.push(port);
         }
     }
 
     #dispatch(): void {
+        this.#grow();
         while (this.#idle.length > 0 && this.#queue.length > 0) {
             const port = this.#idle.pop();
             const job = this.#queue.shift();
             if (port === undefined || job === undefined) {
                 return;
             }
-            this.#pending.set(job.request.id, job.pending);
-            const id = job.request.id;
+            this.#busy.set(port, job);
             this.#timers.set(
-                id,
+                port,
                 setTimeout(
                     () =>
-                        this.#fail(
+                        this.#died(
+                            port,
                             new Error(
                                 `no answer for a page in ${Math.round(this.#timeoutMs / 1000)} s (most often the browser ending the worker for memory)`,
                             ),
@@ -121,34 +138,73 @@ export class PpOcrPool implements PageReader {
     }
 
     #settle(port: ReaderPort, response: ReadResponse): void {
-        const pending = this.#pending.get(response.id);
-        this.#pending.delete(response.id);
-        clearTimeout(this.#timers.get(response.id));
-        this.#timers.delete(response.id);
+        const job = this.#busy.get(port);
+        if (job === undefined || job.request.id !== response.id) {
+            return;
+        }
+        this.#busy.delete(port);
+        clearTimeout(this.#timers.get(port));
+        this.#timers.delete(port);
         this.#idle.push(port);
-        if (pending !== undefined) {
-            if ("error" in response) {
-                pending.reject(new Error(`PP-OCR worker: ${response.error}`));
-            } else {
-                pending.resolve(response.words);
-            }
+        if ("error" in response) {
+            job.pending.reject(new Error(`PP-OCR worker: ${response.error}`));
+        } else {
+            job.pending.resolve(response.words);
         }
         this.#dispatch();
     }
 
-    /** A worker that died fails the run: every page held or waiting is rejected. */
-    #fail(err: Error): void {
+    /**
+     * A worker that died or went silent: it is ended and not replaced (the
+     * pool shrinks by one), and the page it held goes back to the queue for
+     * another worker. A page that outlives too many workers fails the run.
+     */
+    #died(port: ReaderPort, err: Error): void {
+        if (!this.#ports.includes(port)) {
+            return;
+        }
+        clearTimeout(this.#timers.get(port));
+        this.#timers.delete(port);
+        this.#ports.splice(this.#ports.indexOf(port), 1);
+        const idle = this.#idle.indexOf(port);
+        if (idle >= 0) {
+            this.#idle.splice(idle, 1);
+        }
+        void port.terminate().catch(() => undefined);
+        this.#size = Math.max(1, this.#size - 1);
+        const job = this.#busy.get(port);
+        this.#busy.delete(port);
+        if (job !== undefined) {
+            job.deaths += 1;
+            if (job.deaths >= MAX_PAGE_DEATHS) {
+                this.#fail(
+                    new Error(
+                        `PP-OCR worker died: ${err.message} (page ${job.request.page.pageIndex + 1}, ${job.deaths} workers)`,
+                    ),
+                    job,
+                );
+                return;
+            }
+            this.#queue.unshift(job);
+        }
+        this.#dispatch();
+    }
+
+    /** The run stops: the page that failed, every page held or waiting, and every later read fail with `err`. */
+    #fail(err: Error, failed: Job): void {
         if (this.#broken !== null) {
             return;
         }
-        this.#clearTimers();
-        this.#broken = new Error(`PP-OCR worker died: ${err.message}`);
-        for (const pending of this.#pending.values()) {
-            pending.reject(this.#broken);
+        this.#broken = err;
+        failed.pending.reject(err);
+        for (const [port, job] of this.#busy) {
+            clearTimeout(this.#timers.get(port));
+            job.pending.reject(err);
         }
-        this.#pending.clear();
+        this.#busy.clear();
+        this.#timers.clear();
         for (const job of this.#queue.splice(0)) {
-            job.pending.reject(this.#broken);
+            job.pending.reject(err);
         }
     }
 }

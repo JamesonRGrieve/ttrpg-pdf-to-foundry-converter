@@ -75,33 +75,77 @@ describe("PpOcrPool", () => {
         expect(words.map((w) => w[0]?.text).sort()).toEqual(["p0", "p1", "p2"]);
     });
 
-    it("fails every held and waiting page, and every later read, once a worker dies", async () => {
-        const port = new HeldPort();
-        const pool = new PpOcrPool(() => port, 1);
-        const held = pool.read(page(0));
-        const waiting = pool.read(page(1));
-        port.die();
-        await expect(held).rejects.toThrow("PP-OCR worker died: gone");
-        await expect(waiting).rejects.toThrow("PP-OCR worker died: gone");
+    it("starts a worker only for a page waiting for one", () => {
+        const ports: HeldPort[] = [];
+        const pool = new PpOcrPool(() => {
+            const port = new HeldPort();
+            ports.push(port);
+            return port;
+        }, 16);
+        void pool.read(page(0));
+        void pool.read(page(1));
+        expect(ports).toHaveLength(2);
+    });
+
+    it("reads a dead worker's page on another worker, and does not replace the dead one", async () => {
+        const ports: HeldPort[] = [];
+        const pool = new PpOcrPool(() => {
+            const port = new HeldPort();
+            ports.push(port);
+            return port;
+        }, 2);
+        const first = pool.read(page(0));
+        const second = pool.read(page(1));
+        ports[0]?.die();
+        // The pool shrank to one worker, so the page waits for the survivor.
+        expect(ports).toHaveLength(2);
+        ports[1]?.answer();
+        expect(ports[1]?.held.map((r) => r.page.pageIndex)).toEqual([0]);
+        ports[1]?.answer();
+        expect((await first)[0]?.text).toBe("p0");
+        expect((await second)[0]?.text).toBe("p1");
+    });
+
+    it("fails the run once a page has outlived three workers", async () => {
+        const ports: HeldPort[] = [];
+        const pool = new PpOcrPool(() => {
+            const port = new HeldPort();
+            ports.push(port);
+            return port;
+        }, 1);
+        const held = pool.read(page(4));
+        ports[0]?.die();
+        ports[1]?.die();
+        ports[2]?.die();
+        await expect(held).rejects.toThrow(/PP-OCR worker died: gone \(page 5, 3 workers\)/u);
         await expect(pool.read(page(2))).rejects.toThrow("PP-OCR worker died");
     });
 });
 
 describe("answerRead", () => {
-    it("fails the run when a worker goes silent on a page, as one the browser ended without an error does", async () => {
+    it("reads a page again on another worker when its worker goes silent, as one the browser ended does", async () => {
         vi.useFakeTimers();
         try {
-            const port = new HeldPort();
-            const pool = new PpOcrPool(() => port, 1, 1000);
+            const ports: HeldPort[] = [];
+            const pool = new PpOcrPool(
+                () => {
+                    const port = new HeldPort();
+                    ports.push(port);
+                    return port;
+                },
+                1,
+                1000,
+            );
             const answered = pool.read(page(0));
-            port.answer();
+            ports[0]?.answer();
             expect(await answered).toEqual([word("p0")]);
             // Answered in time: its watchdog is cleared and never fires.
             vi.advanceTimersByTime(5000);
             const silent = pool.read(page(1));
             vi.advanceTimersByTime(1000);
-            await expect(silent).rejects.toThrow(/no answer for a page in 1 s/u);
-            await expect(pool.read(page(2))).rejects.toThrow(/PP-OCR worker died/u);
+            expect(ports).toHaveLength(2);
+            ports[1]?.answer();
+            expect(await silent).toEqual([word("p1")]);
         } finally {
             vi.useRealTimers();
         }
