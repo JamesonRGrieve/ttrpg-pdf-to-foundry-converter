@@ -47,6 +47,11 @@ describe("keys", () => {
 });
 
 describe("leafScore", () => {
+    it("reads a list set as one comma-separated string as its items", () => {
+        expect(leafScore("Attack, Concentration", ["Attack", "Concentration"])).toBe(1);
+        expect(leafScore(["Attack"], "Attack, Concentration")).toBe(0.5);
+    });
+
     it("treats case, dash glyphs and numeric strings as one value", () => {
         expect(leafScore("Half–Action", "half-action")).toBe(1);
         expect(leafScore("12", 12)).toBe(1);

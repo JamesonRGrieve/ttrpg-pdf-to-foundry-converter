@@ -493,8 +493,21 @@ export function leafScore(want: Json | undefined, got: Json | undefined): number
         return 1;
     }
     if (Array.isArray(want) || Array.isArray(got)) {
-        const a = Array.isArray(want) ? want : want === undefined || want === null ? [] : [want];
-        const b = Array.isArray(got) ? got : got === undefined || got === null ? [] : [got];
+        // A list set as one comma-separated string ("Attack, Concentration",
+        // a legacy shape the system migrates to the array) is its items.
+        const items = (v: Json | undefined): Json[] =>
+            Array.isArray(v)
+                ? v
+                : v === undefined || v === null
+                  ? []
+                  : typeof v === "string"
+                    ? v
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter((s) => s.length > 0)
+                    : [v];
+        const a = items(want);
+        const b = items(got);
         return jaccard(a.map(normScalar), b.map(normScalar));
     }
     if (want === undefined || got === undefined) {

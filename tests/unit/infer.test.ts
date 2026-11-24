@@ -37,6 +37,7 @@ import {
     focusPowerTest,
     powerActivation,
     powerAttackProfile,
+    powerSubtypes,
     powerProseDamage,
     targetType,
     headingKindTag,
@@ -2745,6 +2746,11 @@ describe("power activation", () => {
             target: { type: "self" },
         });
         expect(powerActivation(undefined, "—")).toEqual({});
+    });
+
+    it("lists a power's printed subtypes in printed order", () => {
+        expect(powerSubtypes("Attack, Concentration")).toEqual(["Attack", "Concentration"]);
+        expect(powerSubtypes(" Movement ")).toEqual(["Movement"]);
     });
 
     it("reads a power's action from a field labelled its focus power time", () => {

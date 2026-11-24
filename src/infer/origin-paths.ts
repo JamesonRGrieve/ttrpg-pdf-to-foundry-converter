@@ -1482,6 +1482,20 @@ export function readFollowingOrigins(
     return out;
 }
 
+/** A statblock's own fields: an origin never prints its rules under these labels. */
+const STATBLOCK_FIELD = /^(?:movement|wounds|(?:total\s+)?armou?r|weapons?)$/iu;
+/** Statblock fields among a reading's rules that make it a statblock read as an origin. */
+const MIN_STATBLOCK_FIELDS = 2;
+
+/**
+ * Whether an origin reading is a creature's statblock (its Skills and Talents
+ * read as grants): its rules include the fields only a statblock prints
+ * (Movement, Armour, Weapons, Wounds). The actor reader reads it as what it is.
+ */
+export function statblockReading(o: OriginPathReading): boolean {
+    return (o.rules ?? []).filter((r) => STATBLOCK_FIELD.test(r.name.trim())).length >= MIN_STATBLOCK_FIELDS;
+}
+
 /** Pages back the origin a label-named reading continues may start. */
 const LABEL_READING_REACH = 1;
 

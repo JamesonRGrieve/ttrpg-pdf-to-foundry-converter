@@ -88,7 +88,12 @@ function entityKey(pack: EmittedPack, doc: JsonObject, line: Line): string | nul
     const values: JsonValue[] = [];
     for (const field of identity) {
         const value = system[field];
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === "" ||
+            (Array.isArray(value) && value.length === 0)
+        ) {
             return null;
         }
         values.push(value);

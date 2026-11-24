@@ -958,6 +958,17 @@ export function targetType(range: string): string {
  * A power's `activation` and `target` from its printed action (or focus time)
  * and range; a field neither names is left to the schema's initial value.
  */
+/**
+ * A power's printed subtypes ("Attack, Concentration") as the schema's list,
+ * one entry each in printed order.
+ */
+export function powerSubtypes(text: string): string[] {
+    return text
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+}
+
 export function powerActivation(action: string | undefined, range: string | undefined): JsonObject {
     const out: JsonObject = {};
     const type = action === undefined ? null : activationType(action);
@@ -1344,14 +1355,13 @@ export function entryItem(entry: Entry, type: ItemType): EntryItem {
             if (focus !== undefined || threshold !== undefined) {
                 system["focusPower"] = focusPowerTest(focus, threshold);
             }
-            for (const [label, field] of [
-                ["range", "range"],
-                ["subtype", "subtype"],
-            ] as const) {
-                const value = text(label);
-                if (value !== undefined && system[field] === undefined) {
-                    system[field] = value;
-                }
+            const range = text("range");
+            if (range !== undefined && system["range"] === undefined) {
+                system["range"] = range;
+            }
+            const subtype = text("subtype");
+            if (subtype !== undefined && system["subtype"] === undefined) {
+                system["subtype"] = powerSubtypes(subtype);
             }
             Object.assign(
                 system,

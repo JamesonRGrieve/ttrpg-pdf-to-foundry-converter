@@ -7,6 +7,7 @@ import {
     focusPowerTest,
     isSustained,
     powerActivation,
+    powerSubtypes,
     structuredPrerequisites,
 } from "./entry-types.ts";
 import {
@@ -349,7 +350,9 @@ function psychicPower(cells: RowCells): RowMapping {
         out.system["focusPower"] = { ...test, threshold };
     }
     text("range", "range");
-    text("subtype", "subtype");
+    if (cells.subtype !== undefined && !isEmptyCell(cells.subtype)) {
+        out.system["subtype"] = powerSubtypes(cells.subtype);
+    }
     const filledCell = (v: string | undefined): string | undefined =>
         v === undefined || isEmptyCell(v) ? undefined : v;
     Object.assign(out.system, powerActivation(filledCell(cells.action), filledCell(cells.range)));

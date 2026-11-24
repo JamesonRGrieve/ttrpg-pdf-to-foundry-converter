@@ -7,34 +7,35 @@ import {
     characteristicModifiers,
     citedOriginPages,
     equipmentItem,
-    originCellName,
     namesOriginStep,
+    originCellName,
     originStepNamedBy,
     pairsSteps,
     readCitedOrigins,
-    readHeadedOrigins,
-    readLabelledOrigins,
-    readVariantOrigins,
     readEffectOrigins,
     readFieldedOrigins,
-    readInlineOrigins,
-    withoutStepLabel,
-    withFollowedRules,
-    withoutLabelReadings,
     readFollowingOrigins,
-    wordPrefix,
+    readHeadedOrigins,
+    readInlineOrigins,
+    readLabelGrantedOrigins,
+    readLabelledOrigins,
     readOriginAbilities,
     readOriginPaths,
     readOriginTable,
-    readLabelGrantedOrigins,
     readRankedCareers,
+    readVariantOrigins,
     resourceChanges,
     sameOrigin,
     signedCharacteristicChanges,
     splitTopLevel,
-    withCitedOrigins,
-    withSkillLevelBase,
+    statblockReading,
     traitGrant,
+    withCitedOrigins,
+    withFollowedRules,
+    withoutLabelReadings,
+    withoutStepLabel,
+    withSkillLevelBase,
+    wordPrefix,
 } from "../../src/infer/origin-paths.ts";
 import { buildOriginPath } from "../../src/infer/schema.ts";
 import { baseSkillLevel, DEFAULT_TARGET, TARGETS } from "../../src/infer/targets.ts";
@@ -1556,5 +1557,32 @@ describe("entries that follow an origin's rules", () => {
     it("skips an entry that names no origin the document holds", () => {
         const body = "Ashreach natives follow the desert world rules.";
         expect(readFollowingOrigins([entry("ashreach", 40, [], body)], [base])).toEqual([]);
+    });
+});
+
+describe("statblockReading", () => {
+    const found = TARGETS.dh2.originSteps.find((st) => st.key === "homeWorld");
+    if (found === undefined) {
+        throw new Error("no home world step");
+    }
+    const step = found;
+    const reading = (rules: string[]): OriginPathReading => ({
+        name: "Lamp Warden Profile",
+        step,
+        pageIndex: 3,
+        description: "",
+        grants: {},
+        modifiers: {},
+        rules: rules.map((name) => ({ name, description: "As printed." })),
+    });
+
+    it("knows a creature's statblock read as an origin by the fields only a statblock prints", () => {
+        expect(statblockReading(reading(["Movement", "Armour", "Weapons"]))).toBe(true);
+        expect(statblockReading(reading(["Total Armour", "Wounds"]))).toBe(true);
+    });
+
+    it("keeps an origin whose own rules are named otherwise, or name one such field alone", () => {
+        expect(statblockReading(reading(["Steady Hand", "Quiet Waters"]))).toBe(false);
+        expect(statblockReading(reading(["Armour"]))).toBe(false);
     });
 });

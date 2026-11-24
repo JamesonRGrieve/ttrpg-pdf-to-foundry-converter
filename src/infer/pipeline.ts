@@ -91,28 +91,29 @@ import {
 } from "./npc.ts";
 import { applyOrderTests } from "./order-tests.ts";
 import {
+    namesOriginStep,
     type OriginPathReading,
     type OriginRule,
     originStepNamedBy,
-    readFieldedOrigins,
-    readInlineOrigins,
-    readOriginAbilities,
-    readOriginPaths,
-    withFollowedRules,
-    withoutLabelReadings,
-    readFollowingOrigins,
-    namesOriginStep,
     pairsSteps,
     readEffectOrigins,
+    readFieldedOrigins,
+    readFollowingOrigins,
     readHeadedOrigins,
-    readLabelledOrigins,
+    readInlineOrigins,
     readLabelGrantedOrigins,
-    readRankedCareers,
-    repeatedGrantLabels,
-    readVariantOrigins,
-    withCitedOrigins,
+    readLabelledOrigins,
+    readOriginAbilities,
+    readOriginPaths,
     readOriginTable,
+    readRankedCareers,
+    readVariantOrigins,
+    repeatedGrantLabels,
     sameOrigin,
+    statblockReading,
+    withCitedOrigins,
+    withFollowedRules,
+    withoutLabelReadings,
     withSkillLevelBase,
 } from "./origin-paths.ts";
 import { applyOriginPrerequisites } from "./origin-prerequisites.ts";
@@ -2210,12 +2211,14 @@ function extractOriginPaths(
     // rules printed apart from it join it when the document reads it.
     const apart = readOriginAbilities(entries, out.target.originSteps);
     const ruled = [
-        ...origins.map((o) => ({
-            origin: cleanName(o.name),
-            pageIndex: o.pageIndex,
-            rules: o.rules ?? [],
-            owner: o,
-        })),
+        ...origins
+            .filter((o) => !statblockReading(o))
+            .map((o) => ({
+                origin: cleanName(o.name),
+                pageIndex: o.pageIndex,
+                rules: o.rules ?? [],
+                owner: o,
+            })),
         ...apart.map((group) => ({
             origin: cleanName(group.origin),
             pageIndex: group.pageIndex,
@@ -2252,7 +2255,7 @@ function extractOriginPaths(
         }
     }
     const placed = withoutLabelReadings([
-        ...origins,
+        ...origins.filter((o) => !statblockReading(o)),
         ...readFollowingOrigins(entries, origins, out.target.originSteps),
     ]);
     withFollowedRules(placed);
