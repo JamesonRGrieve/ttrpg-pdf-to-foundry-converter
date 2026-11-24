@@ -64,7 +64,7 @@ const LABEL_FIELDS: readonly [RegExp, GrantField][] = [
     [/\bfate\b/iu, "fate"],
     [/\bwounds?\b/iu, "wounds"],
     [/\baptitudes?\b/iu, "aptitudes"],
-    [/\bbonus\b/iu, "bonus"],
+    [/\bbonus(?:es)?\b/iu, "bonus"],
     [/\bskills?\b/iu, "skills"],
     [/\btalents?\b/iu, "talents"],
     [/\b(?:equipment|gear)\b/iu, "equipment"],
@@ -574,6 +574,13 @@ function specialAbility(text: string): JsonObject | null {
         : { name: name.trim(), description: description.trim() };
 }
 
+/** An ability whose "Name: effect" line broke into a heading and its prose, or null. */
+function brokenAbility(o: Entry): JsonObject | null {
+    return /^[^:]{2,60}:\s*\S/u.test(o.heading.text)
+        ? specialAbility(`${o.heading.text} ${(o.body.split(PARAGRAPH_BREAK)[0] ?? "").trim()}`)
+        : null;
+}
+
 /** Whether a reading grants anything: a modifier, a wound or fate value, or a listed grant. */
 function grantsAnything(read: {
     grants: JsonObject;
@@ -622,8 +629,20 @@ function grantsOf(
     for (const entry of labels) {
         const label = capitalizeWords(entry.heading.text.toLowerCase());
         // A grant's value is the label's first paragraph; later ones are narrative.
-        const value = (entry.body.split(PARAGRAPH_BREAK)[0] ?? "").trim();
         const field = labelField(entry.heading.text);
+        const prose = (entry.body.split(PARAGRAPH_BREAK)[0] ?? "").trim();
+        // A label's first line may read as a field of its own ("Name: effect").
+        // An ability label's value is that line, its sentence running on into
+        // the prose when the line broke mid-sentence; any other label's value
+        // is its prose.
+        const field0 = entry.fields[0];
+        const own = field0 === undefined ? undefined : `${field0[0]}: ${field0[1]}`.trim();
+        const value =
+            own !== undefined && (field === "bonus" || field === "specialAbilities")
+                ? /[.!?]["”’)]?$/u.test(own) || prose === ""
+                    ? own
+                    : `${own} ${prose}`
+                : prose;
         // A granted Psy Rating makes the character a psyker (#681); one asked
         // for by a prerequisite or price does not.
         if (field === undefined || !PRICE_FIELDS.has(field)) {
@@ -691,10 +710,13 @@ function grantsOf(
             case "specialAbilities": {
                 // Each ability a heading of its own beneath the label; "choose
                 // one" makes them options rather than grants.
-                const abilities = optionsOf(entry).map((o) => ({
-                    name: capitalizeWords(headingName(o.heading.text).toLowerCase()),
-                    description: o.body.trim(),
-                }));
+                const abilities = optionsOf(entry).map(
+                    (o) =>
+                        brokenAbility(o) ?? {
+                            name: capitalizeWords(headingName(o.heading.text).toLowerCase()),
+                            description: o.body.trim(),
+                        },
+                );
                 if (abilities.length === 0) {
                     const ability = specialAbility(value);
                     if (ability !== null) {
@@ -708,6 +730,18 @@ function grantsOf(
                 break;
             }
             case "bonus": {
+                // A label with no text of its own whose abilities each read as a
+                // heading beneath it ("Name: effect…" broken into a heading line
+                // and its prose).
+                if (value === "") {
+                    for (const o of optionsOf(entry)) {
+                        const ability = brokenAbility(o);
+                        if (ability !== null) {
+                            specialAbilities.push(ability);
+                        }
+                    }
+                    break;
+                }
                 // A named ability ("Name: effect"), or a characteristic bonus ("… gain +5 Fellowship").
                 const ability = specialAbility(value);
                 if (ability !== null) {
@@ -1323,13 +1357,13 @@ export function withFollowedRules(origins: OriginPathReading[]): void {
         const own = o.grants;
         const merged: JsonObject = { ...base.grants };
         for (const [k, v] of Object.entries(own)) {
-            if (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "") {
+            // An unread value (none, "", 0) leaves the base's.
+            if (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "" && v !== 0) {
                 merged[k] = v;
             }
         }
-        if (Array.isArray(own["specialAbilities"]) && own["specialAbilities"].length > 0) {
-            merged["specialAbilities"] = own["specialAbilities"];
-        }
+        // The origin's own abilities replace the named one's, never join them.
+        merged["specialAbilities"] = Array.isArray(own["specialAbilities"]) ? own["specialAbilities"] : [];
         o.grants = merged;
         o.modifiers = { ...base.modifiers };
         if (o.resources === undefined && base.resources !== undefined) {
@@ -1923,6 +1957,33 @@ function childrenOf(entries: readonly Entry[], index: number): Entry[] {
 }
 
 /**
+ * The headings a grant label lists beneath it. A label with no text of its
+ * own and no headings nested under it may be followed, on its page, by its
+ * items set as headings of their own ("Name: effect…", broken into a heading
+ * line and its prose) at a size that nests them beside it: those up to the
+ * next grant label.
+ */
+function optionsBeneath(entries: readonly Entry[], label: Entry): Entry[] {
+    const index = entries.indexOf(label);
+    const children = childrenOf(entries, index);
+    if (children.length > 0 || label.body.trim() !== "" || label.fields.length > 0) {
+        return children;
+    }
+    const following: Entry[] = [];
+    for (const e of entries.slice(index + 1)) {
+        if (
+            e.heading.pageIndex !== label.heading.pageIndex ||
+            labelField(e.heading.text) !== undefined ||
+            !/^[^:]{2,60}:\s*\S/u.test(e.heading.text)
+        ) {
+            break;
+        }
+        following.push(e);
+    }
+    return following;
+}
+
+/**
  * Read every origin-path rules block among the document's entries (in order).
  * `runningHeads` gives each page's running text, which names the step when no
  * heading does.
@@ -1976,7 +2037,7 @@ export function readOriginPaths(
             return undefined;
         }
         // A step bought with experience may hold only its price and requirement.
-        const read = grantsOf(fielded, (label) => childrenOf(entries, entries.indexOf(label)));
+        const read = grantsOf(fielded, (label) => optionsBeneath(entries, label));
         if (!grantsAnything(read) && read.xpCost === undefined && read.requirements === undefined) {
             return undefined;
         }
@@ -2096,7 +2157,7 @@ export function readOriginPaths(
         ) {
             continue;
         }
-        const reading = grantsOf(labels, (label) => childrenOf(entries, entries.indexOf(label)));
+        const reading = grantsOf(labels, (label) => optionsBeneath(entries, label));
         if (!grantsAnything(reading)) {
             continue;
         }

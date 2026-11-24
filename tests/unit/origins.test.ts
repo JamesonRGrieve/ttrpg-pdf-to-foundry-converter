@@ -196,6 +196,96 @@ describe("origin rules blocks", () => {
         });
     });
 
+    it("reads a bonus whose one line was read as a field of its own", () => {
+        const s = ["CHOOSE HOME WORLD", "REED WORLD RULES"];
+        const entries: Entry[] = [
+            entry("REED WORLD", 10, ["CHOOSE HOME WORLD"], "The damp and patient folk of the reeds."),
+            entry("REED WORLD RULES", 10, ["CHOOSE HOME WORLD"]),
+            entry("FATE THRESHOLD", 10, s, "3 (Patron’s Blessing 7+)"),
+            { ...entry("HOME WORLD BONUS", 10, s), fields: [["Wader", "Ignores marsh terrain."]] },
+            entry("HOME WORLD APTITUDE", 10, s, "Agility"),
+            entry("WOUNDS", 10, s, "A reed worlder starts with 7+1d5 wounds."),
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["specialAbilities"]).toEqual([
+            { name: "Wader", description: "Ignores marsh terrain." },
+        ]);
+    });
+
+    it("reads a bonus whose line broke into a heading beneath its label", () => {
+        const s = ["CHOOSE BACKGROUND", "LAMPLIGHTERS RULES"];
+        const entries = [
+            entry("LAMPLIGHTERS RULES", 20, ["CHOOSE BACKGROUND"]),
+            entry("STARTING SKILLS", 20, s, "Lantern Lore (Reeds)"),
+            entry("BACKGROUND BONUS", 20, s),
+            entry(
+                "Steady Hands: A lamplighter",
+                20,
+                [...s, "BACKGROUND BONUS"],
+                "never spills oil.\n\nNarrative.",
+            ),
+            entry("BACKGROUND APTITUDE", 20, s, "Finesse"),
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["specialAbilities"]).toEqual([
+            { name: "Steady Hands", description: "A lamplighter never spills oil." },
+        ]);
+    });
+
+    it("reads bonuses set beside their empty label as headings of their own", () => {
+        const s = ["CHOOSE BACKGROUND", "LAMPLIGHTERS RULES"];
+        const entries = [
+            entry("LAMPLIGHTERS RULES", 20, ["CHOOSE BACKGROUND"]),
+            entry("STARTING SKILLS", 20, s, "Lantern Lore (Reeds)"),
+            entry("BACKGROUND BONUSES", 20, s),
+            entry("Steady Hands: A lamplighter", 20, s, "never spills oil."),
+            entry("Night Eyes: The lamplighter", 20, s, "sees in the dark."),
+            entry("BACKGROUND APTITUDE", 20, s, "Finesse"),
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["specialAbilities"]).toEqual([
+            { name: "Steady Hands", description: "A lamplighter never spills oil." },
+            { name: "Night Eyes", description: "The lamplighter sees in the dark." },
+        ]);
+        expect(origin?.grants["aptitudes"]).toEqual(["Finesse"]);
+    });
+
+    it("reads an ability whose line ran on into the label's prose", () => {
+        const s = ["CHOOSE ROLE", "LAMPLIGHTER RULES"];
+        const entries: Entry[] = [
+            entry("LAMPLIGHTER RULES", 30, ["CHOOSE ROLE"]),
+            entry("ROLE APTITUDES", 30, s, "Finesse"),
+            {
+                ...entry("ROLE BONUS", 30, s, "(see the lamp rules), he relights it.\n\nNarrative."),
+                fields: [["Steady Hands", "When a lamp gutters"]],
+            },
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["specialAbilities"]).toEqual([
+            {
+                name: "Steady Hands",
+                description: "When a lamp gutters (see the lamp rules), he relights it.",
+            },
+        ]);
+    });
+
+    it("reads a label's own value, not a field set beside it", () => {
+        const s = ["CHOOSE HOME WORLD", "REED WORLD RULES"];
+        const entries: Entry[] = [
+            entry("REED WORLD", 10, ["CHOOSE HOME WORLD"], "The damp and patient folk of the reeds."),
+            entry("REED WORLD RULES", 10, ["CHOOSE HOME WORLD"]),
+            {
+                ...entry("FATE THRESHOLD", 10, s, "2 (Patron’s Blessing 9+)"),
+                fields: [["Wader", "Ignores marsh terrain."]],
+            },
+            entry("HOME WORLD APTITUDE", 10, s, "Agility"),
+            entry("WOUNDS", 10, s, "A reed worlder starts with 7+1d5 wounds."),
+        ];
+        const [origin] = readOriginPaths(entries, STEPS, NO_HEADS);
+        expect(origin?.grants["fateThreshold"]).toBe(2);
+        expect(origin?.grants["specialAbilities"]).toEqual([]);
+    });
+
     it("turns 'or' into choices and parenthesised specialisations into grants", () => {
         const s = ["CHOOSE BACKGROUND", "LAMPLIGHTERS RULES"];
         const entries = [
@@ -1262,15 +1352,34 @@ describe("origins that follow another origin's rules", () => {
             step,
             pageIndex: 9,
             description: "Ashreach natives follow the marsh world rules, with an ability of their own.",
-            grants: { specialAbilities: [{ name: "New Bonus", description: "y" }] },
+            // Read from a rules block of its own: its unread threshold is 0.
+            grants: {
+                fateThreshold: 0,
+                woundsFormula: "",
+                specialAbilities: [{ name: "New Bonus", description: "y" }],
+            },
             modifiers: {},
         };
         const all = [base(), follower];
         withFollowedRules(all);
+        expect(follower.grants["fateThreshold"]).toBe(3);
         expect(follower.grants["woundsFormula"]).toBe("8+1d5");
         expect(follower.grants["aptitudes"]).toEqual(["Toughness"]);
         expect(follower.modifiers).toEqual({ toughness: 5, agility: -5 });
         expect(follower.grants["specialAbilities"]).toEqual([{ name: "New Bonus", description: "y" }]);
+    });
+    it("never lends the named origin's abilities to one whose own went unread", () => {
+        const follower: OriginPathReading = {
+            name: "Ashreach",
+            step,
+            pageIndex: 9,
+            description: "Ashreach natives follow the marsh world rules.",
+            grants: {},
+            modifiers: {},
+        };
+        withFollowedRules([base(), follower]);
+        expect(follower.grants["woundsFormula"]).toBe("8+1d5");
+        expect(follower.grants["specialAbilities"]).toEqual([]);
     });
     it("leaves an origin with rules of its own as read", () => {
         const own: OriginPathReading = {
