@@ -1283,6 +1283,182 @@ export function sameOrigin(a: string, b: string): boolean {
     return letters(a) === letters(b);
 }
 
+/**
+ * An origin whose prose says it follows another origin's rules ("… follow the
+ * Y rules"), with an ability of its own in place of Y's: the named origin, when the document holds it under the same step, lends its grants
+ * and modifiers, and the origin's own printed abilities replace the named
+ * one's. An origin already carrying rules of its own is left as read.
+ */
+export const FOLLOWS_RULES = /\bfollows?\s+the\s+(?:standard\s+)?([\p{L}'’ -]{3,40}?)\s+rules\b/iu;
+
+/** Grant fields that carry an origin's base rules. */
+const BASE_GRANTS = ["woundsFormula", "fateFormula", "fateThreshold", "aptitudes"] as const;
+
+function carriesBaseRules(o: OriginPathReading): boolean {
+    const g = o.grants;
+    return (
+        Object.keys(o.modifiers).length > 0 ||
+        BASE_GRANTS.some((k) => {
+            const v = g[k];
+            return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "" && v !== 0;
+        })
+    );
+}
+
+export function withFollowedRules(origins: OriginPathReading[]): void {
+    for (const o of origins) {
+        if (carriesBaseRules(o)) {
+            continue;
+        }
+        const named = FOLLOWS_RULES.exec(o.description)?.[1];
+        if (named === undefined) {
+            continue;
+        }
+        const base = origins.find(
+            (b) => b !== o && b.step.key === o.step.key && sameOrigin(b.name, named) && carriesBaseRules(b),
+        );
+        if (base === undefined) {
+            continue;
+        }
+        const own = o.grants;
+        const merged: JsonObject = { ...base.grants };
+        for (const [k, v] of Object.entries(own)) {
+            if (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "") {
+                merged[k] = v;
+            }
+        }
+        if (Array.isArray(own["specialAbilities"]) && own["specialAbilities"].length > 0) {
+            merged["specialAbilities"] = own["specialAbilities"];
+        }
+        o.grants = merged;
+        o.modifiers = { ...base.modifiers };
+        if (o.resources === undefined && base.resources !== undefined) {
+            o.resources = { ...base.resources };
+        }
+    }
+}
+
+/**
+ * Entries whose heading lost its step label but whose prose says they follow
+ * the rules of an origin the document holds ("… follow the X rules"): each is
+ * an origin of that origin's step, named
+ * by its heading. Its own ability is the "<Step> Bonus Name: effect" its
+ * prose carries.
+ */
+export function readFollowingOrigins(
+    entries: readonly Entry[],
+    origins: readonly OriginPathReading[],
+    steps: readonly OriginStepDef[] = [],
+): OriginPathReading[] {
+    const out: OriginPathReading[] = [];
+    for (const entry of entries) {
+        const named = FOLLOWS_RULES.exec(entry.body)?.[1];
+        const heading = entry.heading.text.trim();
+        if (named === undefined || letters(heading).length === 0) {
+            continue;
+        }
+        const base = origins.find((o) => sameOrigin(o.name, named));
+        // A base printed in another document: the prose names the step itself
+        // (its label, before the sentence naming the rules).
+        const step =
+            base?.step ??
+            stepNamedIn(entry.body.slice(0, FOLLOWS_RULES.exec(entry.body)?.index ?? 0), steps, false, false);
+        if (
+            step === undefined ||
+            origins.some((o) => sameOrigin(o.name, heading)) ||
+            out.some((o) => sameOrigin(o.name, heading)) ||
+            !letters(entry.body).includes(letters(heading))
+        ) {
+            continue;
+        }
+        const labels = step.labels.map((l) => l.split(/\s+/u).join("\\s+")).join("|");
+        // The last such span: the sentence introducing it names the bonus too.
+        const bonus =
+            [
+                ...entry.body.matchAll(
+                    new RegExp(`(?:${labels})\\s+bonus\\s+([^:\\n]{3,60}?)[ \\t]*:[ \\t]*([^\\n]+)`, "giu"),
+                ),
+            ].at(-1) ?? null;
+        const description = bonus === null ? entry.body : entry.body.slice(0, bonus.index).trim();
+        out.push({
+            name:
+                caseLost(heading) || !/\p{Ll}/u.test(heading) || !/\p{Lu}/u.test(heading)
+                    ? capitalizeWords(heading.toLowerCase())
+                    : heading,
+            step,
+            pageIndex: entry.heading.pageIndex,
+            description,
+            grants:
+                bonus?.[1] === undefined || bonus[2] === undefined
+                    ? {}
+                    : { specialAbilities: [{ name: bonus[1].trim(), description: bonus[2].trim() }] },
+            modifiers: {},
+        });
+    }
+    return out;
+}
+
+/** Pages back the origin a label-named reading continues may start. */
+const LABEL_READING_REACH = 1;
+
+/** Whether a reading's name is only its step's label and a grant label ("Home World Bonus"). */
+function namedByLabel(o: OriginPathReading): boolean {
+    let rest = o.name;
+    for (const label of o.step.labels) {
+        rest = rest.replace(labelPattern(label, true, false), " ");
+    }
+    rest = rest.trim();
+    return (
+        rest.length > 0 &&
+        rest.split(/\s+/u).length <= 2 &&
+        LABEL_FIELDS.some(([re]) => re.test(rest)) &&
+        rest
+            .replace(/\W+/gu, " ")
+            .trim()
+            .split(" ")
+            .every((w) => LABEL_FIELDS.some(([re]) => re.test(w)))
+    );
+}
+
+/**
+ * A reading named only by a grant label continues the origin printed just
+ * before it (its rules block split at that label): its grants fill the
+ * fields that origin lacks, and it is no origin of its own.
+ */
+export function withoutLabelReadings(origins: OriginPathReading[]): OriginPathReading[] {
+    const kept: OriginPathReading[] = [];
+    for (const o of origins) {
+        if (!namedByLabel(o)) {
+            kept.push(o);
+            continue;
+        }
+        const owner = origins
+            .filter(
+                (b) =>
+                    b !== o &&
+                    !namedByLabel(b) &&
+                    b.step.key === o.step.key &&
+                    b.pageIndex <= o.pageIndex &&
+                    o.pageIndex - b.pageIndex <= LABEL_READING_REACH,
+            )
+            .sort((a, b) => b.pageIndex - a.pageIndex)[0];
+        if (owner === undefined) {
+            kept.push(o);
+            continue;
+        }
+        for (const [k, v] of Object.entries(o.grants)) {
+            const own = owner.grants[k];
+            const empty =
+                own === undefined || own === "" || own === 0 || (Array.isArray(own) && own.length === 0);
+            const has = Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "" && v !== 0;
+            if (empty && has) {
+                owner.grants[k] = v;
+            }
+        }
+    }
+    return kept;
+}
+
 /** How far up an entry's sections the step naming it may be (its own section, or its parent's). */
 const STEP_SECTION_DEPTH = 2;
 

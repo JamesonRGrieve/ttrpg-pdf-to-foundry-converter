@@ -11,6 +11,7 @@ import { RENDERER_ID } from "./ocr/render.ts";
 import type { OcrEngine } from "./ocr/types.ts";
 import { emit, type EmittedPack } from "./stages/emit.ts";
 import { EXTRACTOR_ID, extract } from "./stages/extract.ts";
+import { withFollowedOrigins } from "./stages/follow-rules.ts";
 import { homologate } from "./stages/homologate.ts";
 import { openImageFallback } from "./stages/image-fallback.ts";
 import { recoverImages } from "./stages/images.ts";
@@ -333,6 +334,7 @@ export async function runModule(
     const wh40k: { line: Line; packs: EmittedPack[] }[] = results.flatMap((r) =>
         r.target.system === "wh40k-rpg" ? [{ line: r.target.line, packs: r.packs }] : [],
     );
+    withFollowedOrigins(wh40k);
     const grouped: { group: string; packs: EmittedPack[] }[] =
         system === "wh40k-rpg"
             ? homologate(wh40k).map(({ line, packs }) => ({ group: line, packs }))

@@ -98,6 +98,9 @@ import {
     readInlineOrigins,
     readOriginAbilities,
     readOriginPaths,
+    withFollowedRules,
+    withoutLabelReadings,
+    readFollowingOrigins,
     namesOriginStep,
     pairsSteps,
     readEffectOrigins,
@@ -2248,7 +2251,12 @@ function extractOriginPaths(
             }
         }
     }
-    for (const origin of origins) {
+    const placed = withoutLabelReadings([
+        ...origins,
+        ...readFollowingOrigins(entries, origins, out.target.originSteps),
+    ]);
+    withFollowedRules(placed);
+    for (const origin of placed) {
         addOrigin(out, origin);
     }
 }

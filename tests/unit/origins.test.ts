@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import type { Entry } from "../../src/infer/detect-entries.ts";
+import type { OriginPathReading } from "../../src/infer/origin-paths.ts";
 import {
     characteristicChanges,
     characteristicModifiers,
@@ -18,6 +19,9 @@ import {
     readFieldedOrigins,
     readInlineOrigins,
     withoutStepLabel,
+    withFollowedRules,
+    withoutLabelReadings,
+    readFollowingOrigins,
     wordPrefix,
     readOriginAbilities,
     readOriginPaths,
@@ -1229,5 +1233,103 @@ describe("origins whose grants follow under a label each repeats", () => {
             "Light Sleeper",
         ]);
         expect(read[0]?.modifiers).toEqual({ perception: 5, toughness: -5 });
+    });
+});
+
+describe("origins that follow another origin's rules", () => {
+    const found = TARGETS.dh2.originSteps.find((st) => st.key === "homeWorld");
+    if (found === undefined) {
+        throw new Error("no home world step");
+    }
+    const step = found;
+    const base = (): OriginPathReading => ({
+        name: "Marsh World",
+        step,
+        pageIndex: 3,
+        description: "Life in the marshes.",
+        grants: {
+            woundsFormula: "8+1d5",
+            fateFormula: "3",
+            fateThreshold: 3,
+            aptitudes: ["Toughness"],
+            specialAbilities: [{ name: "Old Bonus", description: "x" }],
+        },
+        modifiers: { toughness: 5, agility: -5 },
+    });
+    it("takes the named origin's rules and keeps its own bonus", () => {
+        const follower: OriginPathReading = {
+            name: "Ashreach",
+            step,
+            pageIndex: 9,
+            description: "Ashreach natives follow the marsh world rules, with an ability of their own.",
+            grants: { specialAbilities: [{ name: "New Bonus", description: "y" }] },
+            modifiers: {},
+        };
+        const all = [base(), follower];
+        withFollowedRules(all);
+        expect(follower.grants["woundsFormula"]).toBe("8+1d5");
+        expect(follower.grants["aptitudes"]).toEqual(["Toughness"]);
+        expect(follower.modifiers).toEqual({ toughness: 5, agility: -5 });
+        expect(follower.grants["specialAbilities"]).toEqual([{ name: "New Bonus", description: "y" }]);
+    });
+    it("leaves an origin with rules of its own as read", () => {
+        const own: OriginPathReading = {
+            ...base(),
+            name: "Ashreach",
+            description: "Ashreach natives follow the marsh world rules.",
+            modifiers: { strength: 5 },
+        };
+        withFollowedRules([base(), own]);
+        expect(own.modifiers).toEqual({ strength: 5 });
+    });
+    it("folds a reading named by a grant label into the origin before it", () => {
+        const owner: OriginPathReading = {
+            ...base(),
+            grants: { fateFormula: "2" },
+            modifiers: { strength: 5 },
+        };
+        const split: OriginPathReading = {
+            name: "Home World Bonus",
+            step,
+            pageIndex: 3,
+            description: "",
+            grants: { woundsFormula: "8+1d5", aptitudes: ["Strength"], fateFormula: "9" },
+            modifiers: {},
+        };
+        const kept = withoutLabelReadings([owner, split]);
+        expect(kept).toEqual([owner]);
+        expect(owner.grants).toEqual({ fateFormula: "2", woundsFormula: "8+1d5", aptitudes: ["Strength"] });
+    });
+});
+
+describe("entries that follow an origin's rules", () => {
+    const found = TARGETS.dh2.originSteps.find((st) => st.key === "homeWorld");
+    if (found === undefined) {
+        throw new Error("no home world step");
+    }
+    const step = found;
+    const base: OriginPathReading = {
+        name: "Marsh World",
+        step,
+        pageIndex: 3,
+        description: "",
+        grants: { woundsFormula: "8+1d5" },
+        modifiers: { toughness: 5 },
+    };
+    it("reads the entry as an origin of the step, with its printed bonus", () => {
+        const body =
+            "Ashreach may be taken as a home world. Its natives follow the marsh world rules, with a home world bonus " +
+            "of their own:\n\nhome world bonus Quiet Waters: A character from Ashreach rests easily.";
+        const read = readFollowingOrigins([entry("ashreach", 40, [], body)], [base]);
+        expect(read).toHaveLength(1);
+        expect(read[0]?.name).toBe("Ashreach");
+        expect(read[0]?.step.key).toBe("homeWorld");
+        expect(read[0]?.grants["specialAbilities"]).toEqual([
+            { name: "Quiet Waters", description: "A character from Ashreach rests easily." },
+        ]);
+    });
+    it("skips an entry that names no origin the document holds", () => {
+        const body = "Ashreach natives follow the desert world rules.";
+        expect(readFollowingOrigins([entry("ashreach", 40, [], body)], [base])).toEqual([]);
     });
 });
