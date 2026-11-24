@@ -79,6 +79,31 @@ function inCaseOf(word: string, like: string): string {
     return LEADING_UPPER.test(like) ? `${word.slice(0, 1).toUpperCase()}${word.slice(1)}` : word;
 }
 
+/**
+ * Glyph sequences OCR reads a wide letter as when a display face draws it
+ * with narrow strokes ("ITI" for "M"): the wide letter, and the narrow
+ * letters read in its place.
+ */
+const SPLIT_GLYPHS: readonly (readonly [string, string])[] = [["m", "iti"]];
+
+/**
+ * The word the document prints that `word` is, read with a wide letter split
+ * into narrow ones ("itioth" where "moth" is printed): each split put back,
+ * the result a word printed at least `MIN_KNOWN` times. Null for none.
+ */
+function unconfused(word: string, lexicon: Lexicon): string | null {
+    for (const [wide, split] of SPLIT_GLYPHS) {
+        if (!word.includes(split)) {
+            continue;
+        }
+        const joined = word.split(split).join(wide);
+        if ([...joined].length >= MIN_LETTERS && (lexicon.document.get(joined) ?? 0) >= MIN_KNOWN) {
+            return joined;
+        }
+    }
+    return null;
+}
+
 export type Vouched = { text: string; known: true } | { text: string; known: false };
 
 /**
@@ -100,7 +125,10 @@ export function vouch(text: string, pageIndex: number, lexicon: Lexicon): Vouche
     if ((lexicon.document.get(lower) ?? 0) >= MIN_KNOWN) {
         return { text, known: true };
     }
-    const correction = dominant(lower, lexicon.pages.get(pageIndex)) ?? dominant(lower, lexicon.document);
+    const correction =
+        dominant(lower, lexicon.pages.get(pageIndex)) ??
+        dominant(lower, lexicon.document) ??
+        unconfused(lower, lexicon);
     return correction === null
         ? { text, known: false }
         : { text: `${lead}${inCaseOf(correction, core)}${trail}`, known: true };

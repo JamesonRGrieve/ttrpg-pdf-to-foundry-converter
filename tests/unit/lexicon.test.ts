@@ -52,6 +52,14 @@ describe("vouch", () => {
         expect(vouch("hat", 0, even)).toEqual({ text: "hat", known: false });
     });
 
+    it("puts back a wide letter OCR read as narrow strokes, where the document prints the word", () => {
+        const lamps = buildLexicon([run("The moth and the moth, the mantle and the mantle.")], all);
+        expect(vouch("ITIOTH", 0, lamps)).toEqual({ text: "MOTH", known: true });
+        expect(vouch("ITIANTLE", 0, lamps)).toEqual({ text: "MANTLE", known: true });
+        // A word with the strokes that the document does not print another way stays.
+        expect(vouch("ITIAR", 0, lamps)).toEqual({ text: "ITIAR", known: false });
+    });
+
     it("never vouches for short words, words with digits, or words printed once", () => {
         expect(vouch("is", 0, lexicon).known).toBe(false);
         expect(vouch("L4MP", 0, lexicon).known).toBe(false);
