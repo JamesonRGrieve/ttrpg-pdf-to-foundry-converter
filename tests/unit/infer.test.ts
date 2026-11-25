@@ -86,6 +86,7 @@ import {
     captionSection,
     citeFirstPage,
     consolidate,
+    withShortenedRowsJoined,
     embedNpcItems,
     fitModifications,
     givenNames,
@@ -1038,6 +1039,37 @@ describe("npc statblocks", () => {
             ["Actor", "Moth Keeper", { characteristics: weak, notes: "keeps moths" }],
             ["Item", "Wick Lance", expect.objectContaining({ damage: "1d10", range: 3 })],
         ]);
+    });
+
+    it("joins a table row naming an entry without its qualifier to that entry", () => {
+        const reading = (blockId: string, name: string): Entity => ({
+            blockId,
+            documentType: "Item",
+            group: "dh2",
+            pack: "p",
+            ordinal: 0,
+            fields: { name, type: "ammunition" },
+            images: {},
+            provenance: { pageIndex: 0, y: 0 },
+        });
+        const joined = withShortenedRowsJoined([
+            reading("entry:ammunition", "Lamp Oil, Refined"),
+            reading("table:ammunition", "Lamp Oil"),
+        ]);
+        expect(joined.map((e) => e.fields["name"])).toEqual(["Lamp Oil, Refined", "Lamp Oil, Refined"]);
+        // A row whose name an entry of its own carries, or that two entries qualify, stays.
+        const own = withShortenedRowsJoined([
+            reading("entry:ammunition", "Lamp Oil"),
+            reading("entry:ammunition", "Lamp Oil, Refined"),
+            reading("table:ammunition", "Lamp Oil"),
+        ]);
+        expect(own.map((e) => e.fields["name"])).toEqual(["Lamp Oil", "Lamp Oil, Refined", "Lamp Oil"]);
+        const two = withShortenedRowsJoined([
+            reading("entry:ammunition", "Lamp Oil, Refined"),
+            reading("entry:ammunition", "Lamp Oil, Crude"),
+            reading("table:ammunition", "Lamp Oil"),
+        ]);
+        expect(two.map((e) => e.fields["name"]).at(-1)).toBe("Lamp Oil");
     });
 
     it("embeds a statblock's items as copies of the document's own, else bare", () => {

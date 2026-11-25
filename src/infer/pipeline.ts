@@ -3617,6 +3617,39 @@ function characteristicSignature(e: Entity): string | null {
     return isJsonObject(characteristics) ? JSON.stringify(characteristics) : null;
 }
 
+/**
+ * A table row naming an entry without the qualifier its heading sets off by
+ * a comma ("Lamp Oil" for the entry "Lamp Oil, Refined") is that entry's
+ * row: where nothing else in the pack carries the row's own name and exactly
+ * one entry is named "<row>, <qualifier>", the row takes the entry's name and
+ * joins it.
+ */
+export function withShortenedRowsJoined(read: readonly Entity[]): Entity[] {
+    const named = new Map<string, Entity[]>();
+    for (const e of read) {
+        const key = `${e.pack}\u0000${singularKey(String(e.fields["name"]))}`;
+        named.set(key, [...(named.get(key) ?? []), e]);
+    }
+    return read.map((e) => {
+        if (!e.blockId.startsWith(TABLE_READING)) {
+            return e;
+        }
+        const name = String(e.fields["name"]);
+        if ((named.get(`${e.pack}\u0000${singularKey(name)}`) ?? []).length > 1) {
+            return e;
+        }
+        const prefix = `${name.trim().toLowerCase()}, `;
+        const entries = read.filter(
+            (o) =>
+                o.pack === e.pack &&
+                o.blockId.startsWith(ENTRY_READING) &&
+                String(o.fields["name"]).trim().toLowerCase().startsWith(prefix),
+        );
+        const entryName = entries.length === 1 ? entries[0]?.fields["name"] : undefined;
+        return typeof entryName === "string" ? { ...e, fields: { ...e.fields, name: entryName } } : e;
+    });
+}
+
 export function consolidate(
     read: readonly Entity[],
     descriptions: ReadonlyMap<string, string>,
@@ -3627,7 +3660,7 @@ export function consolidate(
     loads: ReadonlySet<string> = new Set(),
 ): Entity[] {
     const richness = (e: Entity): number => JSON.stringify(e.fields).length;
-    const entities = withoutMixedCaptionGear(read, loads);
+    const entities = withShortenedRowsJoined(withoutMixedCaptionGear(read, loads));
     // By pack and name, then by printed characteristics: actors of one name
     // whose statblocks differ stay apart. One read without characteristics
     // joins the statblock of its name when there is just one.
