@@ -122,8 +122,14 @@ test("every converted document validates and prepares under the current system",
 /** Documents of each pack whose sheets are opened. */
 const SHEETS_PER_PACK = 3;
 
+/**
+ * Room for every pack's sample: a full regression opens about 1,500 sheets
+ * at some 20 a minute on a shared runner.
+ */
+const SHEETS_TIMEOUT_MS = 2 * 3_600_000;
+
 test("converted documents open their sheets", async ({ page }) => {
-    test.setTimeout(3_600_000);
+    test.setTimeout(SHEETS_TIMEOUT_MS);
     const dir = resolve(MODULES_DIR ?? ".");
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
@@ -189,6 +195,8 @@ test("converted documents open their sheets", async ({ page }) => {
             opened += sample.length;
             failures.push(...result.map((e) => `${book} ${pack.type} ${e}`));
         }
+        // One line per book, so a long run shows its progress as it goes.
+        process.stdout.write(`[sheets] ${book}: ${opened} opened, ${failures.length} failed\n`);
     }
     test.info().annotations.push({
         type: "sheets",
