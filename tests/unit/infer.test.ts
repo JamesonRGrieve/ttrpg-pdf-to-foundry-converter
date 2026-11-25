@@ -4358,6 +4358,15 @@ describe("statblock prose", () => {
         expect(enclosingEntry([outer], outer)).toBeNull();
     });
 
+    it("takes no heading printed after the caption on its page as the statblock's name", () => {
+        const entries = [
+            heading("CREATING NEW HOUNDS", 72),
+            heading("Mire Hound (Minion)", 72),
+            heading("MIRE HOUND WEAPONS", 72),
+        ];
+        expect(namingEntry(entries, "Mire Hound", "Mire Hound (Minion)", 72)).toBeNull();
+    });
+
     it("takes the heading a caption shortens, never the caption line itself", () => {
         const entries = [
             heading("INDUSTRIAL or HEAVY LAMP SERVITOR", 72),

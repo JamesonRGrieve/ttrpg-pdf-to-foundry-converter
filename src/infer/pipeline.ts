@@ -2533,8 +2533,16 @@ export function namingEntry(
     pageIndex: number,
 ): Entry | null {
     const words = nameWords(caption);
+    // A heading printed after the caption on its own page (where the caption
+    // line reads as a heading) titles what follows the statblock, not it.
+    const captionAt = entries.findIndex(
+        (e) => e.heading.pageIndex === pageIndex && nameKey(e.heading.text) === nameKey(captionLine),
+    );
     let best: Entry | null = null;
-    for (const e of entries) {
+    for (const [index, e] of entries.entries()) {
+        if (captionAt >= 0 && index > captionAt && e.heading.pageIndex === pageIndex) {
+            continue;
+        }
         const p = e.heading.pageIndex;
         const heading = new Set(nameWords(e.heading.text));
         if (
