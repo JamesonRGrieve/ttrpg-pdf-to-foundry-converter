@@ -60,9 +60,16 @@ if (outputRoot === undefined) {
 const root = resolve(outputRoot);
 const systemDir = resolve(values.system ?? join(import.meta.dirname, "..", "..", ".foundry-system"));
 
-// The modules' one system: what their packs declare.
+// The modules' one system: what their packs declare, or for a module with no
+// packs (a document the converter read nothing from) the system it relates to.
 const declared = [
-    ...new Set(moduleManifests(root).flatMap(({ manifest }) => (manifest.packs ?? []).map((p) => p.system))),
+    ...new Set(
+        moduleManifests(root).flatMap(({ manifest }) =>
+            (manifest.packs ?? []).length > 0
+                ? manifest.packs.map((p) => p.system)
+                : (manifest.relationships?.systems ?? []).map((s) => s.id),
+        ),
+    ),
 ];
 if (declared.length !== 1) {
     process.stderr.write(
