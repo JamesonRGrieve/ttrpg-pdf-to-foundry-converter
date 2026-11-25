@@ -14,6 +14,21 @@ describe("statblock skills", () => {
         expect(skillKey("  Hush ")).toBe("hush");
     });
 
+    it("reads a rank printed before the specialisation", () => {
+        expect(listedSkills("Lantern Lore +20 (Reeds, Tides), Hush")).toMatchObject([
+            { key: "lanternLore", name: "Lantern Lore (Reeds, Tides)", advance: 3, bonus: 0 },
+            { key: "hush", advance: 1 },
+        ]);
+    });
+
+    it("parts entries at a full stop as at a comma", () => {
+        expect(listedSkills("Hush (Per). Wading (S) +10, Quiet Step").map((s) => s.name)).toEqual([
+            "Hush",
+            "Wading",
+            "Quiet Step",
+        ]);
+    });
+
     it("reads each entry's name, specialisation, characteristic and rank", () => {
         expect(listedSkills("Hush (Ag) +20, Lantern Lore (Reeds) (Int), Wading (S) +10.")).toEqual([
             {

@@ -125,11 +125,31 @@ export function loreKindFirst(name: string): string {
     return name.replace(/^Lore:?\s+(\p{L}+)\b/u, "$1 Lore");
 }
 
+/**
+ * A list's entries parted by full stops as well as commas: a read can take one
+ * for the other ("Ciphers (Int). Climb (S)"), and a stop before a capital
+ * outside the brackets ends an entry either way.
+ */
+function stopsAsCommas(line: string): string {
+    let depth = 0;
+    let out = "";
+    for (let i = 0; i < line.length; i++) {
+        const char = line.charAt(i);
+        if (char === "(") {
+            depth++;
+        } else if (char === ")") {
+            depth = Math.max(0, depth - 1);
+        }
+        out += char === "." && depth === 0 && /^\.\s+\p{Lu}/u.test(line.slice(i)) ? "," : char;
+    }
+    return out;
+}
+
 export function listedSkills(line: string): ListedSkill[] {
     const out: ListedSkill[] = [];
     // A characteristic tag closes its entry: one run into the next with no
     // comma ("Concealment (Ag) Deceive (Fel)") is two.
-    const separated = printedList(line).replace(
+    const separated = printedList(stopsAsCommas(line)).replace(
         /\(([^()]{1,4})\)((?:\s*\+\d+)?)\s+(?=\p{Lu})/gu,
         (whole, inner: string, rank: string) =>
             taggedCharacteristic(inner) === undefined ? whole : `(${inner})${rank}, `,
@@ -141,6 +161,8 @@ export function listedSkills(line: string): ListedSkill[] {
             .replace(/^(?:and|or)\s+/iu, "")
             .replace(/^Lore:\s*\p{L}+\b/u, loreKindFirst)
             .replace(RANK_INSIDE, "($<spec>) $<plus>")
+            // A rank printed before the specialisation ("Lore +20 (Reeds)") closes it all the same.
+            .replace(/\s+(\+\s*\d+)\s*(\([^()]*\))\s*$/u, " $2 $1")
             // A rank printed alone in brackets ("(+20)") leaves none behind.
             .replace(/\s*\(\s*\)/gu, "")
             .trim();

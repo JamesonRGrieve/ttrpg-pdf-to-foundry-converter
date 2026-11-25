@@ -186,8 +186,17 @@ test("converted documents open their sheets", async ({ page }) => {
                             }
                             await doc.delete();
                         } catch (err) {
+                            // The message, then where it was thrown: the top frames name the code.
+                            const frames = ((err as Error).stack ?? "")
+                                .split("\n")
+                                .filter((line) => /^\s*at\s/u.test(line))
+                                .slice(0, 3)
+                                .map((line) => line.trim());
                             out.push(
-                                `${String(data["name"])}: ${(err as Error).message.split("\n")[0] ?? ""}`,
+                                [
+                                    `${String(data["name"])}: ${(err as Error).message.split("\n")[0] ?? ""}`,
+                                    ...frames,
+                                ].join(" | "),
                             );
                         }
                     }
