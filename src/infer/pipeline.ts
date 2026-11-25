@@ -2521,6 +2521,13 @@ function titlesTopic(heading: string, caption: readonly string[]): boolean {
 }
 
 /**
+ * A heading closing on one of a statblock's own parts ("<Name> Characteristics",
+ * "<Name> Weapons") titles rules about that part, not the creature.
+ */
+const STATBLOCK_SECTION =
+    /\b(?:characteristics|skills|talents|traits|weapons|armou?r|gear|wounds|advances)$/iu;
+
+/**
  * The prose entry whose heading a statblock's caption shortens: the nearest
  * heading within reach holding every word of the caption and more ("Lamp
  * Keeper" under "Greater or Lesser Lamp Keeper"). Its heading is the
@@ -2553,7 +2560,8 @@ export function namingEntry(
             words.length > 0 &&
             heading.size > words.length &&
             words.every((w) => heading.has(w)) &&
-            !titlesTopic(e.heading.text, words)
+            !titlesTopic(e.heading.text, words) &&
+            !STATBLOCK_SECTION.test(e.heading.text.trim())
         ) {
             best = e;
         }

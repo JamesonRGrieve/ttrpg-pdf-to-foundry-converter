@@ -4407,6 +4407,12 @@ describe("statblock prose", () => {
             heading("MIRE HOUND WEAPONS", 72),
         ];
         expect(namingEntry(entries, "Mire Hound", "Mire Hound (Minion)", 72)).toBeNull();
+        // Nor one closing on a part of the statblock, before the caption.
+        const rules = [
+            heading("GENERATING MIRE HOUND CHARACTERISTICS", 72),
+            heading("Mire Hound (Minion)", 72),
+        ];
+        expect(namingEntry(rules, "Mire Hound", "Mire Hound (Minion)", 72)).toBeNull();
     });
 
     it("takes the heading a caption shortens, never the caption line itself", () => {
