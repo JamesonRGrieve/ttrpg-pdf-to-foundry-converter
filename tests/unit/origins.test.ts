@@ -72,6 +72,12 @@ describe("origin list parsing", () => {
             perception: 5,
             willpower: -5,
         });
+        expect(characteristicModifiers("+5 Strength, +5 Toughness, −5 Willpower, –10 Fellowship")).toEqual({
+            strength: 5,
+            toughness: 5,
+            willpower: -5,
+            fellowship: -10,
+        });
         expect(
             characteristicChanges(
                 "Increase this character's Fellowship by 5. Reduce his Toughness characteristic by 3.",

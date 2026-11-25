@@ -551,14 +551,19 @@ function specialisationChoice(item: string, type: ChoiceType, label: string): Js
         : null;
 }
 
-/** "+ Agility, + Perception, – Willpower" → characteristic key → points. */
+/**
+ * "+ Agility, + Perception, – Willpower" → characteristic key → points: a
+ * bare sign is one step, and a sign printed with its points ("+5 Strength,
+ * −5 Willpower") is those points.
+ */
 export function characteristicModifiers(text: string): Record<string, number> {
     const out: Record<string, number> = {};
-    for (const m of text.matchAll(/(?<sign>[+\-–−])\s*(?<name>[\p{L} ]+?)\s*(?=,|$)/gu)) {
+    for (const m of text.matchAll(/(?<sign>[+\-–−])\s*(?<points>\d+)?\s*(?<name>[\p{L} ]+?)\s*(?=,|$)/gu)) {
         const key = CHARACTERISTICS[m.groups?.["name"]?.trim().toLowerCase() ?? ""];
         if (key !== undefined) {
             const sign = m.groups?.["sign"] === "+" ? 1 : -1;
-            out[key] = (out[key] ?? 0) + sign * CHARACTERISTIC_STEP;
+            const points = m.groups?.["points"];
+            out[key] = (out[key] ?? 0) + sign * (points === undefined ? CHARACTERISTIC_STEP : Number(points));
         }
     }
     return out;
