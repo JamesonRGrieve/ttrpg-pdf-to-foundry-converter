@@ -1197,6 +1197,7 @@ export function readInlineOrigins(
     steps: readonly OriginStepDef[],
 ): OriginPathReading[] {
     const out: OriginPathReading[] = [];
+    const found: { reading: OriginPathReading; own: string }[] = [];
     entries.forEach((entry, i) => {
         const kinds = new Set(
             entry.fields
@@ -1247,19 +1248,37 @@ export function readInlineOrigins(
         if (letters(name).length === 0) {
             return;
         }
-        out.push({
-            name: capitalizeWords(name.toLowerCase()),
-            step,
-            pageIndex: entry.heading.pageIndex,
-            description:
-                extended !== undefined && extended.e.body.length > 0
-                    ? extended.e.body
-                    : (section?.body ?? entry.body),
-            ...read,
+        found.push({
+            reading: {
+                name: capitalizeWords(name.toLowerCase()),
+                step,
+                pageIndex: entry.heading.pageIndex,
+                description:
+                    extended !== undefined && extended.e.body.length > 0
+                        ? extended.e.body
+                        : (section?.body ?? entry.body),
+                ...read,
+            },
+            own: extended === undefined ? letters(own) : "",
         });
     });
+    // Words leading the grant headings of many origins alike ("Starting" of
+    // each one's "Starting Skills, Talents and Gear") qualify the labels and
+    // name none of them.
+    const leads = new Map<string, number>();
+    for (const { own } of found) {
+        if (own.length > 0) {
+            leads.set(own, (leads.get(own) ?? 0) + 1);
+        }
+    }
+    out.push(
+        ...found.filter(({ own }) => (leads.get(own) ?? 0) < MIN_SHARED_LEADS).map(({ reading }) => reading),
+    );
     return out;
 }
+
+/** Grant headings that must lead with the same words for those words to name none of them. */
+const MIN_SHARED_LEADS = 3;
 
 /**
  * A heading with a closing label of the step dropped ("<Name> Career Path" →

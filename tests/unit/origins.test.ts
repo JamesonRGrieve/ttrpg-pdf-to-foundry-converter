@@ -893,6 +893,31 @@ describe("origins granted by inline fields", () => {
         expect(withSkillLevelBase(grants, "known")).toEqual(grants);
     });
 
+    it("names no origin by a word leading the grant headings of many origins alike", () => {
+        const archetype = (name: string): Entry[] => [
+            at(name, "display", ["Lamps"], [], "Fire answers the call."),
+            at(
+                "STARTING skills, TALENTS & gear",
+                "sub",
+                ["Lamps", name],
+                [
+                    ["Talents", "Steady Hand"],
+                    ["Gear", "Lantern"],
+                ],
+            ),
+        ];
+        const origins = readInlineOrigins(
+            [
+                at("STAGE 2: SELECT AN ARCHETYPE", "display", ["Lamps"], [], "Pick one."),
+                ...archetype("Flamewright"),
+                ...archetype("Wickwarden"),
+                ...archetype("Glowmonger"),
+            ],
+            bc,
+        );
+        expect(origins.map((o) => o.name)).not.toContain("Starting");
+    });
+
     it("reads a skill without the characteristic tag printed after it", () => {
         const origins = readInlineOrigins(
             [
