@@ -618,6 +618,12 @@ function captionLines(lines: readonly TextLine[]): Set<TextLine> {
 const SET_APART_GAP_FACTOR = 2.5;
 /** A line starting this many points left of a set-apart value does not continue it. */
 const SET_APART_SLACK = 4;
+/** No labels: a line read without any. */
+const NO_LABELS: ReadonlySet<string> = new Set();
+/** Fewest words a label printed without its colon runs to. */
+const MIN_UNPUNCTUATED_LABEL_WORDS = 2;
+/** Fewest times a document prints a label with its colon for the label to be read without one. */
+const MIN_LABEL_USES = 3;
 /** Fewest set-apart fields in an entry for them to be read as a block of aligned values. */
 const MIN_SET_APART_FIELDS = 2;
 
@@ -682,11 +688,54 @@ function holdsSentence(text: string): boolean {
 /** Most words an italic lead label carries; longer italic leads are emphasis in running text. */
 const MAX_ITALIC_LABEL_WORDS = 2;
 
+/** Indent (in font-sizes) setting a line in from the one above: it opens a paragraph. */
+const PARAGRAPH_INDENT = 0.5;
+
+/** Whether a line starts set in from the line above, as a new paragraph does. */
+function indentedFrom(line: TextLine, above: TextLine): boolean {
+    const start = visibleRuns(line)[0];
+    const aboveStart = visibleRuns(above)[0];
+    return (
+        start !== undefined &&
+        aboveStart !== undefined &&
+        start.x - aboveStart.x > PARAGRAPH_INDENT * start.size
+    );
+}
+
+/**
+ * A field whose label was printed without its colon: a bold lead the document
+ * sets elsewhere as a recurring bold `Label:`, the line's text after it its value.
+ */
+function unpunctuatedField(
+    line: TextLine,
+    runs: readonly IRTextRun[],
+    recurring: ReadonlySet<string>,
+): [string, string] | null {
+    const roman = runs.findIndex((r) => r.weight !== "bold");
+    if (roman < 1) {
+        return null;
+    }
+    const lead = joinRuns(runs.slice(0, roman)).trim();
+    // A one-word bold lead ("RNG 30M") labels a profile's cell, read with its profile.
+    if (lead.split(/\s+/u).length < MIN_UNPUNCTUATED_LABEL_WORDS) {
+        return null;
+    }
+    if (!recurring.has(lead) || !line.text.startsWith(lead)) {
+        return null;
+    }
+    const value = line.text.slice(lead.length).trim();
+    return value.length > 0 ? [lead, value] : null;
+}
+
 /**
  * A `Label: value` line: its label is the lead set apart from the text — in
  * bold, or in italics as a short capitalised label ("Mass: 6 megatonnes").
  */
-function fieldOf(line: TextLine, boldLabels: ReadonlySet<string>): [string, string] | null {
+function fieldOf(
+    line: TextLine,
+    boldLabels: ReadonlySet<string>,
+    recurring: ReadonlySet<string> = new Set(),
+): [string, string] | null {
     const runs = visibleRuns(line);
     const first = runs[0];
     if (first === undefined) {
@@ -696,7 +745,7 @@ function fieldOf(line: TextLine, boldLabels: ReadonlySet<string>): [string, stri
     const label = m?.groups?.["label"]?.trim();
     const value = m?.groups?.["value"]?.trim();
     if (label === undefined || value === undefined) {
-        return null;
+        return unpunctuatedField(line, runs, recurring);
     }
     // A line whose weights were lost (read from the page image) still opens
     // with a label the document sets in bold elsewhere.
@@ -1069,6 +1118,17 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             .map((l) => fieldOf(l, noLabels)?.[0])
             .filter((label) => label !== undefined),
     );
+    const labelUses = new Map<string, number>();
+    for (const line of lines) {
+        const label = visibleRuns(line)[0]?.weight === "bold" ? fieldOf(line, noLabels)?.[0] : undefined;
+        if (label !== undefined) {
+            labelUses.set(label, (labelUses.get(label) ?? 0) + 1);
+        }
+    }
+    // A label printed without its colon is read only where the document sets it, colon and all, as a recurring field.
+    const recurringLabels = new Set(
+        [...labelUses].filter(([, n]) => n >= MIN_LABEL_USES).map(([label]) => label),
+    );
     const captions = captionLines(lines);
     let previous: TextLine | null = null;
     for (const line of lines) {
@@ -1156,7 +1216,15 @@ export function detectEntries(read: IR, tableRuns: ReadonlySet<IRTextRun>): Entr
             continue;
         }
         const entry: Entry = current;
-        const field = fieldOf(line, boldLabels);
+        // A colon-less label opens a line of its own: one continuing a sentence
+        // ("… a Difficult (-10)" / "Focus Power Test …") is that sentence's words.
+        const opensLine =
+            prevText === null ||
+            prevText === headingLine ||
+            prevText === lastFieldLine ||
+            endsSentence(prevText.text) ||
+            indentedFrom(line, prevText);
+        const field = fieldOf(line, boldLabels, opensLine ? recurringLabels : NO_LABELS);
         if (field !== null) {
             settle();
             entry.fields.push(field);

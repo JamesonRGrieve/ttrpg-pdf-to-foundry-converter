@@ -3363,6 +3363,59 @@ describe("entry detection", () => {
         ]);
     });
 
+    it("reads a bold label printed without its colon where the document prints it with one", () => {
+        const at = (text: string, x: number, y: number, weight: "bold" | "normal"): IRTextRun => ({
+            ...run(text, y, "b", 10),
+            x,
+            weight,
+        });
+        // Each entry: a heading and one field line, top to bottom.
+        const entryRuns = (heading: string, label: string, value: string, y: number): IRTextRun[] => [
+            run(heading, y, "h", 12),
+            at(label, 60, y - 20, "bold"),
+            at(value, 140, y - 20, "normal"),
+        ];
+        const ir = irOf(
+            [0],
+            [
+                run("GLOW SECTION", 760, "h", 14),
+                run(body, 740, "b", 10),
+                ...entryRuns("DIM GLOW", "Glow Gift:", "two lamps", 720),
+                ...entryRuns("FAINT GLOW", "Glow Gift:", "a lamp", 680),
+                ...entryRuns("SOFT GLOW", "Glow Gift:", "four lamps", 640),
+                ...entryRuns("BRIGHT GLOW", "Glow Gift", "three lamps", 600),
+                ...entryRuns("WARM GLOW", "Wick Gift:", "a wick", 560),
+                ...entryRuns("PALE GLOW", "Wick Gift", "one lamp", 520),
+                ...entryRuns("ONE GLOW", "Rng:", "3m", 480),
+                ...entryRuns("TWO GLOW", "Rng:", "4m", 440),
+                ...entryRuns("RED GLOW", "Rng:", "5m", 400),
+                ...entryRuns("BLUE GLOW", "Rng", "6m", 360),
+                run("DARK GLOW", 320, "h", 12),
+                run("The lamp burns for a Difficult (-10)", 300, "b", 10),
+                at("Glow Gift", 60, 290, "bold"),
+                at("test, as the wick allows.", 140, 290, "normal"),
+                run("GREY GLOW", 260, "h", 12),
+                run("The lamp burns for the night with no full stop", 240, "b", 10),
+                at("Glow Gift", 72, 230, "bold"),
+                at("five lamps", 152, 230, "normal"),
+            ],
+        );
+        const fields = Object.fromEntries(
+            detectEntries(ir, new Set()).map((e) => [e.heading.text, e.fields]),
+        );
+        expect(fields["DIM GLOW"]).toEqual([["Glow Gift", "two lamps"]]);
+        expect(fields["BRIGHT GLOW"]).toEqual([["Glow Gift", "three lamps"]]);
+        // A label the document prints with its colon only once is no recurring field.
+        expect(fields["WARM GLOW"]).toEqual([["Wick Gift", "a wick"]]);
+        expect(fields["PALE GLOW"]).toEqual([]);
+        // A one-word lead labels a profile's cell, however often it is printed with a colon.
+        expect(fields["BLUE GLOW"]).toEqual([]);
+        // A line continuing a sentence is that sentence's words, not a field.
+        expect(fields["DARK GLOW"]).toEqual([]);
+        // A line set in from the one above opens a paragraph, its label read whatever the line above ends on.
+        expect(fields["GREY GLOW"]).toEqual([["Glow Gift", "five lamps"]]);
+    });
+
     it("keeps a table caption out of the heading chain", () => {
         const ir = irOf(
             [0],
