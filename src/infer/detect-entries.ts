@@ -163,6 +163,65 @@ export function withoutShadows(runs: readonly IRTextRun[]): IRTextRun[] {
     return kept;
 }
 
+/** Advance per capital, in ems, below which a word is too narrow for its stated size. */
+const NARROW_CAPITAL_EM = 0.6;
+/** Widest advance per capital, in ems, a word set at a size can plausibly take. */
+const WIDE_CAPITAL_EM = 0.95;
+/** Least ratio of a lead word's stated size to its line's for the lead to be checked. */
+const LEAD_SIZE_RATIO = 1.2;
+
+/** A bold line's lead word sized larger than the rest though its advance fits the rest's size: the rest's size, else null. */
+function narrowLeadSize(runs: readonly IRTextRun[]): number | null {
+    const visible = runs.filter((r) => r.text.trim().length > 0);
+    const [lead, next] = visible;
+    if (lead === undefined || next === undefined || !visible.every((r) => r.weight === "bold")) {
+        return null;
+    }
+    const word = lead.text.trim();
+    const size = next.size;
+    if (
+        !/^\p{Lu}{2,}$/u.test(word) ||
+        visible.slice(1).some((r) => r.size !== size) ||
+        lead.size < LEAD_SIZE_RATIO * size
+    ) {
+        return null;
+    }
+    const perCapital = (next.x - lead.x) / word.length;
+    const fits = perCapital / size >= NARROW_CAPITAL_EM && perCapital / size <= WIDE_CAPITAL_EM;
+    return perCapital / lead.size < NARROW_CAPITAL_EM && fits ? size : null;
+}
+
+/**
+ * Lines whose lead word the text layer sizes larger than the rest ("BONE" at
+ * 11 pt before "AGUE" at 7.75 pt), set at the rest's size where the page's
+ * other headings say that is their level: bold lines wholly at that size
+ * outnumber such lines on the page. Where the page's headings share the larger
+ * lead (a face whose initials are set large), the larger size is their level.
+ */
+function withLeadsSized(lines: TextLine[]): TextLine[] {
+    const byPage = new Map<number, TextLine[]>();
+    for (const line of lines) {
+        byPage.set(line.pageIndex, [...(byPage.get(line.pageIndex) ?? []), line]);
+    }
+    return lines.map((line) => {
+        const size = narrowLeadSize(line.runs);
+        if (size === null) {
+            return line;
+        }
+        const page = byPage.get(line.pageIndex) ?? [];
+        const led = page.filter((l) => narrowLeadSize(l.runs) === size).length;
+        const plain = page.filter((l) => {
+            const visible = l.runs.filter((r) => r.text.trim().length > 0);
+            return visible.length > 0 && visible.every((r) => r.weight === "bold" && r.size === size);
+        }).length;
+        if (plain <= led) {
+            return line;
+        }
+        const lead = line.runs.find((r) => r.text.trim().length > 0);
+        return { ...line, runs: line.runs.map((r) => (r === lead ? { ...r, size } : r)) };
+    });
+}
+
 export function buildLines(ir: IR): TextLine[] {
     const byColumn = new Map<string, IRTextRun[]>();
     for (const r of ir.runs) {
@@ -188,7 +247,7 @@ export function buildLines(ir: IR): TextLine[] {
             });
         }
     }
-    return out.sort(
+    return withLeadsSized(out).sort(
         (a, b) => numAsc(a.pageIndex, b.pageIndex) || numAsc(a.column, b.column) || numAsc(b.y, a.y),
     );
 }
