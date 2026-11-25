@@ -65,6 +65,15 @@ describe("inferBookSlug", () => {
         expect(inferBookSlug(ir(null, runs))).toBe("lantern-codex");
     });
 
+    it("prints a cover title set again over itself once", () => {
+        const runs = [
+            run("LANTERN CODEX", 1, 100, 700, 24),
+            run("LANTERN CODEX", 1, 101, 700, 24),
+            run("The Lantern Codex lists every lamp.", 2, 100, 700, 10),
+        ];
+        expect(inferBookSlug(ir(null, runs))).toBe("lantern-codex");
+    });
+
     it("takes no cover line whose words the book never prints, as cover art read as text gives", () => {
         const runs = [
             run("ANTERN CODE", 0, 100, 700, 40),

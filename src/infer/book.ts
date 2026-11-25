@@ -151,7 +151,10 @@ function rawTitle(ir: IR): string | null {
     const title = display
         .filter((r) => top - r.y <= LINE_SHARE * largest)
         .sort((a, b) => a.x - b.x)
-        .map((r) => r.text)
+        .map((r) => r.text.trim())
+        // A run set again over itself (a shadowed or outlined cover title)
+        // prints its words once.
+        .filter((text, i, all) => text.length > 0 && all.indexOf(text) === i)
         .join(" ");
     // A lone word from a cover ("ROLE") is a fragment of its art or banner, not a title.
     const named = wordsOf(title).filter((w) => w.length >= CHECKED_WORD).length >= MIN_COVER_TITLE_WORDS;
