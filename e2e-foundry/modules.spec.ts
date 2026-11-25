@@ -119,14 +119,17 @@ test("every converted document validates and prepares under the current system",
     expect(failures, "documents the system refuses or cannot prepare").toEqual([]);
 });
 
-/** Documents of each pack whose sheets are opened. */
-const SHEETS_PER_PACK = 3;
+/** Sheets between progress lines within a book. */
+const PROGRESS_EVERY = 200;
+
+/** Documents of each pack whose sheets are opened: three, or TPC_SHEETS_PER_PACK (0 opens every one). */
+const SHEETS_PER_PACK = Number(process.env["TPC_SHEETS_PER_PACK"] ?? 3);
 
 /**
  * Room for every pack's sample: a full regression opens about 1,500 sheets
  * at some 20 a minute on a shared runner.
  */
-const SHEETS_TIMEOUT_MS = 2 * 3_600_000;
+const SHEETS_TIMEOUT_MS = Number(process.env["TPC_SHEETS_TIMEOUT_MS"] ?? 2 * 3_600_000);
 
 test("converted documents open their sheets", async ({ page }) => {
     test.setTimeout(SHEETS_TIMEOUT_MS);
@@ -142,7 +145,7 @@ test("converted documents open their sheets", async ({ page }) => {
             if (pack.type !== "Actor" && pack.type !== "Item") {
                 continue;
             }
-            const sample = pack.documents.slice(0, SHEETS_PER_PACK);
+            const sample = SHEETS_PER_PACK > 0 ? pack.documents.slice(0, SHEETS_PER_PACK) : pack.documents;
             const result = await page.evaluate(
                 async ({ type, documents }) => {
                     const config = (
@@ -192,8 +195,13 @@ test("converted documents open their sheets", async ({ page }) => {
                 },
                 { type: pack.type, documents: sample },
             );
+            const before = opened;
             opened += sample.length;
             failures.push(...result.map((e) => `${book} ${pack.type} ${e}`));
+            // Within a long book, a line every PROGRESS_EVERY sheets.
+            if (Math.floor(opened / PROGRESS_EVERY) > Math.floor(before / PROGRESS_EVERY)) {
+                process.stdout.write(`[sheets] ${book} …: ${opened} opened, ${failures.length} failed\n`);
+            }
         }
         // One line per book, so a long run shows its progress as it goes.
         process.stdout.write(`[sheets] ${book}: ${opened} opened, ${failures.length} failed\n`);

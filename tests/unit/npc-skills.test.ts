@@ -8,6 +8,9 @@ describe("statblock skills", () => {
     it("keys a skill by its name in lower camel case", () => {
         expect(skillKey("Lantern Lore")).toBe("lanternLore");
         expect(skillKey("Wick-Use")).toBe("wickUse");
+        // A mark is no part of a key: a "." would read as a path in Foundry's data.
+        expect(skillKey("Lamp Mastery. Other")).toBe("lampMasteryOther");
+        expect(skillKey("Wick’s Craft (Fel)")).toBe("wicksCraftFel");
         expect(skillKey("  Hush ")).toBe("hush");
     });
 

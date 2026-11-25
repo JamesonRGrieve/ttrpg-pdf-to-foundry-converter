@@ -25,11 +25,17 @@ export interface ListedSkill {
     bonus: number;
 }
 
-/** A skill's name as the schema keys skills: lower camel case ("Forbidden Lore" → `forbiddenLore`). */
+/**
+ * A skill's name as the schema keys skills: lower camel case ("Forbidden Lore"
+ * → `forbiddenLore`), of letters and digits only. A mark kept in a key would
+ * break it: Foundry reads a `.` in a data key as a path, so the skill would
+ * split into a nested object with no name.
+ */
 export const skillKey = (name: string): string =>
     name
         .trim()
         .split(/[\s/-]+/u)
+        .map((w) => w.replace(/[^\p{L}\p{N}]+/gu, ""))
         .filter((w) => w.length > 0)
         .map((w, i) =>
             i === 0 ? w.toLowerCase() : `${w.charAt(0).toUpperCase()}${w.slice(1).toLowerCase()}`,
