@@ -4199,6 +4199,16 @@ describe("consolidation helpers", () => {
         expect(summary.fields["system"]).toEqual({
             source: { dh2: { provenance: "raw", book: "b", page: "24" } },
         });
+        // So is an order: its summary table lists it, its entry gives the order in full.
+        const order = (blockId: string, pageIndex: number): Entity => ({
+            ...talent(blockId, pageIndex),
+            fields: { ...talent(blockId, pageIndex).fields, type: "order" },
+        });
+        const listed = order("table:order", 30);
+        citeFirstPage(listed, [listed, order("entry:order", 31)], DEFAULT_LINE);
+        expect(listed.fields["system"]).toEqual({
+            source: { dh2: { provenance: "raw", book: "b", page: "31" } },
+        });
     });
 
     it("files an upgrade's table row with its entry's modification type", () => {

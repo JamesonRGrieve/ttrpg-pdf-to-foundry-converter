@@ -3385,7 +3385,7 @@ export function qualifiedBySection(table: DetectedTable, nameCol: number): Map<T
  * cited only when nothing else reads the entity.
  */
 /** Kinds cited by the entry that describes them in full, beside any summary table. */
-const DESCRIBED_IN_FULL: ReadonlySet<string> = new Set(["talent", "psychicPower"]);
+const DESCRIBED_IN_FULL: ReadonlySet<string> = new Set(["talent", "psychicPower", "order"]);
 
 export function citeFirstPage(head: Entity, readings: readonly Entity[], line: Line): void {
     const rolled = (e: Entity): boolean => e.blockId.endsWith(ROLLED_ROW);
